@@ -9,6 +9,7 @@ impl Schema {
         Self::create_projects_table(conn)?;
         Self::create_issues_table(conn)?;
         Self::create_sync_history_table(conn)?;
+        Self::create_metadata_tables(conn)?;
         Self::create_indexes(conn)?;
         Ok(())
     }
@@ -44,6 +45,12 @@ impl Schema {
                 priority VARCHAR,
                 assignee VARCHAR,
                 reporter VARCHAR,
+                issue_type VARCHAR,
+                resolution VARCHAR,
+                labels VARCHAR,
+                components VARCHAR,
+                fix_versions VARCHAR,
+                parent_key VARCHAR,
                 created_date TIMESTAMP,
                 updated_date TIMESTAMP,
                 raw_data JSON,
@@ -77,6 +84,106 @@ impl Schema {
             "#,
             [],
         )?;
+        Ok(())
+    }
+
+    fn create_metadata_tables(conn: &Connection) -> Result<()> {
+        // Statuses table
+        conn.execute(
+            r#"
+            CREATE TABLE IF NOT EXISTS statuses (
+                project_id VARCHAR NOT NULL,
+                name VARCHAR NOT NULL,
+                description VARCHAR,
+                category VARCHAR,
+                created_at TIMESTAMP NOT NULL,
+                updated_at TIMESTAMP NOT NULL,
+                PRIMARY KEY (project_id, name)
+            )
+            "#,
+            [],
+        )?;
+
+        // Priorities table
+        conn.execute(
+            r#"
+            CREATE TABLE IF NOT EXISTS priorities (
+                project_id VARCHAR NOT NULL,
+                name VARCHAR NOT NULL,
+                description VARCHAR,
+                icon_url VARCHAR,
+                created_at TIMESTAMP NOT NULL,
+                updated_at TIMESTAMP NOT NULL,
+                PRIMARY KEY (project_id, name)
+            )
+            "#,
+            [],
+        )?;
+
+        // Issue types table
+        conn.execute(
+            r#"
+            CREATE TABLE IF NOT EXISTS issue_types (
+                project_id VARCHAR NOT NULL,
+                name VARCHAR NOT NULL,
+                description VARCHAR,
+                icon_url VARCHAR,
+                subtask BOOLEAN DEFAULT false,
+                created_at TIMESTAMP NOT NULL,
+                updated_at TIMESTAMP NOT NULL,
+                PRIMARY KEY (project_id, name)
+            )
+            "#,
+            [],
+        )?;
+
+        // Labels table
+        conn.execute(
+            r#"
+            CREATE TABLE IF NOT EXISTS labels (
+                project_id VARCHAR NOT NULL,
+                name VARCHAR NOT NULL,
+                created_at TIMESTAMP NOT NULL,
+                updated_at TIMESTAMP NOT NULL,
+                PRIMARY KEY (project_id, name)
+            )
+            "#,
+            [],
+        )?;
+
+        // Components table
+        conn.execute(
+            r#"
+            CREATE TABLE IF NOT EXISTS components (
+                project_id VARCHAR NOT NULL,
+                name VARCHAR NOT NULL,
+                description VARCHAR,
+                lead VARCHAR,
+                created_at TIMESTAMP NOT NULL,
+                updated_at TIMESTAMP NOT NULL,
+                PRIMARY KEY (project_id, name)
+            )
+            "#,
+            [],
+        )?;
+
+        // Fix versions table
+        conn.execute(
+            r#"
+            CREATE TABLE IF NOT EXISTS fix_versions (
+                project_id VARCHAR NOT NULL,
+                name VARCHAR NOT NULL,
+                description VARCHAR,
+                released BOOLEAN DEFAULT false,
+                release_date TIMESTAMP,
+                created_at TIMESTAMP NOT NULL,
+                updated_at TIMESTAMP NOT NULL,
+                PRIMARY KEY (project_id, name)
+            )
+            "#,
+            [],
+        )?;
+
         Ok(())
     }
 

@@ -1,3 +1,3 @@
 pub mod settings;
 
-pub use settings::{JiraConfig, ProjectConfig, Settings};
+pub use settings::{DatabaseConfig, JiraConfig, ProjectConfig, Settings};

@@ -3,6 +3,7 @@ use crate::db::{Database, IssueRepository, ProjectRepository, SyncHistoryReposit
 use crate::error::Result;
 use crate::jira::JiraClient;
 use chrono::Utc;
+use indicatif::{ProgressBar, ProgressStyle};
 use log::{info, warn};
 
 pub struct SyncManager {
@@ -81,8 +82,27 @@ impl SyncManager {
 
         info!("Fetched {} issues, saving to database...", count);
 
+        // Create progress bar
+        let pb = ProgressBar::new(count as u64);
+        pb.set_style(
+            ProgressStyle::default_bar()
+                .template("[{elapsed_precise}] {bar:40.cyan/blue} {pos}/{len} {msg}")
+                .expect("Failed to create progress style")
+                .progress_chars("█▓▒░ "),
+        );
+        pb.set_message("Saving issues...");
+
+        // Save issues with progress
         let issue_repo = IssueRepository::new(self.db.connection());
-        issue_repo.batch_insert(&issues)?;
+
+        // Split into chunks for better progress feedback
+        let chunk_size = 50;
+        for chunk in issues.chunks(chunk_size) {
+            issue_repo.batch_insert(chunk)?;
+            pb.inc(chunk.len() as u64);
+        }
+
+        pb.finish_with_message("Completed!");
 
         Ok(count)
     }

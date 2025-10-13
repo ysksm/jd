@@ -9,6 +9,49 @@ pub struct Project {
     pub description: Option<String>,
 }
 
+// Metadata models
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Status {
+    pub name: String,
+    pub description: Option<String>,
+    pub category: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Priority {
+    pub name: String,
+    pub description: Option<String>,
+    pub icon_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IssueType {
+    pub name: String,
+    pub description: Option<String>,
+    pub icon_url: Option<String>,
+    pub subtask: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Label {
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Component {
+    pub name: String,
+    pub description: Option<String>,
+    pub lead: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FixVersion {
+    pub name: String,
+    pub description: Option<String>,
+    pub released: bool,
+    pub release_date: Option<DateTime<Utc>>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Issue {
     pub id: String,
@@ -20,6 +63,12 @@ pub struct Issue {
     pub priority: Option<String>,
     pub assignee: Option<String>,
     pub reporter: Option<String>,
+    pub issue_type: Option<String>,
+    pub resolution: Option<String>,
+    pub labels: Option<Vec<String>>,
+    pub components: Option<Vec<String>>,
+    pub fix_versions: Option<Vec<String>>,
+    pub parent_key: Option<String>,
     pub created_date: Option<DateTime<Utc>>,
     pub updated_date: Option<DateTime<Utc>>,
 }
@@ -70,6 +119,50 @@ impl From<jira_api::Issue> for Issue {
             .as_str()
             .map(|s| s.to_string());
 
+        // Extract metadata
+        let issue_type = fields["issuetype"]["name"]
+            .as_str()
+            .map(|s| s.to_string());
+
+        let resolution = fields["resolution"]["name"]
+            .as_str()
+            .map(|s| s.to_string());
+
+        // Extract labels (array of strings)
+        let labels = fields["labels"]
+            .as_array()
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                    .collect::<Vec<String>>()
+            })
+            .filter(|v| !v.is_empty());
+
+        // Extract components (array of objects with "name" field)
+        let components = fields["components"]
+            .as_array()
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v["name"].as_str().map(|s| s.to_string()))
+                    .collect::<Vec<String>>()
+            })
+            .filter(|v| !v.is_empty());
+
+        // Extract fix versions (array of objects with "name" field)
+        let fix_versions = fields["fixVersions"]
+            .as_array()
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v["name"].as_str().map(|s| s.to_string()))
+                    .collect::<Vec<String>>()
+            })
+            .filter(|v| !v.is_empty());
+
+        // Extract parent key (for subtasks)
+        let parent_key = fields["parent"]["key"]
+            .as_str()
+            .map(|s| s.to_string());
+
         let created_date = fields["created"]
             .as_str()
             .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
@@ -90,6 +183,12 @@ impl From<jira_api::Issue> for Issue {
             priority,
             assignee,
             reporter,
+            issue_type,
+            resolution,
+            labels,
+            components,
+            fix_versions,
+            parent_key,
             created_date,
             updated_date,
         }

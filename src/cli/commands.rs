@@ -12,7 +12,11 @@ pub struct Cli {
 #[derive(Subcommand)]
 pub enum Commands {
     /// Initialize configuration file
-    Init,
+    Init {
+        /// Interactive configuration setup
+        #[arg(short, long)]
+        interactive: bool,
+    },
 
     /// Manage JIRA projects
     Project {
@@ -49,6 +53,18 @@ pub enum Commands {
         /// Filter by status
         #[arg(short, long)]
         status: Option<String>,
+
+        /// Filter by assignee
+        #[arg(short, long)]
+        assignee: Option<String>,
+
+        /// Maximum number of results
+        #[arg(short, long, default_value = "20")]
+        limit: usize,
+
+        /// Offset for pagination
+        #[arg(short, long, default_value = "0")]
+        offset: usize,
     },
 }
 

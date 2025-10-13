@@ -1,8 +1,19 @@
 use crate::error::Result;
-use crate::jira::models::{Issue, Project};
+use crate::jira::models::{Component, FixVersion, Issue, IssueType, Label, Priority, Project, Status};
 use chrono::{DateTime, Utc};
 use duckdb::Connection;
 use std::sync::{Arc, Mutex};
+
+/// Search parameters for issues
+#[derive(Debug, Default)]
+pub struct SearchParams {
+    pub query: Option<String>,
+    pub project_key: Option<String>,
+    pub status: Option<String>,
+    pub assignee: Option<String>,
+    pub limit: Option<usize>,
+    pub offset: Option<usize>,
+}
 
 pub struct ProjectRepository {
     conn: Arc<Mutex<Connection>>,
@@ -97,14 +108,28 @@ impl IssueRepository {
         let now = Utc::now().to_rfc3339();
 
         for issue in issues {
+            // Convert array fields to JSON strings
+            let labels_json = issue.labels
+                .as_ref()
+                .map(|v| serde_json::to_string(v).unwrap_or_default());
+
+            let components_json = issue.components
+                .as_ref()
+                .map(|v| serde_json::to_string(v).unwrap_or_default());
+
+            let fix_versions_json = issue.fix_versions
+                .as_ref()
+                .map(|v| serde_json::to_string(v).unwrap_or_default());
+
             conn.execute(
                 r#"
                 INSERT INTO issues (
                     id, project_id, key, summary, description,
                     status, priority, assignee, reporter,
+                    issue_type, resolution, labels, components, fix_versions, parent_key,
                     created_date, updated_date, raw_data, synced_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (id) DO UPDATE SET
                     project_id = excluded.project_id,
                     key = excluded.key,
@@ -114,6 +139,12 @@ impl IssueRepository {
                     priority = excluded.priority,
                     assignee = excluded.assignee,
                     reporter = excluded.reporter,
+                    issue_type = excluded.issue_type,
+                    resolution = excluded.resolution,
+                    labels = excluded.labels,
+                    components = excluded.components,
+                    fix_versions = excluded.fix_versions,
+                    parent_key = excluded.parent_key,
                     created_date = excluded.created_date,
                     updated_date = excluded.updated_date,
                     raw_data = excluded.raw_data,
@@ -129,6 +160,12 @@ impl IssueRepository {
                     &issue.priority,
                     &issue.assignee,
                     &issue.reporter,
+                    &issue.issue_type,
+                    &issue.resolution,
+                    &labels_json,
+                    &components_json,
+                    &fix_versions_json,
+                    &issue.parent_key,
                     &issue.created_date.map(|d| d.to_rfc3339()),
                     &issue.updated_date.map(|d| d.to_rfc3339()),
                     &serde_json::to_string(&issue)?,
@@ -147,6 +184,7 @@ impl IssueRepository {
             r#"
             SELECT id, project_id, key, summary, description,
                    status, priority, assignee, reporter,
+                   issue_type, resolution, labels, components, fix_versions, parent_key,
                    created_date, updated_date
             FROM issues
             WHERE project_id = ?
@@ -154,6 +192,14 @@ impl IssueRepository {
         )?;
 
         let rows = stmt.query_map(duckdb::params![project_id], |row| {
+            // Parse JSON strings back to Vec<String>
+            let labels: Option<Vec<String>> = row.get::<_, Option<String>>(11)?
+                .and_then(|s| serde_json::from_str(&s).ok());
+            let components: Option<Vec<String>> = row.get::<_, Option<String>>(12)?
+                .and_then(|s| serde_json::from_str(&s).ok());
+            let fix_versions: Option<Vec<String>> = row.get::<_, Option<String>>(13)?
+                .and_then(|s| serde_json::from_str(&s).ok());
+
             Ok(Issue {
                 id: row.get(0)?,
                 project_id: row.get(1)?,
@@ -164,8 +210,14 @@ impl IssueRepository {
                 priority: row.get(6)?,
                 assignee: row.get(7)?,
                 reporter: row.get(8)?,
-                created_date: row.get::<_, Option<String>>(9)?.and_then(|s| DateTime::parse_from_rfc3339(&s).ok().map(|dt| dt.with_timezone(&Utc))),
-                updated_date: row.get::<_, Option<String>>(10)?.and_then(|s| DateTime::parse_from_rfc3339(&s).ok().map(|dt| dt.with_timezone(&Utc))),
+                issue_type: row.get(9)?,
+                resolution: row.get(10)?,
+                labels,
+                components,
+                fix_versions,
+                parent_key: row.get(14)?,
+                created_date: row.get::<_, Option<String>>(15)?.and_then(|s| DateTime::parse_from_rfc3339(&s).ok().map(|dt| dt.with_timezone(&Utc))),
+                updated_date: row.get::<_, Option<String>>(16)?.and_then(|s| DateTime::parse_from_rfc3339(&s).ok().map(|dt| dt.with_timezone(&Utc))),
             })
         })?;
 
@@ -186,6 +238,115 @@ impl IssueRepository {
         )?;
 
         Ok(count as usize)
+    }
+
+    /// Search issues with filters
+    pub fn search(&self, params: &SearchParams) -> Result<Vec<Issue>> {
+        let conn = self.conn.lock().unwrap();
+
+        // Build SQL query dynamically
+        let mut sql = String::from(
+            r#"
+            SELECT i.id, i.project_id, i.key, i.summary, i.description,
+                   i.status, i.priority, i.assignee, i.reporter,
+                   i.issue_type, i.resolution, i.labels, i.components, i.fix_versions, i.parent_key,
+                   i.created_date, i.updated_date
+            FROM issues i
+            LEFT JOIN projects p ON i.project_id = p.id
+            WHERE 1=1
+            "#,
+        );
+
+        let mut conditions = Vec::new();
+        let mut sql_params: Vec<Box<dyn duckdb::ToSql>> = Vec::new();
+
+        // Text search in summary and description
+        if let Some(query) = &params.query {
+            conditions.push("(i.summary LIKE ? OR i.description LIKE ?)");
+            let search_pattern = format!("%{}%", query);
+            sql_params.push(Box::new(search_pattern.clone()));
+            sql_params.push(Box::new(search_pattern));
+        }
+
+        // Project key filter
+        if let Some(project_key) = &params.project_key {
+            conditions.push("p.key = ?");
+            sql_params.push(Box::new(project_key.clone()));
+        }
+
+        // Status filter
+        if let Some(status) = &params.status {
+            conditions.push("i.status = ?");
+            sql_params.push(Box::new(status.clone()));
+        }
+
+        // Assignee filter
+        if let Some(assignee) = &params.assignee {
+            conditions.push("i.assignee LIKE ?");
+            let assignee_pattern = format!("%{}%", assignee);
+            sql_params.push(Box::new(assignee_pattern));
+        }
+
+        // Add conditions to SQL
+        for condition in conditions {
+            sql.push_str(" AND ");
+            sql.push_str(condition);
+        }
+
+        // Order by created date descending
+        sql.push_str(" ORDER BY i.created_date DESC");
+
+        // Pagination
+        if let Some(limit) = params.limit {
+            sql.push_str(&format!(" LIMIT {}", limit));
+        }
+        if let Some(offset) = params.offset {
+            sql.push_str(&format!(" OFFSET {}", offset));
+        }
+
+        // Prepare statement
+        let mut stmt = conn.prepare(&sql)?;
+
+        // Convert params to references
+        let param_refs: Vec<&dyn duckdb::ToSql> = sql_params.iter().map(|p| p.as_ref()).collect();
+
+        // Execute query
+        let rows = stmt.query_map(param_refs.as_slice(), |row| {
+            // Parse JSON strings back to Vec<String>
+            let labels: Option<Vec<String>> = row.get::<_, Option<String>>(11)?
+                .and_then(|s| serde_json::from_str(&s).ok());
+            let components: Option<Vec<String>> = row.get::<_, Option<String>>(12)?
+                .and_then(|s| serde_json::from_str(&s).ok());
+            let fix_versions: Option<Vec<String>> = row.get::<_, Option<String>>(13)?
+                .and_then(|s| serde_json::from_str(&s).ok());
+
+            Ok(Issue {
+                id: row.get(0)?,
+                project_id: row.get(1)?,
+                key: row.get(2)?,
+                summary: row.get(3)?,
+                description: row.get(4)?,
+                status: row.get(5)?,
+                priority: row.get(6)?,
+                assignee: row.get(7)?,
+                reporter: row.get(8)?,
+                issue_type: row.get(9)?,
+                resolution: row.get(10)?,
+                labels,
+                components,
+                fix_versions,
+                parent_key: row.get(14)?,
+                created_date: row.get::<_, Option<String>>(15)?.and_then(|s| DateTime::parse_from_rfc3339(&s).ok().map(|dt| dt.with_timezone(&Utc))),
+                updated_date: row.get::<_, Option<String>>(16)?.and_then(|s| DateTime::parse_from_rfc3339(&s).ok().map(|dt| dt.with_timezone(&Utc))),
+            })
+        })?;
+
+        let mut issues = Vec::new();
+        for issue in rows {
+            issues.push(issue?);
+        }
+
+        Ok(issues)
     }
 }
 
@@ -277,5 +438,309 @@ impl SyncHistoryRepository {
         } else {
             Ok(None)
         }
+    }
+}
+
+pub struct MetadataRepository {
+    conn: Arc<Mutex<Connection>>,
+}
+
+impl MetadataRepository {
+    pub fn new(conn: Arc<Mutex<Connection>>) -> Self {
+        Self { conn }
+    }
+
+    // Status operations
+    pub fn upsert_statuses(&self, project_id: &str, statuses: &[Status]) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let now = Utc::now().to_rfc3339();
+
+        for status in statuses {
+            conn.execute(
+                r#"
+                INSERT INTO statuses (project_id, name, description, category, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT (project_id, name) DO UPDATE SET
+                    description = excluded.description,
+                    category = excluded.category,
+                    updated_at = excluded.updated_at
+                "#,
+                duckdb::params![
+                    project_id,
+                    &status.name,
+                    &status.description,
+                    &status.category,
+                    &now,
+                    &now,
+                ],
+            )?;
+        }
+        Ok(())
+    }
+
+    pub fn find_statuses_by_project(&self, project_id: &str) -> Result<Vec<Status>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT name, description, category FROM statuses WHERE project_id = ? ORDER BY name",
+        )?;
+
+        let rows = stmt.query_map(duckdb::params![project_id], |row| {
+            Ok(Status {
+                name: row.get(0)?,
+                description: row.get(1)?,
+                category: row.get(2)?,
+            })
+        })?;
+
+        let mut statuses = Vec::new();
+        for status in rows {
+            statuses.push(status?);
+        }
+        Ok(statuses)
+    }
+
+    // Priority operations
+    pub fn upsert_priorities(&self, project_id: &str, priorities: &[Priority]) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let now = Utc::now().to_rfc3339();
+
+        for priority in priorities {
+            conn.execute(
+                r#"
+                INSERT INTO priorities (project_id, name, description, icon_url, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT (project_id, name) DO UPDATE SET
+                    description = excluded.description,
+                    icon_url = excluded.icon_url,
+                    updated_at = excluded.updated_at
+                "#,
+                duckdb::params![
+                    project_id,
+                    &priority.name,
+                    &priority.description,
+                    &priority.icon_url,
+                    &now,
+                    &now,
+                ],
+            )?;
+        }
+        Ok(())
+    }
+
+    pub fn find_priorities_by_project(&self, project_id: &str) -> Result<Vec<Priority>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT name, description, icon_url FROM priorities WHERE project_id = ? ORDER BY name",
+        )?;
+
+        let rows = stmt.query_map(duckdb::params![project_id], |row| {
+            Ok(Priority {
+                name: row.get(0)?,
+                description: row.get(1)?,
+                icon_url: row.get(2)?,
+            })
+        })?;
+
+        let mut priorities = Vec::new();
+        for priority in rows {
+            priorities.push(priority?);
+        }
+        Ok(priorities)
+    }
+
+    // IssueType operations
+    pub fn upsert_issue_types(&self, project_id: &str, issue_types: &[IssueType]) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let now = Utc::now().to_rfc3339();
+
+        for issue_type in issue_types {
+            conn.execute(
+                r#"
+                INSERT INTO issue_types (project_id, name, description, icon_url, subtask, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT (project_id, name) DO UPDATE SET
+                    description = excluded.description,
+                    icon_url = excluded.icon_url,
+                    subtask = excluded.subtask,
+                    updated_at = excluded.updated_at
+                "#,
+                duckdb::params![
+                    project_id,
+                    &issue_type.name,
+                    &issue_type.description,
+                    &issue_type.icon_url,
+                    &issue_type.subtask,
+                    &now,
+                    &now,
+                ],
+            )?;
+        }
+        Ok(())
+    }
+
+    pub fn find_issue_types_by_project(&self, project_id: &str) -> Result<Vec<IssueType>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT name, description, icon_url, subtask FROM issue_types WHERE project_id = ? ORDER BY name",
+        )?;
+
+        let rows = stmt.query_map(duckdb::params![project_id], |row| {
+            Ok(IssueType {
+                name: row.get(0)?,
+                description: row.get(1)?,
+                icon_url: row.get(2)?,
+                subtask: row.get(3)?,
+            })
+        })?;
+
+        let mut issue_types = Vec::new();
+        for issue_type in rows {
+            issue_types.push(issue_type?);
+        }
+        Ok(issue_types)
+    }
+
+    // Label operations
+    pub fn upsert_labels(&self, project_id: &str, labels: &[Label]) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let now = Utc::now().to_rfc3339();
+
+        for label in labels {
+            conn.execute(
+                r#"
+                INSERT INTO labels (project_id, name, created_at, updated_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT (project_id, name) DO UPDATE SET
+                    updated_at = excluded.updated_at
+                "#,
+                duckdb::params![
+                    project_id,
+                    &label.name,
+                    &now,
+                    &now,
+                ],
+            )?;
+        }
+        Ok(())
+    }
+
+    pub fn find_labels_by_project(&self, project_id: &str) -> Result<Vec<Label>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT name FROM labels WHERE project_id = ? ORDER BY name",
+        )?;
+
+        let rows = stmt.query_map(duckdb::params![project_id], |row| {
+            Ok(Label {
+                name: row.get(0)?,
+            })
+        })?;
+
+        let mut labels = Vec::new();
+        for label in rows {
+            labels.push(label?);
+        }
+        Ok(labels)
+    }
+
+    // Component operations
+    pub fn upsert_components(&self, project_id: &str, components: &[Component]) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let now = Utc::now().to_rfc3339();
+
+        for component in components {
+            conn.execute(
+                r#"
+                INSERT INTO components (project_id, name, description, lead, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT (project_id, name) DO UPDATE SET
+                    description = excluded.description,
+                    lead = excluded.lead,
+                    updated_at = excluded.updated_at
+                "#,
+                duckdb::params![
+                    project_id,
+                    &component.name,
+                    &component.description,
+                    &component.lead,
+                    &now,
+                    &now,
+                ],
+            )?;
+        }
+        Ok(())
+    }
+
+    pub fn find_components_by_project(&self, project_id: &str) -> Result<Vec<Component>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT name, description, lead FROM components WHERE project_id = ? ORDER BY name",
+        )?;
+
+        let rows = stmt.query_map(duckdb::params![project_id], |row| {
+            Ok(Component {
+                name: row.get(0)?,
+                description: row.get(1)?,
+                lead: row.get(2)?,
+            })
+        })?;
+
+        let mut components = Vec::new();
+        for component in rows {
+            components.push(component?);
+        }
+        Ok(components)
+    }
+
+    // FixVersion operations
+    pub fn upsert_fix_versions(&self, project_id: &str, fix_versions: &[FixVersion]) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let now = Utc::now().to_rfc3339();
+
+        for version in fix_versions {
+            conn.execute(
+                r#"
+                INSERT INTO fix_versions (project_id, name, description, released, release_date, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT (project_id, name) DO UPDATE SET
+                    description = excluded.description,
+                    released = excluded.released,
+                    release_date = excluded.release_date,
+                    updated_at = excluded.updated_at
+                "#,
+                duckdb::params![
+                    project_id,
+                    &version.name,
+                    &version.description,
+                    &version.released,
+                    &version.release_date.map(|d| d.to_rfc3339()),
+                    &now,
+                    &now,
+                ],
+            )?;
+        }
+        Ok(())
+    }
+
+    pub fn find_fix_versions_by_project(&self, project_id: &str) -> Result<Vec<FixVersion>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT name, description, released, release_date FROM fix_versions WHERE project_id = ? ORDER BY name",
+        )?;
+
+        let rows = stmt.query_map(duckdb::params![project_id], |row| {
+            Ok(FixVersion {
+                name: row.get(0)?,
+                description: row.get(1)?,
+                released: row.get(2)?,
+                release_date: row.get::<_, Option<String>>(3)?.and_then(|s| DateTime::parse_from_rfc3339(&s).ok().map(|dt| dt.with_timezone(&Utc))),
+            })
+        })?;
+
+        let mut fix_versions = Vec::new();
+        for version in rows {
+            fix_versions.push(version?);
+        }
+        Ok(fix_versions)
     }
 }

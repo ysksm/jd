@@ -223,8 +223,11 @@ jira-db project disable PROJ
 
 ## コマンドリファレンス
 
-### `jira-db init`
-設定ファイルを初期化します。`~/.config/jira-db/settings.json` を作成します。
+### `jira-db init [OPTIONS]`
+設定ファイルを初期化します。`./settings.json` を作成します。
+
+**オプション：**
+- `-i, --interactive` - 対話的に設定を入力（エンドポイント、ユーザー名、APIキーなど）
 
 ### `jira-db project <SUBCOMMAND>`
 プロジェクト管理コマンド。
@@ -254,7 +257,32 @@ jira-db project disable PROJ
   - 有効なキー: `jira.endpoint`, `jira.username`, `jira.api_key`
 
 ### `jira-db search <QUERY> [OPTIONS]`
-イシューを検索します（実装予定）。
+同期済みのイシューを検索します。
+
+**引数：**
+- `QUERY` - 検索キーワード（summaryとdescriptionから検索）
+
+**オプション：**
+- `-p, --project <PROJECT_KEY>` - プロジェクトで絞り込み
+- `-s, --status <STATUS>` - ステータスで絞り込み
+- `-a, --assignee <NAME>` - 担当者で絞り込み
+- `-l, --limit <NUM>` - 表示件数（デフォルト: 20）
+- `-o, --offset <NUM>` - オフセット（ページネーション用、デフォルト: 0）
+
+**例：**
+```bash
+# "bug"を含むイシューを検索
+jira-db search bug
+
+# 特定プロジェクトのオープンなイシューを検索
+jira-db search "" --project PROJ --status "Open"
+
+# 担当者で絞り込み
+jira-db search "performance" --assignee "john"
+
+# 2ページ目を表示（21〜40件目）
+jira-db search "api" --limit 20 --offset 20
+```
 
 ## データの保存場所
 
@@ -452,14 +480,21 @@ Issue報告やPull Requestを歓迎します！
 - [DuckDB](https://duckdb.org/)
 - [Rust](https://www.rust-lang.org/)
 
+## 実装済み機能
+
+- ✅ **検索機能**（フルテキスト検索、フィルタ、ページネーション）
+- ✅ **対話的な初期設定**（--interactiveフラグ）
+- ✅ **進捗バー表示**（同期中の視覚的フィードバック）
+- ✅ **エラーハンドリング**（自動リトライ、タイムアウト処理）
+
 ## 今後の実装予定
 
-- [ ] 検索機能（フルテキスト検索、フィルタ）
 - [ ] 増分同期（最終同期日時以降の変更のみ取得）
 - [ ] エクスポート機能（CSV、Excel）
 - [ ] 統計・分析機能
 - [ ] Webhookによるリアルタイム同期
 - [ ] 複数JIRA環境のサポート
+- [ ] ユニットテスト・統合テスト
 
 ## サポート
 

@@ -7,12 +7,15 @@ mod sync;
 
 use clap::Parser;
 use crate::cli::{Cli, Commands, ConfigAction, ProjectAction};
-use crate::config::Settings;
-use crate::db::Database;
+use crate::config::{DatabaseConfig, JiraConfig, Settings};
+use crate::db::{Database, IssueRepository, SearchParams};
 use crate::error::{JiraDbError, Result};
 use crate::jira::JiraClient;
 use crate::sync::SyncManager;
+use comfy_table::{Table, Cell, Color, Attribute};
+use dialoguer::{Input, Confirm};
 use log::{error, info};
+use std::path::PathBuf;
 
 #[tokio::main]
 async fn main() {
@@ -28,7 +31,7 @@ async fn run() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Init => handle_init().await,
+        Commands::Init { interactive } => handle_init(interactive).await,
         Commands::Project { action } => handle_project(action).await,
         Commands::Sync { project, force } => handle_sync(project, force).await,
         Commands::Config { action } => handle_config(action).await,
@@ -36,11 +39,14 @@ async fn run() -> Result<()> {
             query,
             project,
             status,
-        } => handle_search(query, project, status).await,
+            assignee,
+            limit,
+            offset,
+        } => handle_search(query, project, status, assignee, limit, offset).await,
     }
 }
 
-async fn handle_init() -> Result<()> {
+async fn handle_init(interactive: bool) -> Result<()> {
     info!("Initializing jira-db configuration...");
 
     let settings_path = Settings::default_path()?;
@@ -52,16 +58,91 @@ async fn handle_init() -> Result<()> {
         )));
     }
 
-    let _settings = Settings::create_default(&settings_path)?;
+    let _settings = if interactive {
+        // Interactive mode
+        info!("Interactive configuration setup\n");
+
+        let endpoint: String = Input::new()
+            .with_prompt("JIRA instance URL (e.g., https://your-domain.atlassian.net)")
+            .interact_text()
+            .map_err(|e| JiraDbError::Config(format!("Input error: {}", e)))?;
+
+        let username: String = Input::new()
+            .with_prompt("JIRA username/email")
+            .interact_text()
+            .map_err(|e| JiraDbError::Config(format!("Input error: {}", e)))?;
+
+        let api_key: String = Input::new()
+            .with_prompt("JIRA API token")
+            .interact_text()
+            .map_err(|e| JiraDbError::Config(format!("Input error: {}", e)))?;
+
+        let db_path: String = Input::new()
+            .with_prompt("Database path")
+            .default("./data/jira.duckdb".to_string())
+            .interact_text()
+            .map_err(|e| JiraDbError::Config(format!("Input error: {}", e)))?;
+
+        let settings = Settings {
+            jira: JiraConfig {
+                endpoint,
+                username,
+                api_key,
+            },
+            projects: Vec::new(),
+            database: DatabaseConfig {
+                path: PathBuf::from(db_path),
+            },
+        };
+
+        settings.save(&settings_path)?;
+
+        // Test connection if user wants
+        let test_connection = Confirm::new()
+            .with_prompt("Test JIRA connection now?")
+            .default(true)
+            .interact()
+            .map_err(|e| JiraDbError::Config(format!("Input error: {}", e)))?;
+
+        if test_connection {
+            info!("Testing JIRA connection...");
+            match JiraClient::new(&settings.jira) {
+                Ok(client) => {
+                    match client.test_connection().await {
+                        Ok(_) => info!("✓ Connection successful!"),
+                        Err(e) => {
+                            error!("✗ Connection failed: {}", e);
+                            info!("Configuration saved, but please check your credentials.");
+                        }
+                    }
+                }
+                Err(e) => {
+                    error!("✗ Failed to create client: {}", e);
+                }
+            }
+        }
+
+        settings
+    } else {
+        // Non-interactive mode (default)
+        Settings::create_default(&settings_path)?
+    };
 
     info!("Created configuration file at: {}", settings_path.display());
-    info!("");
-    info!("Next steps:");
-    info!("  1. Edit the configuration file and set your JIRA credentials:");
-    info!("     - endpoint: Your JIRA instance URL");
-    info!("     - username: Your JIRA username/email");
-    info!("     - api_key: Your JIRA API key");
-    info!("  2. Run: jira-db project init");
+
+    if !interactive {
+        info!("");
+        info!("Next steps:");
+        info!("  1. Edit the configuration file and set your JIRA credentials:");
+        info!("     - endpoint: Your JIRA instance URL");
+        info!("     - username: Your JIRA username/email");
+        info!("     - api_key: Your JIRA API key");
+        info!("  2. Run: jira-db project init");
+    } else {
+        info!("");
+        info!("Next step:");
+        info!("  Run: jira-db project init");
+    }
 
     Ok(())
 }
@@ -241,16 +322,83 @@ async fn handle_config(action: ConfigAction) -> Result<()> {
 
 async fn handle_search(
     query: String,
-    _project_filter: Option<String>,
-    _status_filter: Option<String>,
+    project_filter: Option<String>,
+    status_filter: Option<String>,
+    assignee_filter: Option<String>,
+    limit: usize,
+    offset: usize,
 ) -> Result<()> {
     let settings_path = Settings::default_path()?;
     let settings = Settings::load(&settings_path)?;
 
-    let _db = Database::new(&settings.database.path)?;
+    let db = Database::new(&settings.database.path)?;
+    let issue_repo = IssueRepository::new(db.connection());
 
-    info!("Searching for: {}", query);
-    info!("(Search functionality coming soon)");
+    // Build search parameters
+    let search_params = SearchParams {
+        query: if query.is_empty() { None } else { Some(query.clone()) },
+        project_key: project_filter,
+        status: status_filter,
+        assignee: assignee_filter,
+        limit: Some(limit),
+        offset: Some(offset),
+    };
+
+    info!("Searching for issues...");
+    let issues = issue_repo.search(&search_params)?;
+
+    if issues.is_empty() {
+        info!("No issues found matching the search criteria.");
+        return Ok(());
+    }
+
+    info!("Found {} issue(s):\n", issues.len());
+
+    // Create table for results
+    let mut table = Table::new();
+    table.set_header(vec![
+        Cell::new("Key").fg(Color::Cyan).add_attribute(Attribute::Bold),
+        Cell::new("Summary").fg(Color::Cyan).add_attribute(Attribute::Bold),
+        Cell::new("Status").fg(Color::Cyan).add_attribute(Attribute::Bold),
+        Cell::new("Assignee").fg(Color::Cyan).add_attribute(Attribute::Bold),
+        Cell::new("Created").fg(Color::Cyan).add_attribute(Attribute::Bold),
+    ]);
+
+    for issue in &issues {
+        let created = issue
+            .created_date
+            .map(|d| d.format("%Y-%m-%d").to_string())
+            .unwrap_or_else(|| "N/A".to_string());
+
+        let assignee = issue.assignee.clone().unwrap_or_else(|| "Unassigned".to_string());
+        let status = issue.status.clone().unwrap_or_else(|| "Unknown".to_string());
+
+        // Truncate summary if too long
+        let summary = if issue.summary.len() > 60 {
+            format!("{}...", &issue.summary[..57])
+        } else {
+            issue.summary.clone()
+        };
+
+        table.add_row(vec![
+            Cell::new(&issue.key),
+            Cell::new(summary),
+            Cell::new(status),
+            Cell::new(assignee),
+            Cell::new(created),
+        ]);
+    }
+
+    println!("{}", table);
+
+    // Show pagination info
+    if limit > 0 {
+        info!("");
+        info!("Showing results {} to {} (limit: {})", offset + 1, offset + issues.len(), limit);
+        if issues.len() == limit {
+            info!("Use --offset {} to see more results", offset + limit);
+        }
+    }
 
     Ok(())
 }
