@@ -103,28 +103,167 @@ impl JiraClient {
         Ok(projects.into_iter().map(|p| p.into()).collect())
     }
 
-    /// Fetch all issues for a project
+    /// Fetch all issues for a project with all fields and changelog
     pub async fn fetch_project_issues(&self, project_key: &str) -> Result<Vec<Issue>> {
         let jql = format!("project = {} ORDER BY created DESC", project_key);
-        let client = &self.client;
-        let jql_clone = jql.clone();
+        let url = format!("{}/rest/api/3/search/jql", self.base_url);
 
-        let responses = retry_with_backoff(
-            || async { jira_api::search_all_issues_paginated(client, jql_clone.clone(), Some(100)).await },
-            3, // max 3 retries
-            60, // 60 second timeout (longer for potentially large result sets)
-        )
-        .await
-        .map_err(|e| JiraDbError::JiraApi(e.to_string()))?;
+        let mut all_issues = Vec::new();
+        let mut start_at = 0;
+        let max_results = 100;
 
-        // Flatten all issues from all pages
-        let issues: Vec<Issue> = responses
-            .into_iter()
-            .flat_map(|response| response.issues)
-            .map(|i| i.into())
-            .collect();
+        loop {
+            let response = self.http_client
+                .get(&url)
+                .query(&[
+                    ("jql", jql.as_str()),
+                    ("fields", "*navigable"),
+                    ("expand", "changelog"),
+                    ("maxResults", &max_results.to_string()),
+                    ("startAt", &start_at.to_string()),
+                ])
+                .header("Authorization", &self.auth_header)
+                .header("Accept", "application/json")
+                .send()
+                .await
+                .map_err(|e| JiraDbError::JiraApi(format!("Failed to fetch issues: {}", e)))?;
 
-        Ok(issues)
+            if !response.status().is_success() {
+                let status = response.status();
+                let error_text = response.text().await.unwrap_or_else(|_| "Could not read error response".to_string());
+                return Err(JiraDbError::JiraApi(format!("Failed to fetch issues: {} - {}", status, error_text)));
+            }
+
+            let json: serde_json::Value = response.json().await
+                .map_err(|e| JiraDbError::JiraApi(format!("Failed to parse issues: {}", e)))?;
+
+            let total = json["total"].as_i64().unwrap_or(0);
+
+            if let Some(issues_array) = json["issues"].as_array() {
+                for issue_json in issues_array {
+                    // Parse issue from JSON
+                    if let (Some(id), Some(key)) = (
+                        issue_json["id"].as_str(),
+                        issue_json["key"].as_str(),
+                    ) {
+                        let fields = &issue_json["fields"];
+
+                        let project_id = fields["project"]["id"]
+                            .as_str()
+                            .unwrap_or("")
+                            .to_string();
+
+                        let summary = fields["summary"]
+                            .as_str()
+                            .unwrap_or("")
+                            .to_string();
+
+                        let description = fields["description"]
+                            .as_str()
+                            .map(|s| s.to_string());
+
+                        let status = fields["status"]["name"]
+                            .as_str()
+                            .map(|s| s.to_string());
+
+                        let priority = fields["priority"]["name"]
+                            .as_str()
+                            .map(|s| s.to_string());
+
+                        let assignee = fields["assignee"]["displayName"]
+                            .as_str()
+                            .map(|s| s.to_string());
+
+                        let reporter = fields["reporter"]["displayName"]
+                            .as_str()
+                            .map(|s| s.to_string());
+
+                        let issue_type = fields["issuetype"]["name"]
+                            .as_str()
+                            .map(|s| s.to_string());
+
+                        let resolution = fields["resolution"]["name"]
+                            .as_str()
+                            .map(|s| s.to_string());
+
+                        let labels = fields["labels"]
+                            .as_array()
+                            .map(|arr| {
+                                arr.iter()
+                                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                                    .collect::<Vec<String>>()
+                            })
+                            .filter(|v| !v.is_empty());
+
+                        let components = fields["components"]
+                            .as_array()
+                            .map(|arr| {
+                                arr.iter()
+                                    .filter_map(|v| v["name"].as_str().map(|s| s.to_string()))
+                                    .collect::<Vec<String>>()
+                            })
+                            .filter(|v| !v.is_empty());
+
+                        let fix_versions = fields["fixVersions"]
+                            .as_array()
+                            .map(|arr| {
+                                arr.iter()
+                                    .filter_map(|v| v["name"].as_str().map(|s| s.to_string()))
+                                    .collect::<Vec<String>>()
+                            })
+                            .filter(|v| !v.is_empty());
+
+                        let parent_key = fields["parent"]["key"]
+                            .as_str()
+                            .map(|s| s.to_string());
+
+                        let created_date = fields["created"]
+                            .as_str()
+                            .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+                            .map(|dt| dt.with_timezone(&chrono::Utc));
+
+                        let updated_date = fields["updated"]
+                            .as_str()
+                            .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+                            .map(|dt| dt.with_timezone(&chrono::Utc));
+
+                        // Store the complete JSON response including changelog
+                        let raw_json = serde_json::to_string(&issue_json).ok();
+
+                        all_issues.push(Issue {
+                            id: id.to_string(),
+                            project_id,
+                            key: key.to_string(),
+                            summary,
+                            description,
+                            status,
+                            priority,
+                            assignee,
+                            reporter,
+                            issue_type,
+                            resolution,
+                            labels,
+                            components,
+                            fix_versions,
+                            parent_key,
+                            created_date,
+                            updated_date,
+                            raw_json,
+                        });
+                    }
+                }
+
+                // Check if there are more pages
+                if (start_at + max_results) >= total as usize {
+                    break;
+                }
+                start_at += max_results;
+            } else {
+                break;
+            }
+        }
+
+        Ok(all_issues)
     }
 
     /// Test connection to JIRA
@@ -260,7 +399,7 @@ impl JiraClient {
         let jql = format!("project = {} AND labels is not EMPTY", project_key);
 
         let response = self.http_client
-            .get(format!("{}/rest/api/3/search", self.base_url))
+            .get(format!("{}/rest/api/3/search/jql", self.base_url))
             .query(&[("jql", &jql), ("fields", &"labels".to_string()), ("maxResults", &"1000".to_string())])
             .header("Authorization", &self.auth_header)
             .header("Accept", "application/json")

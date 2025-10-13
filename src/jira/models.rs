@@ -71,6 +71,8 @@ pub struct Issue {
     pub parent_key: Option<String>,
     pub created_date: Option<DateTime<Utc>>,
     pub updated_date: Option<DateTime<Utc>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub raw_json: Option<String>,
 }
 
 impl From<jira_api::Project> for Project {
@@ -191,6 +193,7 @@ impl From<jira_api::Issue> for Issue {
             parent_key,
             created_date,
             updated_date,
+            raw_json: None,
         }
     }
 }

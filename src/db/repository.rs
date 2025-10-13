@@ -121,6 +121,11 @@ impl IssueRepository {
                 .as_ref()
                 .map(|v| serde_json::to_string(v).unwrap_or_default());
 
+            // Use raw_json if available, otherwise serialize the issue
+            let raw_data = issue.raw_json.as_ref()
+                .map(|s| s.clone())
+                .unwrap_or_else(|| serde_json::to_string(&issue).unwrap_or_default());
+
             conn.execute(
                 r#"
                 INSERT INTO issues (
@@ -168,7 +173,7 @@ impl IssueRepository {
                     &issue.parent_key,
                     &issue.created_date.map(|d| d.to_rfc3339()),
                     &issue.updated_date.map(|d| d.to_rfc3339()),
-                    &serde_json::to_string(&issue)?,
+                    &raw_data,
                     &now,
                     &now,
                 ],
@@ -218,6 +223,7 @@ impl IssueRepository {
                 parent_key: row.get(14)?,
                 created_date: row.get::<_, Option<String>>(15)?.and_then(|s| DateTime::parse_from_rfc3339(&s).ok().map(|dt| dt.with_timezone(&Utc))),
                 updated_date: row.get::<_, Option<String>>(16)?.and_then(|s| DateTime::parse_from_rfc3339(&s).ok().map(|dt| dt.with_timezone(&Utc))),
+                raw_json: None,
             })
         })?;
 
@@ -338,6 +344,7 @@ impl IssueRepository {
                 parent_key: row.get(14)?,
                 created_date: row.get::<_, Option<String>>(15)?.and_then(|s| DateTime::parse_from_rfc3339(&s).ok().map(|dt| dt.with_timezone(&Utc))),
                 updated_date: row.get::<_, Option<String>>(16)?.and_then(|s| DateTime::parse_from_rfc3339(&s).ok().map(|dt| dt.with_timezone(&Utc))),
+                raw_json: None,
             })
         })?;
 
