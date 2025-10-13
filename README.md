@@ -7,8 +7,10 @@ JIRAのプロジェクトとイシューをローカルのDuckDBデータベー�
 - 🚀 JIRAデータをローカルに同期して高速アクセス
 - 💾 DuckDBによる効率的なデータ保存
 - 🔄 プロジェクト単位での同期制御
-- 📊 RAWデータとしてJSON形式で完全なAPIレスポンスを保存
+- 📊 RAWデータとしてJSON形式で完全なAPIレスポンス（全フィールド・変更履歴含む）を保存
+- 🏷️ プロジェクトのメタデータ（ステータス、優先度、イシュータイプ、ラベル等）を自動同期
 - 🛠️ 使いやすいCLIインターフェース
+- 🔍 高速なフルテキスト検索とフィルタリング
 
 ## 前提条件
 
@@ -284,6 +286,39 @@ jira-db search "performance" --assignee "john"
 jira-db search "api" --limit 20 --offset 20
 ```
 
+### `jira-db metadata [OPTIONS]`
+プロジェクトのメタデータ（ステータス、優先度、イシュータイプなど）を表示します。
+
+**オプション：**
+- `-p, --project <PROJECT_KEY>` - プロジェクトキーを指定（必須）
+- `-t, --type <TYPE>` - メタデータタイプを指定（オプション）
+  - `status` - ステータス一覧
+  - `priority` - 優先度一覧
+  - `issue-type` - イシュータイプ一覧
+  - `label` - ラベル一覧
+  - `component` - コンポーネント一覧
+  - `version` - バージョン（フィックスバージョン）一覧
+
+**例：**
+```bash
+# プロジェクト全体のメタデータサマリーを表示
+jira-db metadata --project PROJ
+
+# ステータス一覧を表示
+jira-db metadata --project PROJ --type status
+
+# 優先度一覧を表示
+jira-db metadata --project PROJ --type priority
+
+# イシュータイプ一覧を表示
+jira-db metadata --project PROJ --type issue-type
+
+# ラベル一覧を表示
+jira-db metadata --project PROJ --type label
+```
+
+**注意：** メタデータは `jira-db sync` の実行時にJIRA APIから自動的に取得・保存されます。
+
 ## データの保存場所
 
 - **設定ファイル**: `./settings.json`（カレントディレクトリ）
@@ -354,8 +389,10 @@ JIRAイシューデータを保存。
 | reporter | VARCHAR | 報告者 |
 | created_date | TIMESTAMP | イシュー作成日 |
 | updated_date | TIMESTAMP | イシュー更新日 |
-| raw_data | JSON | 完全なAPIレスポンス |
+| raw_data | JSON | 完全なAPIレスポンス（全フィールド・変更履歴含む） |
 | synced_at | TIMESTAMP | 同期日時 |
+
+**注意：** raw_dataカラムには、JIRA REST API v3から取得した全フィールド（`*navigable`）と変更履歴（`changelog`）を含む完全なJSONデータが保存されます。
 
 ### sync_historyテーブル
 同期履歴を記録。
@@ -370,6 +407,82 @@ JIRAイシューデータを保存。
 | status | VARCHAR | ステータス（running/completed/failed） |
 | items_synced | INTEGER | 同期したアイテム数 |
 | error_message | TEXT | エラーメッセージ |
+
+### メタデータテーブル
+
+#### statusesテーブル
+プロジェクトのステータス定義を保存。
+
+| カラム | 型 | 説明 |
+|--------|-----|------|
+| project_id | VARCHAR | プロジェクトID（複合主キー） |
+| name | VARCHAR | ステータス名（複合主キー） |
+| description | VARCHAR | 説明 |
+| category | VARCHAR | ステータスカテゴリ |
+| created_at | TIMESTAMP | レコード作成日時 |
+| updated_at | TIMESTAMP | レコード更新日時 |
+
+#### prioritiesテーブル
+プロジェクトの優先度定義を保存。
+
+| カラム | 型 | 説明 |
+|--------|-----|------|
+| project_id | VARCHAR | プロジェクトID（複合主キー） |
+| name | VARCHAR | 優先度名（複合主キー） |
+| description | VARCHAR | 説明 |
+| icon_url | VARCHAR | アイコンURL |
+| created_at | TIMESTAMP | レコード作成日時 |
+| updated_at | TIMESTAMP | レコード更新日時 |
+
+#### issue_typesテーブル
+プロジェクトのイシュータイプ定義を保存。
+
+| カラム | 型 | 説明 |
+|--------|-----|------|
+| project_id | VARCHAR | プロジェクトID（複合主キー） |
+| name | VARCHAR | イシュータイプ名（複合主キー） |
+| description | VARCHAR | 説明 |
+| icon_url | VARCHAR | アイコンURL |
+| subtask | BOOLEAN | サブタスクかどうか |
+| created_at | TIMESTAMP | レコード作成日時 |
+| updated_at | TIMESTAMP | レコード更新日時 |
+
+#### labelsテーブル
+プロジェクトのラベルを保存。
+
+| カラム | 型 | 説明 |
+|--------|-----|------|
+| project_id | VARCHAR | プロジェクトID（複合主キー） |
+| name | VARCHAR | ラベル名（複合主キー） |
+| created_at | TIMESTAMP | レコード作成日時 |
+| updated_at | TIMESTAMP | レコード更新日時 |
+
+#### componentsテーブル
+プロジェクトのコンポーネント定義を保存。
+
+| カラム | 型 | 説明 |
+|--------|-----|------|
+| project_id | VARCHAR | プロジェクトID（複合主キー） |
+| name | VARCHAR | コンポーネント名（複合主キー） |
+| description | VARCHAR | 説明 |
+| lead | VARCHAR | リード担当者 |
+| created_at | TIMESTAMP | レコード作成日時 |
+| updated_at | TIMESTAMP | レコード更新日時 |
+
+#### fix_versionsテーブル
+プロジェクトのバージョン（フィックスバージョン）定義を保存。
+
+| カラム | 型 | 説明 |
+|--------|-----|------|
+| project_id | VARCHAR | プロジェクトID（複合主キー） |
+| name | VARCHAR | バージョン名（複合主キー） |
+| description | VARCHAR | 説明 |
+| released | BOOLEAN | リリース済みかどうか |
+| release_date | TIMESTAMP | リリース日 |
+| created_at | TIMESTAMP | レコード作成日時 |
+| updated_at | TIMESTAMP | レコード更新日時 |
+
+**注意：** メタデータテーブルは同期時にJIRA REST API v3から直接取得されます。issuesテーブルのデータから抽出されるのではなく、プロジェクトに定義されているすべてのメタデータが保存されます。
 
 ## トラブルシューティング
 
@@ -486,6 +599,8 @@ Issue報告やPull Requestを歓迎します！
 - ✅ **対話的な初期設定**（--interactiveフラグ）
 - ✅ **進捗バー表示**（同期中の視覚的フィードバック）
 - ✅ **エラーハンドリング**（自動リトライ、タイムアウト処理）
+- ✅ **メタデータ管理**（ステータス、優先度、イシュータイプ、ラベル、コンポーネント、バージョンの同期・表示）
+- ✅ **完全なイシューデータ取得**（全フィールド、変更履歴を含む完全なJSON保存）
 
 ## 今後の実装予定
 
