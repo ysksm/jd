@@ -1,0 +1,7 @@
+[package]
+name = "jira-db"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+jira-api = { git = "https://github.com/ysksm/jira-api" }
