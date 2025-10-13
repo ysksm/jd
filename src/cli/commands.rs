@@ -1,0 +1,93 @@
+use clap::{Parser, Subcommand};
+
+#[derive(Parser)]
+#[command(name = "jira-db")]
+#[command(about = "JIRA data synchronization and local database tool", long_about = None)]
+#[command(version)]
+pub struct Cli {
+    #[command(subcommand)]
+    pub command: Commands,
+}
+
+#[derive(Subcommand)]
+pub enum Commands {
+    /// Initialize configuration file
+    Init,
+
+    /// Manage JIRA projects
+    Project {
+        #[command(subcommand)]
+        action: ProjectAction,
+    },
+
+    /// Synchronize JIRA data for enabled projects
+    Sync {
+        /// Specific project key to sync (syncs all enabled projects if not specified)
+        #[arg(short, long)]
+        project: Option<String>,
+
+        /// Force full synchronization
+        #[arg(short, long)]
+        force: bool,
+    },
+
+    /// Configure settings
+    Config {
+        #[command(subcommand)]
+        action: ConfigAction,
+    },
+
+    /// Search issues
+    Search {
+        /// Search query
+        query: String,
+
+        /// Filter by project key
+        #[arg(short, long)]
+        project: Option<String>,
+
+        /// Filter by status
+        #[arg(short, long)]
+        status: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum ProjectAction {
+    /// Initialize project list from JIRA
+    Init,
+
+    /// List all projects
+    List {
+        /// Show detailed information
+        #[arg(short, long)]
+        verbose: bool,
+    },
+
+    /// Enable sync for a project
+    Enable {
+        /// Project key
+        project_key: String,
+    },
+
+    /// Disable sync for a project
+    Disable {
+        /// Project key
+        project_key: String,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum ConfigAction {
+    /// Show current configuration
+    Show,
+
+    /// Set configuration value
+    Set {
+        /// Configuration key (e.g., jira.endpoint)
+        key: String,
+
+        /// Configuration value
+        value: String,
+    },
+}

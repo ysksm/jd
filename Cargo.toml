@@ -5,3 +5,14 @@ edition = "2024"
 
 [dependencies]
 jira-api = { git = "https://github.com/ysksm/jira-api" }
+duckdb = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1", features = ["full"] }
+anyhow = "1.0"
+thiserror = "1.0"
+clap = { version = "4", features = ["derive"] }
+log = "0.4"
+env_logger = "0.11"
+dirs = "5.0"
+chrono = { version = "0.4", features = ["serde"] }
