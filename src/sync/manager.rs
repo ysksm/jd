@@ -1,5 +1,5 @@
 use crate::config::{ProjectConfig, Settings};
-use crate::db::{Database, IssueRepository, ProjectRepository, SyncHistoryRepository};
+use crate::db::{Database, IssueRepository, MetadataRepository, ProjectRepository, SyncHistoryRepository};
 use crate::error::Result;
 use crate::jira::JiraClient;
 use chrono::Utc;
@@ -74,7 +74,7 @@ impl SyncManager {
         }
     }
 
-    async fn sync_project_internal(&self, project_key: &str, _project_id: &str) -> Result<usize> {
+    async fn sync_project_internal(&self, project_key: &str, project_id: &str) -> Result<usize> {
         info!("Fetching issues for project: {}", project_key);
 
         let issues = self.client.fetch_project_issues(project_key).await?;
@@ -103,6 +103,76 @@ impl SyncManager {
         }
 
         pb.finish_with_message("Completed!");
+
+        // Fetch and save metadata from JIRA API
+        info!("Fetching and saving project metadata...");
+        let metadata_repo = MetadataRepository::new(self.db.connection());
+
+        // Fetch statuses
+        match self.client.fetch_project_statuses(project_key).await {
+            Ok(statuses) => {
+                if !statuses.is_empty() {
+                    metadata_repo.upsert_statuses(project_id, &statuses)?;
+                    info!("Saved {} statuses", statuses.len());
+                }
+            }
+            Err(e) => warn!("Failed to fetch statuses: {}", e),
+        }
+
+        // Fetch priorities
+        match self.client.fetch_priorities().await {
+            Ok(priorities) => {
+                if !priorities.is_empty() {
+                    metadata_repo.upsert_priorities(project_id, &priorities)?;
+                    info!("Saved {} priorities", priorities.len());
+                }
+            }
+            Err(e) => warn!("Failed to fetch priorities: {}", e),
+        }
+
+        // Fetch issue types
+        match self.client.fetch_project_issue_types(project_id).await {
+            Ok(issue_types) => {
+                if !issue_types.is_empty() {
+                    metadata_repo.upsert_issue_types(project_id, &issue_types)?;
+                    info!("Saved {} issue types", issue_types.len());
+                }
+            }
+            Err(e) => warn!("Failed to fetch issue types: {}", e),
+        }
+
+        // Fetch labels
+        match self.client.fetch_project_labels(project_key).await {
+            Ok(labels) => {
+                if !labels.is_empty() {
+                    metadata_repo.upsert_labels(project_id, &labels)?;
+                    info!("Saved {} labels", labels.len());
+                }
+            }
+            Err(e) => warn!("Failed to fetch labels: {}", e),
+        }
+
+        // Fetch components
+        match self.client.fetch_project_components(project_key).await {
+            Ok(components) => {
+                if !components.is_empty() {
+                    metadata_repo.upsert_components(project_id, &components)?;
+                    info!("Saved {} components", components.len());
+                }
+            }
+            Err(e) => warn!("Failed to fetch components: {}", e),
+        }
+
+        // Fetch versions
+        match self.client.fetch_project_versions(project_key).await {
+            Ok(fix_versions) => {
+                if !fix_versions.is_empty() {
+                    metadata_repo.upsert_fix_versions(project_id, &fix_versions)?;
+                    info!("Saved {} fix versions", fix_versions.len());
+                }
+            }
+            Err(e) => warn!("Failed to fetch versions: {}", e),
+        }
 
         Ok(count)
     }

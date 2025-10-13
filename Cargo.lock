@@ -1238,6 +1238,7 @@ name = "jira-db"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "base64 0.21.7",
  "chrono",
  "clap",
  "comfy-table",
@@ -1248,6 +1249,7 @@ dependencies = [
  "indicatif",
  "jira-api",
  "log",
+ "reqwest",
  "serde",
  "serde_json",
  "thiserror",

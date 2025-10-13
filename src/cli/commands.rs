@@ -66,6 +66,17 @@ pub enum Commands {
         #[arg(short, long, default_value = "0")]
         offset: usize,
     },
+
+    /// List metadata (statuses, priorities, etc.)
+    Metadata {
+        /// Project key to show metadata for
+        #[arg(short, long)]
+        project: String,
+
+        /// Type of metadata to show (status, priority, issue-type, label, component, version)
+        #[arg(short, long)]
+        r#type: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]

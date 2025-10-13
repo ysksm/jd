@@ -8,7 +8,7 @@ mod sync;
 use clap::Parser;
 use crate::cli::{Cli, Commands, ConfigAction, ProjectAction};
 use crate::config::{DatabaseConfig, JiraConfig, Settings};
-use crate::db::{Database, IssueRepository, SearchParams};
+use crate::db::{Database, IssueRepository, MetadataRepository, SearchParams};
 use crate::error::{JiraDbError, Result};
 use crate::jira::JiraClient;
 use crate::sync::SyncManager;
@@ -43,6 +43,7 @@ async fn run() -> Result<()> {
             limit,
             offset,
         } => handle_search(query, project, status, assignee, limit, offset).await,
+        Commands::Metadata { project, r#type } => handle_metadata(project, r#type).await,
     }
 }
 
@@ -397,6 +398,188 @@ async fn handle_search(
         info!("Showing results {} to {} (limit: {})", offset + 1, offset + issues.len(), limit);
         if issues.len() == limit {
             info!("Use --offset {} to see more results", offset + limit);
+        }
+    }
+
+    Ok(())
+}
+
+async fn handle_metadata(project_key: String, metadata_type: Option<String>) -> Result<()> {
+    let settings = Settings::load(&Settings::default_path()?)?;
+
+    // Find project
+    let project = settings
+        .find_project(&project_key)
+        .ok_or_else(|| JiraDbError::ProjectNotFound(project_key.clone()))?;
+
+    // Connect to database
+    let db_config = settings.database.clone();
+    let db = Database::new(&db_config.path)?;
+    let metadata_repo = MetadataRepository::new(db.connection());
+
+    let project_id = &project.id;
+
+    match metadata_type.as_deref() {
+        Some("status") | Some("statuses") => {
+            let statuses = metadata_repo.find_statuses_by_project(project_id)?;
+            if statuses.is_empty() {
+                info!("No statuses found for project {}", project_key);
+                return Ok(());
+            }
+
+            info!("Statuses for project {}:\n", project_key);
+            let mut table = Table::new();
+            table.set_header(vec![
+                Cell::new("Name").fg(Color::Cyan).add_attribute(Attribute::Bold),
+                Cell::new("Category").fg(Color::Cyan).add_attribute(Attribute::Bold),
+            ]);
+
+            for status in statuses {
+                table.add_row(vec![
+                    Cell::new(&status.name),
+                    Cell::new(status.category.unwrap_or_else(|| "-".to_string())),
+                ]);
+            }
+            println!("{}", table);
+        }
+        Some("priority") | Some("priorities") => {
+            let priorities = metadata_repo.find_priorities_by_project(project_id)?;
+            if priorities.is_empty() {
+                info!("No priorities found for project {}", project_key);
+                return Ok(());
+            }
+
+            info!("Priorities for project {}:\n", project_key);
+            let mut table = Table::new();
+            table.set_header(vec![
+                Cell::new("Name").fg(Color::Cyan).add_attribute(Attribute::Bold),
+                Cell::new("Description").fg(Color::Cyan).add_attribute(Attribute::Bold),
+            ]);
+
+            for priority in priorities {
+                table.add_row(vec![
+                    Cell::new(&priority.name),
+                    Cell::new(priority.description.unwrap_or_else(|| "-".to_string())),
+                ]);
+            }
+            println!("{}", table);
+        }
+        Some("issue-type") | Some("issue-types") => {
+            let issue_types = metadata_repo.find_issue_types_by_project(project_id)?;
+            if issue_types.is_empty() {
+                info!("No issue types found for project {}", project_key);
+                return Ok(());
+            }
+
+            info!("Issue Types for project {}:\n", project_key);
+            let mut table = Table::new();
+            table.set_header(vec![
+                Cell::new("Name").fg(Color::Cyan).add_attribute(Attribute::Bold),
+                Cell::new("Subtask").fg(Color::Cyan).add_attribute(Attribute::Bold),
+            ]);
+
+            for issue_type in issue_types {
+                table.add_row(vec![
+                    Cell::new(&issue_type.name),
+                    Cell::new(if issue_type.subtask { "Yes" } else { "No" }),
+                ]);
+            }
+            println!("{}", table);
+        }
+        Some("label") | Some("labels") => {
+            let labels = metadata_repo.find_labels_by_project(project_id)?;
+            if labels.is_empty() {
+                info!("No labels found for project {}", project_key);
+                return Ok(());
+            }
+
+            info!("Labels for project {} (total: {}):\n", project_key, labels.len());
+            for label in labels {
+                println!("  - {}", label.name);
+            }
+        }
+        Some("component") | Some("components") => {
+            let components = metadata_repo.find_components_by_project(project_id)?;
+            if components.is_empty() {
+                info!("No components found for project {}", project_key);
+                return Ok(());
+            }
+
+            info!("Components for project {}:\n", project_key);
+            let mut table = Table::new();
+            table.set_header(vec![
+                Cell::new("Name").fg(Color::Cyan).add_attribute(Attribute::Bold),
+                Cell::new("Lead").fg(Color::Cyan).add_attribute(Attribute::Bold),
+            ]);
+
+            for component in components {
+                table.add_row(vec![
+                    Cell::new(&component.name),
+                    Cell::new(component.lead.unwrap_or_else(|| "-".to_string())),
+                ]);
+            }
+            println!("{}", table);
+        }
+        Some("version") | Some("versions") | Some("fix-version") | Some("fix-versions") => {
+            let versions = metadata_repo.find_fix_versions_by_project(project_id)?;
+            if versions.is_empty() {
+                info!("No fix versions found for project {}", project_key);
+                return Ok(());
+            }
+
+            info!("Fix Versions for project {}:\n", project_key);
+            let mut table = Table::new();
+            table.set_header(vec![
+                Cell::new("Name").fg(Color::Cyan).add_attribute(Attribute::Bold),
+                Cell::new("Released").fg(Color::Cyan).add_attribute(Attribute::Bold),
+                Cell::new("Release Date").fg(Color::Cyan).add_attribute(Attribute::Bold),
+            ]);
+
+            for version in versions {
+                let release_date = version.release_date
+                    .map(|d| d.format("%Y-%m-%d").to_string())
+                    .unwrap_or_else(|| "-".to_string());
+
+                table.add_row(vec![
+                    Cell::new(&version.name),
+                    Cell::new(if version.released { "Yes" } else { "No" }),
+                    Cell::new(release_date),
+                ]);
+            }
+            println!("{}", table);
+        }
+        None => {
+            // Show all metadata types summary
+            info!("Metadata for project {}:\n", project_key);
+
+            let statuses = metadata_repo.find_statuses_by_project(project_id)?;
+            let priorities = metadata_repo.find_priorities_by_project(project_id)?;
+            let issue_types = metadata_repo.find_issue_types_by_project(project_id)?;
+            let labels = metadata_repo.find_labels_by_project(project_id)?;
+            let components = metadata_repo.find_components_by_project(project_id)?;
+            let versions = metadata_repo.find_fix_versions_by_project(project_id)?;
+
+            let mut table = Table::new();
+            table.set_header(vec![
+                Cell::new("Type").fg(Color::Cyan).add_attribute(Attribute::Bold),
+                Cell::new("Count").fg(Color::Cyan).add_attribute(Attribute::Bold),
+            ]);
+
+            table.add_row(vec![Cell::new("Statuses"), Cell::new(statuses.len())]);
+            table.add_row(vec![Cell::new("Priorities"), Cell::new(priorities.len())]);
+            table.add_row(vec![Cell::new("Issue Types"), Cell::new(issue_types.len())]);
+            table.add_row(vec![Cell::new("Labels"), Cell::new(labels.len())]);
+            table.add_row(vec![Cell::new("Components"), Cell::new(components.len())]);
+            table.add_row(vec![Cell::new("Fix Versions"), Cell::new(versions.len())]);
+
+            println!("{}", table);
+            info!("\nUse --type <TYPE> to see details (e.g., --type status)");
+        }
+        Some(t) => {
+            return Err(JiraDbError::Config(format!(
+                "Unknown metadata type: {}. Valid types: status, priority, issue-type, label, component, version",
+                t
+            )));
         }
     }
 

@@ -3,4 +3,4 @@ pub mod repository;
 pub mod schema;
 
 pub use connection::Database;
-pub use repository::{IssueRepository, ProjectRepository, SearchParams, SyncHistoryRepository};
+pub use repository::{IssueRepository, MetadataRepository, ProjectRepository, SearchParams, SyncHistoryRepository};
