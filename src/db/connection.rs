@@ -31,6 +31,7 @@ impl Database {
     }
 
     /// Execute a query
+    #[allow(dead_code)]
     pub fn execute<P: duckdb::Params>(&self, sql: &str, params: P) -> Result<usize> {
         let conn = self.conn.lock().unwrap();
         Ok(conn.execute(sql, params)?)

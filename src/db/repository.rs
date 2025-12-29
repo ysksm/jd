@@ -52,6 +52,7 @@ impl ProjectRepository {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn find_by_key(&self, key: &str) -> Result<Option<Project>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
@@ -72,6 +73,7 @@ impl ProjectRepository {
         }
     }
 
+    #[allow(dead_code)]
     pub fn find_all(&self) -> Result<Vec<Project>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare("SELECT id, key, name, description FROM projects")?;
@@ -183,6 +185,7 @@ impl IssueRepository {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn find_by_project(&self, project_id: &str) -> Result<Vec<Issue>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
@@ -235,6 +238,7 @@ impl IssueRepository {
         Ok(issues)
     }
 
+    #[allow(dead_code)]
     pub fn count_by_project(&self, project_id: &str) -> Result<usize> {
         let conn = self.conn.lock().unwrap();
         let count: i64 = conn.query_row(
@@ -419,6 +423,7 @@ impl SyncHistoryRepository {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn find_latest_by_project(&self, project_id: &str) -> Result<Option<(DateTime<Utc>, String)>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
@@ -810,6 +815,7 @@ impl ChangeHistoryRepository {
     }
 
     /// Find change history by issue key
+    #[allow(dead_code)]
     pub fn find_by_issue_key(&self, issue_key: &str) -> Result<Vec<ChangeHistoryItem>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
