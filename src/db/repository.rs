@@ -818,7 +818,7 @@ impl ChangeHistoryRepository {
                    author_account_id, author_display_name,
                    field, field_type,
                    from_value, from_string, to_value, to_string,
-                   changed_at
+                   CAST(changed_at AS VARCHAR) as changed_at
             FROM issue_change_history
             WHERE issue_key = ?
             ORDER BY changed_at DESC
@@ -866,7 +866,7 @@ impl ChangeHistoryRepository {
                    author_account_id, author_display_name,
                    field, field_type,
                    from_value, from_string, to_value, to_string,
-                   changed_at
+                   CAST(changed_at AS VARCHAR) as changed_at
             FROM issue_change_history
             WHERE issue_key = ? AND field = ?
             ORDER BY changed_at DESC
@@ -877,7 +877,7 @@ impl ChangeHistoryRepository {
                    author_account_id, author_display_name,
                    field, field_type,
                    from_value, from_string, to_value, to_string,
-                   changed_at
+                   CAST(changed_at AS VARCHAR) as changed_at
             FROM issue_change_history
             WHERE issue_key = ?
             ORDER BY changed_at DESC
