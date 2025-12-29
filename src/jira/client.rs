@@ -505,4 +505,89 @@ impl JiraClient {
 
         Ok(versions)
     }
+
+    /// Create a new issue in JIRA
+    pub async fn create_issue(
+        &self,
+        project_key: &str,
+        summary: &str,
+        description: Option<&str>,
+        issue_type: &str,
+    ) -> Result<CreatedIssue> {
+        let url = format!("{}/rest/api/3/issue", self.base_url);
+
+        // Build the request body with Atlassian Document Format for description
+        let mut fields = serde_json::json!({
+            "project": {
+                "key": project_key
+            },
+            "summary": summary,
+            "issuetype": {
+                "name": issue_type
+            }
+        });
+
+        // Add description in Atlassian Document Format (ADF) if provided
+        if let Some(desc) = description {
+            fields["description"] = serde_json::json!({
+                "type": "doc",
+                "version": 1,
+                "content": [
+                    {
+                        "type": "paragraph",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": desc
+                            }
+                        ]
+                    }
+                ]
+            });
+        }
+
+        let body = serde_json::json!({
+            "fields": fields
+        });
+
+        let response = self.http_client
+            .post(&url)
+            .header("Authorization", &self.auth_header)
+            .header("Content-Type", "application/json")
+            .header("Accept", "application/json")
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| JiraDbError::JiraApi(format!("Failed to create issue: {}", e)))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response.text().await.unwrap_or_else(|_| "Could not read error response".to_string());
+            return Err(JiraDbError::JiraApi(format!("Failed to create issue: {} - {}", status, error_text)));
+        }
+
+        let json: serde_json::Value = response.json().await
+            .map_err(|e| JiraDbError::JiraApi(format!("Failed to parse create issue response: {}", e)))?;
+
+        let id = json["id"].as_str()
+            .ok_or_else(|| JiraDbError::JiraApi("Response missing 'id' field".to_string()))?
+            .to_string();
+
+        let key = json["key"].as_str()
+            .ok_or_else(|| JiraDbError::JiraApi("Response missing 'key' field".to_string()))?
+            .to_string();
+
+        let self_url = json["self"].as_str()
+            .map(|s| s.to_string());
+
+        Ok(CreatedIssue { id, key, self_url })
+    }
+}
+
+/// Response from creating a new issue
+#[derive(Debug)]
+pub struct CreatedIssue {
+    pub id: String,
+    pub key: String,
+    pub self_url: Option<String>,
 }

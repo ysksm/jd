@@ -91,6 +91,25 @@ pub enum Commands {
         #[arg(short, long, default_value = "50")]
         limit: usize,
     },
+
+    /// Create a test ticket in JIRA for verification
+    TestTicket {
+        /// Project key to create the test ticket in
+        #[arg(short, long)]
+        project: String,
+
+        /// Summary/title of the test ticket
+        #[arg(short, long, default_value = "[jira-db] 動作確認用テストチケット")]
+        summary: String,
+
+        /// Description of the test ticket
+        #[arg(short, long)]
+        description: Option<String>,
+
+        /// Issue type (e.g., Task, Bug, Story)
+        #[arg(short = 't', long, default_value = "Task")]
+        issue_type: String,
+    },
 }
 
 #[derive(Subcommand)]

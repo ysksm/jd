@@ -45,6 +45,12 @@ async fn run() -> Result<()> {
         } => handle_search(query, project, status, assignee, limit, offset).await,
         Commands::Metadata { project, r#type } => handle_metadata(project, r#type).await,
         Commands::History { issue_key, field, limit } => handle_history(issue_key, field, limit).await,
+        Commands::TestTicket {
+            project,
+            summary,
+            description,
+            issue_type,
+        } => handle_test_ticket(project, summary, description, issue_type).await,
     }
 }
 
@@ -665,6 +671,52 @@ async fn handle_history(
 
     if field_filter.is_some() {
         info!("Filtered by field. Remove --field to see all changes.");
+    }
+
+    Ok(())
+}
+
+async fn handle_test_ticket(
+    project_key: String,
+    summary: String,
+    description: Option<String>,
+    issue_type: String,
+) -> Result<()> {
+    let settings_path = Settings::default_path()?;
+    let settings = Settings::load(&settings_path)?;
+
+    settings.validate()?;
+
+    // Verify project exists
+    if settings.find_project(&project_key).is_none() {
+        return Err(JiraDbError::ProjectNotFound(project_key));
+    }
+
+    info!("Creating test ticket in project {}...", project_key);
+    info!("  Summary: {}", summary);
+    info!("  Issue Type: {}", issue_type);
+    if let Some(ref desc) = description {
+        info!("  Description: {}", desc);
+    }
+
+    let client = JiraClient::new(&settings.jira)?;
+
+    // Test connection first
+    client.test_connection().await?;
+
+    // Create the issue
+    let created = client
+        .create_issue(&project_key, &summary, description.as_deref(), &issue_type)
+        .await?;
+
+    info!("");
+    info!("Test ticket created successfully!");
+    info!("  Key: {}", created.key);
+    info!("  ID: {}", created.id);
+    if let Some(url) = created.self_url {
+        // Convert API URL to browse URL
+        let browse_url = url.replace("/rest/api/3/issue/", "/browse/");
+        info!("  URL: {}", browse_url);
     }
 
     Ok(())
