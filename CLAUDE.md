@@ -49,6 +49,7 @@ cargo run -- project enable PROJ  # Enable sync for a project
 cargo run -- sync              # Sync JIRA data (issues + metadata)
 cargo run -- search "bug"      # Search issues
 cargo run -- metadata --project PROJ  # View project metadata
+cargo run -- history PROJ-123  # View change history for an issue
 cargo run -- config show       # Show configuration
 ```
 
@@ -93,6 +94,18 @@ src/
 - **projects**: JIRA project metadata
 - **issues**: JIRA issue data with all fields (includes `raw_data` JSON with full API response + changelog)
 - **sync_history**: Tracks synchronization operations
+- **issue_change_history**: Normalized change history extracted from issue changelog
+
+#### Change History Table
+The `issue_change_history` table stores normalized change history data:
+- `issue_id`, `issue_key`: Issue identifiers
+- `history_id`: JIRA history entry ID
+- `author_account_id`, `author_display_name`: Who made the change
+- `field`: Field that was changed (e.g., status, assignee, priority)
+- `field_type`: Type of field
+- `from_value`, `from_string`: Previous value
+- `to_value`, `to_string`: New value
+- `changed_at`: When the change occurred
 
 #### Metadata Tables
 - **statuses**: Project status definitions (name, description, category)
@@ -129,7 +142,8 @@ All metadata tables use composite primary key `(project_id, name)` for uniquenes
 6. **Sync Data**: `jira-db sync` downloads issues + metadata for enabled projects
 7. **Search Issues**: `jira-db search <QUERY>` searches synced issues
 8. **View Metadata**: `jira-db metadata --project <KEY>` shows project metadata
-9. **List Status**: `jira-db project list --verbose` shows detailed sync status
+9. **View Change History**: `jira-db history <ISSUE_KEY>` shows issue change history
+10. **List Status**: `jira-db project list --verbose` shows detailed sync status
 
 ## Configuration
 
@@ -167,6 +181,10 @@ The CLI is organized with clear separation of concerns:
   - Pagination with `--limit` and `--offset`
 - **`metadata`** - View project metadata
   - Supports filtering by type (status, priority, issue-type, label, component, version)
+- **`history`** - View change history for an issue
+  - Shows all field changes with timestamps and authors
+  - Supports filtering by field name (`--field status`)
+  - Pagination with `--limit`
 
 This design ensures:
 - Each command has a single, clear purpose
@@ -219,6 +237,7 @@ Metadata is NOT extracted from issues - it's fetched from API to ensure complete
 - ✅ Search functionality with full-text and filtering
 - ✅ Metadata management (statuses, priorities, issue types, labels, components, versions)
 - ✅ Complete issue data capture (all fields + changelog)
+- ✅ Change history management with dedicated table and CLI command
 - ✅ Interactive initialization
 - ✅ Progress bars for sync operations
 - ✅ Comprehensive error handling

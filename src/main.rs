@@ -8,7 +8,7 @@ mod sync;
 use clap::Parser;
 use crate::cli::{Cli, Commands, ConfigAction, ProjectAction};
 use crate::config::{DatabaseConfig, JiraConfig, Settings};
-use crate::db::{Database, IssueRepository, MetadataRepository, SearchParams};
+use crate::db::{ChangeHistoryRepository, Database, IssueRepository, MetadataRepository, SearchParams};
 use crate::error::{JiraDbError, Result};
 use crate::jira::JiraClient;
 use crate::sync::SyncManager;
@@ -44,6 +44,7 @@ async fn run() -> Result<()> {
             offset,
         } => handle_search(query, project, status, assignee, limit, offset).await,
         Commands::Metadata { project, r#type } => handle_metadata(project, r#type).await,
+        Commands::History { issue_key, field, limit } => handle_history(issue_key, field, limit).await,
     }
 }
 
@@ -581,6 +582,89 @@ async fn handle_metadata(project_key: String, metadata_type: Option<String>) -> 
                 t
             )));
         }
+    }
+
+    Ok(())
+}
+
+async fn handle_history(
+    issue_key: String,
+    field_filter: Option<String>,
+    limit: usize,
+) -> Result<()> {
+    let settings = Settings::load(&Settings::default_path()?)?;
+    let db = Database::new(&settings.database.path)?;
+    let history_repo = ChangeHistoryRepository::new(db.connection());
+
+    // Get change history
+    let history_items = history_repo.find_by_issue_key_and_field(
+        &issue_key,
+        field_filter.as_deref(),
+    )?;
+
+    if history_items.is_empty() {
+        if let Some(field) = &field_filter {
+            info!("No change history found for issue {} with field '{}'", issue_key, field);
+        } else {
+            info!("No change history found for issue {}", issue_key);
+        }
+        info!("\nNote: Change history is extracted during sync. Run 'jira-db sync' to update.");
+        return Ok(());
+    }
+
+    // Apply limit
+    let display_items: Vec<_> = history_items.into_iter().take(limit).collect();
+
+    info!("Change history for issue {}:\n", issue_key);
+
+    // Create table for results
+    let mut table = Table::new();
+    table.set_header(vec![
+        Cell::new("Date").fg(Color::Cyan).add_attribute(Attribute::Bold),
+        Cell::new("Field").fg(Color::Cyan).add_attribute(Attribute::Bold),
+        Cell::new("From").fg(Color::Cyan).add_attribute(Attribute::Bold),
+        Cell::new("To").fg(Color::Cyan).add_attribute(Attribute::Bold),
+        Cell::new("Author").fg(Color::Cyan).add_attribute(Attribute::Bold),
+    ]);
+
+    for item in &display_items {
+        let date = item.changed_at.format("%Y-%m-%d %H:%M").to_string();
+        let from = item.from_string.clone().unwrap_or_else(|| "-".to_string());
+        let to = item.to_string.clone().unwrap_or_else(|| "-".to_string());
+        let author = item.author_display_name.clone().unwrap_or_else(|| "Unknown".to_string());
+
+        // Truncate long values
+        let from_display = if from.len() > 30 {
+            format!("{}...", &from[..27])
+        } else {
+            from
+        };
+
+        let to_display = if to.len() > 30 {
+            format!("{}...", &to[..27])
+        } else {
+            to
+        };
+
+        table.add_row(vec![
+            Cell::new(date),
+            Cell::new(&item.field),
+            Cell::new(from_display),
+            Cell::new(to_display),
+            Cell::new(author),
+        ]);
+    }
+
+    println!("{}", table);
+
+    // Show summary
+    let total_count = history_repo.count_by_issue_key(&issue_key)?;
+    if display_items.len() < total_count {
+        info!("\nShowing {} of {} changes. Use --limit to see more.", display_items.len(), total_count);
+    }
+
+    if field_filter.is_some() {
+        info!("Filtered by field. Remove --field to see all changes.");
     }
 
     Ok(())
