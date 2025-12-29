@@ -123,9 +123,12 @@ impl SyncManager {
                 );
 
                 if !history_items.is_empty() {
+                    info!("  {} has {} change history items", issue.key, history_items.len());
                     change_history_repo.batch_insert(&history_items)?;
                     total_history_items += history_items.len();
                 }
+            } else {
+                warn!("  {} has no raw_json", issue.key);
             }
         }
 

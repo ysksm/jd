@@ -100,13 +100,25 @@ impl ChangeHistoryItem {
 
         let json: Value = match serde_json::from_str(raw_json) {
             Ok(v) => v,
-            Err(_) => return items,
+            Err(e) => {
+                log::warn!("Failed to parse raw_json for {}: {}", issue_key, e);
+                return items;
+            }
         };
 
         // Navigate to changelog.histories
-        let histories = match json.get("changelog").and_then(|c| c.get("histories")) {
+        let changelog = json.get("changelog");
+        if changelog.is_none() {
+            log::debug!("No changelog found in raw_json for {} (this is normal for issues with no changes)", issue_key);
+            return items;
+        }
+
+        let histories = match changelog.and_then(|c| c.get("histories")) {
             Some(Value::Array(arr)) => arr,
-            _ => return items,
+            _ => {
+                log::debug!("No histories array found in changelog for {}", issue_key);
+                return items;
+            }
         };
 
         for history in histories {
