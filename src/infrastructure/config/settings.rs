@@ -1,8 +1,8 @@
-use crate::error::{JiraDbError, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
+use crate::domain::error::{DomainError, DomainResult};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settings {
@@ -33,37 +33,40 @@ pub struct DatabaseConfig {
 }
 
 impl Settings {
-    /// Load settings from file
-    pub fn load<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let content = fs::read_to_string(&path)?;
-        let settings: Settings = serde_json::from_str(&content)?;
+    pub fn load<P: AsRef<Path>>(path: P) -> DomainResult<Self> {
+        let content = fs::read_to_string(&path)
+            .map_err(|e| DomainError::Repository(format!("Failed to read settings file: {}", e)))?;
+        let settings: Settings = serde_json::from_str(&content)
+            .map_err(|e| DomainError::Repository(format!("Failed to parse settings: {}", e)))?;
         Ok(settings)
     }
 
-    /// Save settings to file
-    pub fn save<P: AsRef<Path>>(&self, path: P) -> Result<()> {
-        // Create parent directory if it doesn't exist
+    pub fn save<P: AsRef<Path>>(&self, path: P) -> DomainResult<()> {
         if let Some(parent) = path.as_ref().parent() {
-            fs::create_dir_all(parent)?;
+            fs::create_dir_all(parent)
+                .map_err(|e| DomainError::Repository(format!("Failed to create directory: {}", e)))?;
         }
 
-        let content = serde_json::to_string_pretty(self)?;
-        fs::write(&path, content)?;
+        let content = serde_json::to_string_pretty(self)
+            .map_err(|e| DomainError::Repository(format!("Failed to serialize settings: {}", e)))?;
+        fs::write(&path, content)
+            .map_err(|e| DomainError::Repository(format!("Failed to write settings: {}", e)))?;
 
-        // Set file permissions to 600 (read/write for owner only) on Unix
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let mut perms = fs::metadata(&path)?.permissions();
+            let mut perms = fs::metadata(&path)
+                .map_err(|e| DomainError::Repository(format!("Failed to get metadata: {}", e)))?
+                .permissions();
             perms.set_mode(0o600);
-            fs::set_permissions(&path, perms)?;
+            fs::set_permissions(&path, perms)
+                .map_err(|e| DomainError::Repository(format!("Failed to set permissions: {}", e)))?;
         }
 
         Ok(())
     }
 
-    /// Create default settings file
-    pub fn create_default<P: AsRef<Path>>(path: P) -> Result<Self> {
+    pub fn create_default<P: AsRef<Path>>(path: P) -> DomainResult<Self> {
         let settings = Settings {
             jira: JiraConfig {
                 endpoint: String::from("https://your-domain.atlassian.net"),
@@ -80,32 +83,29 @@ impl Settings {
         Ok(settings)
     }
 
-    /// Get the default settings file path (current directory)
-    pub fn default_path() -> Result<PathBuf> {
+    pub fn default_path() -> DomainResult<PathBuf> {
         Ok(PathBuf::from("./settings.json"))
     }
 
-    /// Check if settings file exists
     pub fn exists<P: AsRef<Path>>(path: P) -> bool {
         path.as_ref().exists()
     }
 
-    /// Validate settings
-    pub fn validate(&self) -> Result<()> {
+    pub fn validate(&self) -> DomainResult<()> {
         if self.jira.endpoint.is_empty() {
-            return Err(JiraDbError::InvalidConfig(
+            return Err(DomainError::Validation(
                 "JIRA endpoint cannot be empty".into(),
             ));
         }
 
         if self.jira.username.is_empty() {
-            return Err(JiraDbError::InvalidConfig(
+            return Err(DomainError::Validation(
                 "JIRA username cannot be empty".into(),
             ));
         }
 
         if self.jira.api_key.is_empty() || self.jira.api_key == "your-api-key-here" {
-            return Err(JiraDbError::InvalidConfig(
+            return Err(DomainError::Validation(
                 "JIRA API key must be configured".into(),
             ));
         }
@@ -113,17 +113,14 @@ impl Settings {
         Ok(())
     }
 
-    /// Find a project by key
     pub fn find_project(&self, key: &str) -> Option<&ProjectConfig> {
         self.projects.iter().find(|p| p.key == key)
     }
 
-    /// Find a mutable project by key
     pub fn find_project_mut(&mut self, key: &str) -> Option<&mut ProjectConfig> {
         self.projects.iter_mut().find(|p| p.key == key)
     }
 
-    /// Add or update a project
     pub fn upsert_project(&mut self, project: ProjectConfig) {
         if let Some(existing) = self.find_project_mut(&project.key) {
             *existing = project;
@@ -132,12 +129,8 @@ impl Settings {
         }
     }
 
-    /// Get all projects that should be synced
     pub fn sync_enabled_projects(&self) -> Vec<&ProjectConfig> {
-        self.projects
-            .iter()
-            .filter(|p| p.sync_enabled)
-            .collect()
+        self.projects.iter().filter(|p| p.sync_enabled).collect()
     }
 }
 
