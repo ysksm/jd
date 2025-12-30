@@ -15,7 +15,8 @@ pub mod report;
 pub use application::dto::{CreatedIssueDto, SyncResult};
 pub use application::services::JiraService;
 pub use application::use_cases::{
-    CreateTestTicketUseCase, GenerateReportUseCase, GetChangeHistoryUseCase,
+    CreateTestTicketUseCase, EmbeddingGenerationConfig, EmbeddingGenerationResult,
+    EmbeddingTiming, GenerateEmbeddingsUseCase, GenerateReportUseCase, GetChangeHistoryUseCase,
     GetProjectMetadataUseCase, ReportData, SearchIssuesUseCase, SyncProjectListUseCase,
     SyncProjectUseCase,
 };
