@@ -432,11 +432,20 @@ impl ToolHandler for ExecuteSqlTool {
 
 pub struct SemanticSearchTool {
     db_conn: Arc<Mutex<Connection>>,
+    openai_api_key: Option<String>,
 }
 
 impl SemanticSearchTool {
     pub fn new(db_conn: Arc<Mutex<Connection>>) -> Self {
-        Self { db_conn }
+        // Try to get OpenAI API key from environment
+        let openai_api_key = std::env::var("OPENAI_API_KEY").ok();
+        Self { db_conn, openai_api_key }
+    }
+
+    #[allow(dead_code)]
+    pub fn with_api_key(db_conn: Arc<Mutex<Connection>>, api_key: Option<String>) -> Self {
+        let openai_api_key = api_key.or_else(|| std::env::var("OPENAI_API_KEY").ok());
+        Self { db_conn, openai_api_key }
     }
 }
 
@@ -445,7 +454,7 @@ impl ToolHandler for SemanticSearchTool {
     fn definition(&self) -> Tool {
         build_tool_definition::<SemanticSearchParams>(
             "semantic_search",
-            "Search for issues using natural language semantic search (requires embeddings to be generated during sync)",
+            "Search for issues using natural language semantic search (requires embeddings to be generated with 'jira-db embeddings')",
         )
     }
 
@@ -460,26 +469,86 @@ impl ToolHandler for SemanticSearchTool {
             Ok(c) => c,
             Err(_) => {
                 return Ok(CallToolResult::error(
-                    "Semantic search is not available. Embeddings table not initialized. Please run 'jira-db sync' with embedding generation enabled.",
+                    "Semantic search is not available. Embeddings table not initialized. Please run 'jira-db embeddings' to generate embeddings for issues.",
                 ));
             }
         };
 
         if count == 0 {
             return Ok(CallToolResult::error(
-                "No embeddings found. Please run 'jira-db sync' with embedding generation enabled to generate embeddings for issues.",
+                "No embeddings found. Please run 'jira-db embeddings' to generate embeddings for issues.",
             ));
         }
 
-        // For now, return info about embeddings
-        // Full implementation requires OpenAI API key to embed the query
+        // Check if we have an API key for embedding the query
+        let api_key = match &self.openai_api_key {
+            Some(key) => key.clone(),
+            None => {
+                return Ok(CallToolResult::error(
+                    "Semantic search requires OPENAI_API_KEY environment variable to be set for query embedding.",
+                ));
+            }
+        };
+
+        // Create embedding client for the query
+        let embedding_config = jira_db_core::EmbeddingConfig::new(api_key);
+        let embedding_client = match jira_db_core::OpenAIEmbeddingClient::new(embedding_config) {
+            Ok(client) => client,
+            Err(e) => {
+                return Ok(CallToolResult::error(format!(
+                    "Failed to create embedding client: {}",
+                    e
+                )));
+            }
+        };
+
+        // Embed the query
+        use jira_db_core::EmbeddingProvider;
+        let query_embedding = match embedding_client.embed(&params.query).await {
+            Ok(embedding) => embedding,
+            Err(e) => {
+                return Ok(CallToolResult::error(format!(
+                    "Failed to embed query: {}",
+                    e
+                )));
+            }
+        };
+
+        // Perform semantic search
+        let limit = params.limit.unwrap_or(10);
+        let results = match embeddings_repo.semantic_search(
+            &query_embedding,
+            params.project.as_deref(),
+            limit,
+        ) {
+            Ok(results) => results,
+            Err(e) => {
+                return Ok(CallToolResult::error(format!(
+                    "Failed to perform semantic search: {}",
+                    e
+                )));
+            }
+        };
+
+        // Format results
+        let response: Vec<serde_json::Value> = results
+            .into_iter()
+            .map(|r| {
+                serde_json::json!({
+                    "issue_key": r.issue_key,
+                    "summary": r.summary,
+                    "description": r.description,
+                    "status": r.status,
+                    "project_id": r.project_id,
+                    "similarity_score": r.similarity_score
+                })
+            })
+            .collect();
+
         let result = serde_json::json!({
-            "status": "embeddings_available",
-            "embedding_count": count,
-            "message": "Semantic search requires an OpenAI API key to embed the query. This feature will be fully available when embedding configuration is added to the MCP server.",
             "query": params.query,
-            "project_filter": params.project,
-            "limit": params.limit.unwrap_or(10)
+            "result_count": response.len(),
+            "results": response
         });
 
         let json = serde_json::to_string_pretty(&result)?;
