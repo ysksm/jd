@@ -1,5 +1,5 @@
 use crate::error::Result;
-use crate::jira::models::{Component, FixVersion, Issue, IssueType, Label, Priority, Project, Status};
+use crate::jira::models::{ChangeHistoryItem, Component, FixVersion, Issue, IssueType, Label, Priority, Project, Status};
 use chrono::{DateTime, Utc};
 use duckdb::Connection;
 use std::sync::{Arc, Mutex};
@@ -52,6 +52,7 @@ impl ProjectRepository {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn find_by_key(&self, key: &str) -> Result<Option<Project>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
@@ -72,6 +73,7 @@ impl ProjectRepository {
         }
     }
 
+    #[allow(dead_code)]
     pub fn find_all(&self) -> Result<Vec<Project>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare("SELECT id, key, name, description FROM projects")?;
@@ -183,6 +185,7 @@ impl IssueRepository {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn find_by_project(&self, project_id: &str) -> Result<Vec<Issue>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
@@ -235,6 +238,7 @@ impl IssueRepository {
         Ok(issues)
     }
 
+    #[allow(dead_code)]
     pub fn count_by_project(&self, project_id: &str) -> Result<usize> {
         let conn = self.conn.lock().unwrap();
         let count: i64 = conn.query_row(
@@ -419,6 +423,7 @@ impl SyncHistoryRepository {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn find_latest_by_project(&self, project_id: &str) -> Result<Option<(DateTime<Utc>, String)>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
@@ -749,5 +754,203 @@ impl MetadataRepository {
             fix_versions.push(version?);
         }
         Ok(fix_versions)
+    }
+}
+
+pub struct ChangeHistoryRepository {
+    conn: Arc<Mutex<Connection>>,
+}
+
+impl ChangeHistoryRepository {
+    pub fn new(conn: Arc<Mutex<Connection>>) -> Self {
+        Self { conn }
+    }
+
+    /// Insert change history items in batch
+    pub fn batch_insert(&self, items: &[ChangeHistoryItem]) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let now = Utc::now().to_rfc3339();
+
+        for item in items {
+            conn.execute(
+                r#"
+                INSERT INTO issue_change_history (
+                    issue_id, issue_key, history_id,
+                    author_account_id, author_display_name,
+                    field, field_type,
+                    from_value, from_string, to_value, to_string,
+                    changed_at, created_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                "#,
+                duckdb::params![
+                    &item.issue_id,
+                    &item.issue_key,
+                    &item.history_id,
+                    &item.author_account_id,
+                    &item.author_display_name,
+                    &item.field,
+                    &item.field_type,
+                    &item.from_value,
+                    &item.from_string,
+                    &item.to_value,
+                    &item.to_string,
+                    &item.changed_at.to_rfc3339(),
+                    &now,
+                ],
+            )?;
+        }
+
+        Ok(())
+    }
+
+    /// Delete all change history for an issue (used before re-syncing)
+    pub fn delete_by_issue_id(&self, issue_id: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "DELETE FROM issue_change_history WHERE issue_id = ?",
+            duckdb::params![issue_id],
+        )?;
+        Ok(())
+    }
+
+    /// Find change history by issue key
+    #[allow(dead_code)]
+    pub fn find_by_issue_key(&self, issue_key: &str) -> Result<Vec<ChangeHistoryItem>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            r#"
+            SELECT issue_id, issue_key, history_id,
+                   author_account_id, author_display_name,
+                   field, field_type,
+                   from_value, from_string, to_value, to_string,
+                   CAST(changed_at AS VARCHAR) as changed_at
+            FROM issue_change_history
+            WHERE issue_key = ?
+            ORDER BY changed_at DESC
+            "#,
+        )?;
+
+        let rows = stmt.query_map(duckdb::params![issue_key], |row| {
+            Ok(ChangeHistoryItem {
+                issue_id: row.get(0)?,
+                issue_key: row.get(1)?,
+                history_id: row.get(2)?,
+                author_account_id: row.get(3)?,
+                author_display_name: row.get(4)?,
+                field: row.get(5)?,
+                field_type: row.get(6)?,
+                from_value: row.get(7)?,
+                from_string: row.get(8)?,
+                to_value: row.get(9)?,
+                to_string: row.get(10)?,
+                changed_at: row.get::<_, String>(11)?
+                    .parse::<DateTime<Utc>>()
+                    .unwrap_or_else(|_| Utc::now()),
+            })
+        })?;
+
+        let mut items = Vec::new();
+        for item in rows {
+            items.push(item?);
+        }
+
+        Ok(items)
+    }
+
+    /// Find change history by issue key with optional field filter
+    pub fn find_by_issue_key_and_field(
+        &self,
+        issue_key: &str,
+        field_filter: Option<&str>,
+    ) -> Result<Vec<ChangeHistoryItem>> {
+        let conn = self.conn.lock().unwrap();
+
+        let sql = if field_filter.is_some() {
+            r#"
+            SELECT issue_id, issue_key, history_id,
+                   author_account_id, author_display_name,
+                   field, field_type,
+                   from_value, from_string, to_value, to_string,
+                   CAST(changed_at AS VARCHAR) as changed_at
+            FROM issue_change_history
+            WHERE issue_key = ? AND field = ?
+            ORDER BY changed_at DESC
+            "#
+        } else {
+            r#"
+            SELECT issue_id, issue_key, history_id,
+                   author_account_id, author_display_name,
+                   field, field_type,
+                   from_value, from_string, to_value, to_string,
+                   CAST(changed_at AS VARCHAR) as changed_at
+            FROM issue_change_history
+            WHERE issue_key = ?
+            ORDER BY changed_at DESC
+            "#
+        };
+
+        let mut stmt = conn.prepare(sql)?;
+
+        let rows: Vec<_> = if let Some(field) = field_filter {
+            stmt.query_map(duckdb::params![issue_key, field], |row| {
+                Ok(ChangeHistoryItem {
+                    issue_id: row.get(0)?,
+                    issue_key: row.get(1)?,
+                    history_id: row.get(2)?,
+                    author_account_id: row.get(3)?,
+                    author_display_name: row.get(4)?,
+                    field: row.get(5)?,
+                    field_type: row.get(6)?,
+                    from_value: row.get(7)?,
+                    from_string: row.get(8)?,
+                    to_value: row.get(9)?,
+                    to_string: row.get(10)?,
+                    changed_at: row.get::<_, String>(11)?
+                        .parse::<DateTime<Utc>>()
+                        .unwrap_or_else(|_| Utc::now()),
+                })
+            })?
+            .collect()
+        } else {
+            stmt.query_map(duckdb::params![issue_key], |row| {
+                Ok(ChangeHistoryItem {
+                    issue_id: row.get(0)?,
+                    issue_key: row.get(1)?,
+                    history_id: row.get(2)?,
+                    author_account_id: row.get(3)?,
+                    author_display_name: row.get(4)?,
+                    field: row.get(5)?,
+                    field_type: row.get(6)?,
+                    from_value: row.get(7)?,
+                    from_string: row.get(8)?,
+                    to_value: row.get(9)?,
+                    to_string: row.get(10)?,
+                    changed_at: row.get::<_, String>(11)?
+                        .parse::<DateTime<Utc>>()
+                        .unwrap_or_else(|_| Utc::now()),
+                })
+            })?
+            .collect()
+        };
+
+        let mut items = Vec::new();
+        for item in rows {
+            items.push(item?);
+        }
+
+        Ok(items)
+    }
+
+    /// Count change history items by issue key
+    pub fn count_by_issue_key(&self, issue_key: &str) -> Result<usize> {
+        let conn = self.conn.lock().unwrap();
+        let count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM issue_change_history WHERE issue_key = ?",
+            duckdb::params![issue_key],
+            |row| row.get(0),
+        )?;
+
+        Ok(count as usize)
     }
 }

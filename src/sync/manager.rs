@@ -1,7 +1,8 @@
 use crate::config::{ProjectConfig, Settings};
-use crate::db::{Database, IssueRepository, MetadataRepository, ProjectRepository, SyncHistoryRepository};
+use crate::db::{ChangeHistoryRepository, Database, IssueRepository, MetadataRepository, ProjectRepository, SyncHistoryRepository};
 use crate::error::Result;
 use crate::jira::JiraClient;
+use crate::jira::models::ChangeHistoryItem;
 use chrono::Utc;
 use indicatif::{ProgressBar, ProgressStyle};
 use log::{info, warn};
@@ -103,6 +104,37 @@ impl SyncManager {
         }
 
         pb.finish_with_message("Completed!");
+
+        // Extract and save change history from raw_json
+        info!("Extracting and saving change history...");
+        let change_history_repo = ChangeHistoryRepository::new(self.db.connection());
+        let mut total_history_items = 0;
+
+        for issue in &issues {
+            if let Some(raw_json) = &issue.raw_json {
+                // Delete existing change history for this issue (to avoid duplicates on re-sync)
+                change_history_repo.delete_by_issue_id(&issue.id)?;
+
+                // Extract change history items from raw JSON
+                let history_items = ChangeHistoryItem::extract_from_raw_json(
+                    &issue.id,
+                    &issue.key,
+                    raw_json,
+                );
+
+                if !history_items.is_empty() {
+                    info!("  {} has {} change history items", issue.key, history_items.len());
+                    change_history_repo.batch_insert(&history_items)?;
+                    total_history_items += history_items.len();
+                }
+            } else {
+                warn!("  {} has no raw_json", issue.key);
+            }
+        }
+
+        if total_history_items > 0 {
+            info!("Saved {} change history items", total_history_items);
+        }
 
         // Fetch and save metadata from JIRA API
         info!("Fetching and saving project metadata...");

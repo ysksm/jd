@@ -10,6 +10,7 @@ impl Schema {
         Self::create_issues_table(conn)?;
         Self::create_sync_history_table(conn)?;
         Self::create_metadata_tables(conn)?;
+        Self::create_change_history_table(conn)?;
         Self::create_indexes(conn)?;
         Ok(())
     }
@@ -181,6 +182,56 @@ impl Schema {
                 PRIMARY KEY (project_id, name)
             )
             "#,
+            [],
+        )?;
+
+        Ok(())
+    }
+
+    fn create_change_history_table(conn: &Connection) -> Result<()> {
+        // Create sequence for auto-incrementing ID
+        conn.execute(
+            "CREATE SEQUENCE IF NOT EXISTS change_history_id_seq START 1",
+            [],
+        )?;
+
+        conn.execute(
+            r#"
+            CREATE TABLE IF NOT EXISTS issue_change_history (
+                id INTEGER PRIMARY KEY DEFAULT nextval('change_history_id_seq'),
+                issue_id VARCHAR NOT NULL,
+                issue_key VARCHAR NOT NULL,
+                history_id VARCHAR NOT NULL,
+                author_account_id VARCHAR,
+                author_display_name VARCHAR,
+                field VARCHAR NOT NULL,
+                field_type VARCHAR,
+                from_value VARCHAR,
+                from_string VARCHAR,
+                to_value VARCHAR,
+                to_string VARCHAR,
+                changed_at TIMESTAMP NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            "#,
+            [],
+        )?;
+
+        // Create indexes for efficient querying
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_change_history_issue_id ON issue_change_history(issue_id)",
+            [],
+        )?;
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_change_history_issue_key ON issue_change_history(issue_key)",
+            [],
+        )?;
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_change_history_field ON issue_change_history(field)",
+            [],
+        )?;
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_change_history_changed_at ON issue_change_history(changed_at)",
             [],
         )?;
 

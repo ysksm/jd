@@ -77,6 +77,20 @@ pub enum Commands {
         #[arg(short, long)]
         r#type: Option<String>,
     },
+
+    /// Show change history for an issue
+    History {
+        /// Issue key (e.g., PROJ-123)
+        issue_key: String,
+
+        /// Filter by field name (e.g., status, assignee, priority)
+        #[arg(short, long)]
+        field: Option<String>,
+
+        /// Maximum number of results
+        #[arg(short, long, default_value = "50")]
+        limit: usize,
+    },
 }
 
 #[derive(Subcommand)]
