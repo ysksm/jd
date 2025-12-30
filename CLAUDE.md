@@ -69,23 +69,69 @@ cargo fmt            # Format code
 
 ## Architecture
 
-The project follows a modular architecture:
+The project is organized as a Cargo workspace with two crates, designed for future GUI support (Tauri, Web server):
 
 ```
-src/
-├── main.rs           # Entry point and CLI command handlers
-├── cli/              # CLI command definitions (using clap)
-├── config/           # Settings management (JSON-based config)
-├── jira/             # JIRA API client wrapper
-│   ├── client.rs     # Direct JIRA REST API v3 calls with reqwest
-│   └── models.rs     # Domain models (Project, Issue, Status, Priority, etc.)
-├── sync/             # Synchronization logic
-│   └── manager.rs    # Orchestrates JIRA to DB sync (issues + metadata)
-├── db/               # Database layer (DuckDB)
-│   ├── connection.rs # Connection management
-│   ├── schema.rs     # Table definitions (issues, metadata tables)
-│   └── repository.rs # Data access layer (IssueRepository, MetadataRepository)
-└── error.rs          # Error types
+jira-db/
+├── Cargo.toml                    # Workspace definition
+├── crates/
+│   ├── jira-db-core/             # Core library (reusable by GUI)
+│   │   ├── Cargo.toml
+│   │   └── src/
+│   │       ├── lib.rs            # Public API exports
+│   │       ├── domain/           # Business entities & repository traits
+│   │       │   ├── entities/     # Project, Issue, ChangeHistory, Metadata
+│   │       │   ├── repositories/ # Abstract repository interfaces
+│   │       │   └── error.rs      # DomainError, DomainResult
+│   │       ├── application/      # Use cases & services
+│   │       │   ├── use_cases/    # SyncProject, SearchIssues, etc.
+│   │       │   ├── services/     # JiraService trait
+│   │       │   └── dto/          # SyncResult, CreatedIssueDto
+│   │       ├── infrastructure/   # External integrations
+│   │       │   ├── config/       # Settings (JSON-based)
+│   │       │   ├── database/     # DuckDB repositories
+│   │       │   └── external/     # JIRA API client
+│   │       └── report/           # HTML report generation
+│   │           ├── static_report.rs
+│   │           └── interactive/  # JavaScript-based dashboard
+│   └── jira-db-cli/              # CLI binary
+│       ├── Cargo.toml
+│       └── src/
+│           ├── main.rs           # Entry point
+│           └── cli/              # Command handlers (clap)
+│               ├── commands.rs   # CLI command definitions
+│               └── handlers.rs   # Command implementations
+```
+
+### Crate Responsibilities
+
+#### jira-db-core (Library)
+- **domain**: Pure business logic, no I/O dependencies
+- **application**: Use cases orchestrating domain + infrastructure
+- **infrastructure**: DuckDB, JIRA API, config file handling
+- **report**: HTML report generation (static & interactive)
+
+#### jira-db-cli (Binary)
+- CLI-specific code (clap, dialoguer, comfy-table)
+- Command routing and user interaction
+- Binary name: `jira-db`
+
+### Using Core in Future GUI
+
+```rust
+use jira_db_core::{
+    Settings, Database, JiraApiClient,
+    DuckDbIssueRepository, SearchIssuesUseCase, SearchParams,
+};
+
+// Initialize
+let settings = Settings::load(&path)?;
+let db = Database::new(&settings.database.path)?;
+let repo = DuckDbIssueRepository::new(db.connection());
+
+// Execute use case
+let use_case = SearchIssuesUseCase::new(Arc::new(repo));
+let issues = use_case.execute(SearchParams { query: Some("bug".into()), ..Default::default() })?;
 ```
 
 ### Database Schema
@@ -234,6 +280,7 @@ Metadata is NOT extracted from issues - it's fetched from API to ensure complete
 
 ## Completed Features
 
+- ✅ Core/CLI workspace split for GUI support
 - ✅ Search functionality with full-text and filtering
 - ✅ Metadata management (statuses, priorities, issue types, labels, components, versions)
 - ✅ Complete issue data capture (all fields + changelog)
@@ -241,9 +288,11 @@ Metadata is NOT extracted from issues - it's fetched from API to ensure complete
 - ✅ Interactive initialization
 - ✅ Progress bars for sync operations
 - ✅ Comprehensive error handling
+- ✅ HTML reports (static & interactive dashboard)
 
 ## Future Enhancements
 
+- GUI implementation (Tauri desktop app or Web server)
 - Incremental sync (currently only full sync)
 - Multiple JIRA instance support
 - Export capabilities (CSV, Excel)

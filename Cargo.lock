@@ -1394,19 +1394,28 @@ dependencies = [
 ]
 
 [[package]]
-name = "jira-db"
+name = "jira-db-cli"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "comfy-table",
+ "dialoguer",
+ "env_logger",
+ "jira-db-core",
+ "log",
+ "tokio",
+]
+
+[[package]]
+name = "jira-db-core"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
  "base64 0.21.7",
  "chrono",
- "clap",
- "comfy-table",
- "dialoguer",
  "dirs",
  "duckdb",
- "env_logger",
  "indicatif",
  "jira-api",
  "log",

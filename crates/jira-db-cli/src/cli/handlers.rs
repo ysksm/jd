@@ -4,24 +4,26 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use chrono::Utc;
 use comfy_table::{presets::UTF8_FULL, Cell, Color, Table};
 use dialoguer::{Confirm, Input};
-use indicatif::{ProgressBar, ProgressStyle};
 use log::{info, warn};
 
-use crate::application::services::JiraService;
-use crate::application::use_cases::{
+use jira_db_core::application::services::JiraService;
+use jira_db_core::application::use_cases::{
     CreateTestTicketUseCase, GenerateReportUseCase, GetChangeHistoryUseCase,
     GetProjectMetadataUseCase, SearchIssuesUseCase, SyncProjectListUseCase, SyncProjectUseCase,
 };
-use crate::domain::error::{DomainError, DomainResult};
-use crate::domain::repositories::{
+use jira_db_core::domain::error::{DomainError, DomainResult};
+use jira_db_core::domain::repositories::{
     ChangeHistoryRepository, IssueRepository, MetadataRepository, ProjectRepository,
     SearchParams, SyncHistoryRepository,
 };
-use crate::infrastructure::config::{ProjectConfig, Settings};
-use crate::presentation::report::{generate_interactive_report, generate_static_report};
+use jira_db_core::infrastructure::config::{
+    DatabaseConfig, JiraConfig, ProjectConfig, Settings,
+};
+use jira_db_core::report::{generate_interactive_report, generate_static_report};
+use jira_db_core::indicatif::{ProgressBar, ProgressStyle};
+use jira_db_core::chrono::Utc;
 
 pub struct CliHandler<P, I, M, C, S, J>
 where
@@ -118,13 +120,13 @@ where
             .map_err(|e| DomainError::Repository(format!("Input error: {}", e)))?;
 
         let settings = Settings {
-            jira: crate::infrastructure::config::JiraConfig {
+            jira: JiraConfig {
                 endpoint,
                 username,
                 api_key,
             },
             projects: Vec::new(),
-            database: crate::infrastructure::config::DatabaseConfig {
+            database: DatabaseConfig {
                 path: PathBuf::from(db_path),
             },
         };
