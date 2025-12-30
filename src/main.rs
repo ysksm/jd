@@ -45,6 +45,13 @@ async fn run() -> Result<()> {
         } => handle_search(query, project, status, assignee, limit, offset).await,
         Commands::Metadata { project, r#type } => handle_metadata(project, r#type).await,
         Commands::History { issue_key, field, limit } => handle_history(issue_key, field, limit).await,
+        Commands::TestTicket {
+            project,
+            summary,
+            description,
+            issue_type,
+            count,
+        } => handle_test_ticket(project, summary, description, issue_type, count).await,
     }
 }
 
@@ -665,6 +672,91 @@ async fn handle_history(
 
     if field_filter.is_some() {
         info!("Filtered by field. Remove --field to see all changes.");
+    }
+
+    Ok(())
+}
+
+async fn handle_test_ticket(
+    project_key: String,
+    summary: String,
+    description: Option<String>,
+    issue_type: String,
+    count: usize,
+) -> Result<()> {
+    let settings_path = Settings::default_path()?;
+    let settings = Settings::load(&settings_path)?;
+
+    settings.validate()?;
+
+    // Verify project exists
+    if settings.find_project(&project_key).is_none() {
+        return Err(JiraDbError::ProjectNotFound(project_key));
+    }
+
+    // Validate count (1-10)
+    let count = count.clamp(1, 10);
+
+    info!("Creating {} test ticket(s) in project {}...", count, project_key);
+    info!("  Summary: {}", summary);
+    info!("  Issue Type: {}", issue_type);
+    if let Some(ref desc) = description {
+        info!("  Description: {}", desc);
+    }
+    info!("");
+
+    let client = JiraClient::new(&settings.jira)?;
+
+    // Test connection first
+    client.test_connection().await?;
+
+    let mut created_tickets = Vec::new();
+
+    for i in 1..=count {
+        // Add number suffix for multiple tickets
+        let ticket_summary = if count > 1 {
+            format!("{} #{}", summary, i)
+        } else {
+            summary.clone()
+        };
+
+        let ticket_description = description.as_ref().map(|d| {
+            if count > 1 {
+                format!("{} (#{}/{})", d, i, count)
+            } else {
+                d.clone()
+            }
+        });
+
+        // Create the issue
+        match client
+            .create_issue(&project_key, &ticket_summary, ticket_description.as_deref(), &issue_type)
+            .await
+        {
+            Ok(created) => {
+                info!("[{}/{}] Created: {}", i, count, created.key);
+                created_tickets.push(created);
+            }
+            Err(e) => {
+                error!("[{}/{}] Failed to create ticket: {}", i, count, e);
+            }
+        }
+    }
+
+    info!("");
+    info!("Created {} of {} test ticket(s):", created_tickets.len(), count);
+    for ticket in &created_tickets {
+        info!("  - {}", ticket.key);
+    }
+
+    if !created_tickets.is_empty() {
+        // Show browse URL for first ticket
+        if let Some(ref url) = created_tickets[0].self_url {
+            let browse_url = url.replace("/rest/api/3/issue/", "/browse/");
+            let base_url = browse_url.rsplit_once('/').map(|(base, _)| base).unwrap_or(&browse_url);
+            info!("");
+            info!("Browse: {}", base_url);
+        }
     }
 
     Ok(())

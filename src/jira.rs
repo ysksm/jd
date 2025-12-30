@@ -1,4 +1,4 @@
 pub mod client;
 pub mod models;
 
-pub use client::JiraClient;
+pub use client::{CreatedIssue, JiraClient};
