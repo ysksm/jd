@@ -319,6 +319,79 @@ jira-db metadata --project PROJ --type label
 
 **注意：** メタデータは `jira-db sync` の実行時にJIRA APIから自動的に取得・保存されます。
 
+### `jira-db history <ISSUE_KEY> [OPTIONS]`
+イシューの変更履歴を表示します。
+
+**引数：**
+- `ISSUE_KEY` - イシューキー（例: PROJ-123）
+
+**オプション：**
+- `-f, --field <FIELD>` - 特定のフィールドで絞り込み（例: status, assignee, priority）
+- `-l, --limit <NUM>` - 表示件数（デフォルト: 50）
+
+**例：**
+```bash
+# イシューの全変更履歴を表示
+jira-db history PROJ-123
+
+# ステータス変更のみを表示
+jira-db history PROJ-123 --field status
+
+# 担当者変更のみを表示
+jira-db history PROJ-123 --field assignee
+
+# 最新10件のみ表示
+jira-db history PROJ-123 --limit 10
+```
+
+### `jira-db test-ticket [OPTIONS]`
+JIRAにテスト用チケットを作成します。動作確認やテスト目的で使用します。
+
+**オプション：**
+- `-p, --project <PROJECT_KEY>` - プロジェクトキー（必須）
+- `-s, --summary <SUMMARY>` - チケットのタイトル（デフォルト: "[jira-db] 動作確認用テストチケット"）
+- `-d, --description <DESCRIPTION>` - チケットの説明
+- `-t, --issue-type <TYPE>` - イシュータイプ（デフォルト: "Task"）
+- `-n, --count <NUM>` - 作成するチケット数（1-10、デフォルト: 1）
+
+**例：**
+```bash
+# デフォルト設定でテストチケットを作成
+jira-db test-ticket --project PROJ
+
+# カスタムタイトルでテストチケットを作成
+jira-db test-ticket --project PROJ --summary "APIテスト用チケット"
+
+# 複数のテストチケットを作成
+jira-db test-ticket --project PROJ --count 3
+
+# Bugタイプのテストチケットを作成
+jira-db test-ticket --project PROJ --issue-type Bug
+```
+
+### `jira-db report [OPTIONS]`
+同期済みデータからHTMLレポートを生成します。
+
+**オプション：**
+- `-p, --project <PROJECT_KEY>` - プロジェクトキー（"all"で全プロジェクト）
+- `-i, --interactive` - インタラクティブレポートを生成（JavaScript付き）
+- `-o, --output <PATH>` - 出力ファイルパス（デフォルト: reports/report_YYYYMMDD_HHMMSS.html）
+
+**例：**
+```bash
+# 全プロジェクトの静的レポートを生成
+jira-db report
+
+# 特定プロジェクトのレポートを生成
+jira-db report --project PROJ
+
+# インタラクティブレポートを生成
+jira-db report --interactive
+
+# 出力先を指定
+jira-db report --project PROJ --output ./my-report.html
+```
+
 ## データの保存場所
 
 - **設定ファイル**: `./settings.json`（カレントディレクトリ）
@@ -387,6 +460,13 @@ JIRAイシューデータを保存。
 | priority | VARCHAR | 優先度 |
 | assignee | VARCHAR | 担当者 |
 | reporter | VARCHAR | 報告者 |
+| issue_type | VARCHAR | イシュータイプ（Task, Bug, Story等） |
+| resolution | VARCHAR | 解決状況 |
+| labels | VARCHAR | ラベル（カンマ区切り） |
+| components | VARCHAR | コンポーネント（カンマ区切り） |
+| fix_versions | VARCHAR | フィックスバージョン（カンマ区切り） |
+| sprint | VARCHAR | スプリント名 |
+| parent_key | VARCHAR | 親イシューキー（サブタスクの場合） |
 | created_date | TIMESTAMP | イシュー作成日 |
 | updated_date | TIMESTAMP | イシュー更新日 |
 | raw_data | JSON | 完全なAPIレスポンス（全フィールド・変更履歴含む） |
@@ -407,6 +487,26 @@ JIRAイシューデータを保存。
 | status | VARCHAR | ステータス（running/completed/failed） |
 | items_synced | INTEGER | 同期したアイテム数 |
 | error_message | TEXT | エラーメッセージ |
+
+### issue_change_historyテーブル
+イシューの変更履歴を保存。同期時にchangelogから正規化されたデータ。
+
+| カラム | 型 | 説明 |
+|--------|-----|------|
+| id | INTEGER | 変更履歴ID（主キー） |
+| issue_id | VARCHAR | イシューID |
+| issue_key | VARCHAR | イシューキー |
+| history_id | VARCHAR | JIRAの履歴エントリID |
+| author_account_id | VARCHAR | 変更者のアカウントID |
+| author_display_name | VARCHAR | 変更者の表示名 |
+| field | VARCHAR | 変更されたフィールド（status, assignee等） |
+| field_type | VARCHAR | フィールドタイプ |
+| from_value | VARCHAR | 変更前の値（ID） |
+| from_string | VARCHAR | 変更前の値（表示名） |
+| to_value | VARCHAR | 変更後の値（ID） |
+| to_string | VARCHAR | 変更後の値（表示名） |
+| changed_at | TIMESTAMP | 変更日時 |
+| created_at | TIMESTAMP | レコード作成日時 |
 
 ### メタデータテーブル
 
@@ -601,12 +701,14 @@ Issue報告やPull Requestを歓迎します！
 - ✅ **エラーハンドリング**（自動リトライ、タイムアウト処理）
 - ✅ **メタデータ管理**（ステータス、優先度、イシュータイプ、ラベル、コンポーネント、バージョンの同期・表示）
 - ✅ **完全なイシューデータ取得**（全フィールド、変更履歴を含む完全なJSON保存）
+- ✅ **変更履歴管理**（`history`コマンドでイシューの変更履歴を表示）
+- ✅ **テストチケット作成**（`test-ticket`コマンドでJIRAにテストチケットを作成）
+- ✅ **HTMLレポート生成**（`report`コマンドで静的・インタラクティブレポートを生成）
 
 ## 今後の実装予定
 
 - [ ] 増分同期（最終同期日時以降の変更のみ取得）
 - [ ] エクスポート機能（CSV、Excel）
-- [ ] 統計・分析機能
 - [ ] Webhookによるリアルタイム同期
 - [ ] 複数JIRA環境のサポート
 - [ ] ユニットテスト・統合テスト
