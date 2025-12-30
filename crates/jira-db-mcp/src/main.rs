@@ -4,17 +4,19 @@
 //! AI assistants to query JIRA data stored in a local DuckDB database.
 
 mod config;
+mod handlers;
+mod protocol;
 mod server;
 mod tools;
+mod transport;
 
 use anyhow::{Context, Result};
 use clap::Parser;
-use rmcp::ServiceExt;
 use std::path::PathBuf;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 use config::McpConfig;
-use server::JiraDbService;
+use server::McpServer;
 
 /// MCP Server for JIRA Database queries
 #[derive(Parser, Debug)]
@@ -94,19 +96,7 @@ async fn main() -> Result<()> {
         anyhow::bail!("HTTP mode is not yet implemented. Please use stdio mode (default).");
     }
 
-    // Create service
-    let service = JiraDbService::new(config.clone()).context("Failed to create JIRA DB service")?;
-
-    run_stdio_server(service).await
-}
-
-/// Run the MCP server over stdio
-async fn run_stdio_server(service: JiraDbService) -> Result<()> {
-    tracing::info!("Starting MCP server over stdio");
-
-    let transport = rmcp::transport::io::stdio();
-
-    service.serve(transport).await.context("MCP server error")?;
-
-    Ok(())
+    // Create and run server
+    let server = McpServer::new(config).context("Failed to create MCP server")?;
+    server.run_stdio().await
 }

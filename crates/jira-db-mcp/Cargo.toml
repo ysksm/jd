@@ -12,20 +12,14 @@ path = "src/main.rs"
 # Core library
 jira-db-core = { path = "../jira-db-core" }
 
-# MCP SDK
-rmcp = { version = "0.12", features = [
-    "server",
-    "transport-io",
-    "macros",
-] }
-
 # Serialization
 serde.workspace = true
 serde_json.workspace = true
 
 # Async
-tokio.workspace = true
+tokio = { version = "1", features = ["full", "io-std"] }
 async-trait.workspace = true
+futures = "0.3"
 
 # Error handling
 anyhow.workspace = true
