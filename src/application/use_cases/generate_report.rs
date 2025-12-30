@@ -1,7 +1,7 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use serde::Serialize;
 
 use crate::domain::entities::Issue;
@@ -25,6 +25,15 @@ pub struct ProjectReportData {
     pub assignee_counts: HashMap<String, usize>,
     pub issue_type_counts: HashMap<String, usize>,
     pub component_counts: HashMap<String, usize>,
+    pub timeline_data: Vec<TimelineDataPoint>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct TimelineDataPoint {
+    pub date: String,
+    pub created: usize,
+    pub resolved: usize,
+    pub active: usize,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -155,6 +164,9 @@ where
             });
         }
 
+        // Calculate timeline data for burndown chart
+        let timeline_data = self.calculate_timeline_data(&issue_data_list);
+
         Ok(ProjectReportData {
             key: project_key.to_string(),
             name: project_name.to_string(),
@@ -164,6 +176,82 @@ where
             assignee_counts,
             issue_type_counts,
             component_counts,
+            timeline_data,
         })
+    }
+
+    fn calculate_timeline_data(&self, issues: &[IssueReportData]) -> Vec<TimelineDataPoint> {
+        // Collect all events (created and resolved)
+        let mut created_by_date: BTreeMap<NaiveDate, usize> = BTreeMap::new();
+        let mut resolved_by_date: BTreeMap<NaiveDate, usize> = BTreeMap::new();
+
+        for issue in issues {
+            // Track creation date
+            if let Some(created) = issue.created_date {
+                let date = created.date_naive();
+                *created_by_date.entry(date).or_insert(0) += 1;
+            }
+
+            // Track resolution date from change history
+            for change in &issue.change_history {
+                if change.field.to_lowercase() == "status" {
+                    let to_status = change.to_string.to_lowercase();
+                    if to_status.contains("done")
+                        || to_status.contains("closed")
+                        || to_status.contains("resolved")
+                        || to_status.contains("complete") {
+                        let date = change.changed_at.date_naive();
+                        *resolved_by_date.entry(date).or_insert(0) += 1;
+                        break; // Only count first resolution
+                    }
+                }
+            }
+        }
+
+        // If no dates found, return empty
+        if created_by_date.is_empty() {
+            return Vec::new();
+        }
+
+        // Get date range
+        let min_date = *created_by_date.keys().next().unwrap();
+        let max_date = Utc::now().date_naive();
+
+        // Build cumulative timeline
+        let mut timeline = Vec::new();
+        let mut cumulative_created = 0usize;
+        let mut cumulative_resolved = 0usize;
+        let mut current_date = min_date;
+
+        while current_date <= max_date {
+            let created_today = created_by_date.get(&current_date).copied().unwrap_or(0);
+            let resolved_today = resolved_by_date.get(&current_date).copied().unwrap_or(0);
+
+            cumulative_created += created_today;
+            cumulative_resolved += resolved_today;
+
+            let active = cumulative_created.saturating_sub(cumulative_resolved);
+
+            timeline.push(TimelineDataPoint {
+                date: current_date.format("%Y-%m-%d").to_string(),
+                created: cumulative_created,
+                resolved: cumulative_resolved,
+                active,
+            });
+
+            current_date = current_date.succ_opt().unwrap_or(current_date);
+        }
+
+        // Reduce data points if too many (keep weekly for long periods)
+        if timeline.len() > 90 {
+            let step = timeline.len() / 60;
+            timeline = timeline.into_iter()
+                .enumerate()
+                .filter(|(i, _)| i % step == 0 || *i == 0)
+                .map(|(_, point)| point)
+                .collect();
+        }
+
+        timeline
     }
 }

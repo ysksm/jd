@@ -78,6 +78,20 @@ pub fn generate_interactive_report(data: &ReportData) -> String {
 
         <main class="main-content">
             <div class="dashboard">
+                <div class="burndown-section">
+                    <div class="chart-card chart-card-wide" id="burndown-chart-card">
+                        <div class="chart-header">
+                            <h3>Issue Timeline (Burndown)</h3>
+                            <div class="chart-legend">
+                                <span class="legend-item"><span class="legend-color" style="background:#0052CC"></span>Total Created</span>
+                                <span class="legend-item"><span class="legend-color" style="background:#36B37E"></span>Resolved</span>
+                                <span class="legend-item"><span class="legend-color" style="background:#FF5630"></span>Active (Open)</span>
+                            </div>
+                        </div>
+                        <canvas id="burndown-chart"></canvas>
+                    </div>
+                </div>
+
                 <div class="charts-row">
                     <div class="chart-card" id="status-chart-card">
                         <h3>Status Distribution</h3>
@@ -724,6 +738,53 @@ fn get_interactive_css() -> &'static str {
             }
         }
 
+        .burndown-section {
+            margin-bottom: 8px;
+        }
+
+        .chart-card-wide {
+            grid-column: 1 / -1;
+        }
+
+        .chart-card-wide canvas {
+            max-height: 300px;
+            width: 100%;
+        }
+
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .chart-header h3 {
+            margin-bottom: 0;
+        }
+
+        .chart-legend {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            color: var(--jira-gray);
+        }
+
+        .legend-color {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+        }
+
         @media (max-width: 768px) {
             .header-content {
                 flex-direction: column;
@@ -764,6 +825,11 @@ fn get_interactive_css() -> &'static str {
 
             .issue-summary {
                 max-width: 150px;
+            }
+
+            .chart-header {
+                flex-direction: column;
+                align-items: flex-start;
             }
         }
     "#
@@ -1045,6 +1111,201 @@ fn get_interactive_js() -> &'static str {
         renderPieChart('priority-chart', getDistribution('priority'));
         renderPieChart('type-chart', getDistribution('issue_type'));
         renderBarChart('assignee-chart', getDistribution('assignee', 10));
+        renderBurndownChart();
+    }
+
+    function renderBurndownChart() {
+        const canvas = document.getElementById('burndown-chart');
+        const ctx = canvas.getContext('2d');
+        const rect = canvas.getBoundingClientRect();
+        canvas.width = rect.width * 2;
+        canvas.height = 600;
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Get timeline data from the first project (or aggregate all)
+        let timelineData = [];
+        if (REPORT_DATA.projects && REPORT_DATA.projects.length > 0) {
+            // If single project selected, use that project's timeline
+            const projectFilter = document.getElementById('project-filter').value;
+            if (projectFilter) {
+                const project = REPORT_DATA.projects.find(p => p.key === projectFilter);
+                if (project && project.timeline_data) {
+                    timelineData = project.timeline_data;
+                }
+            } else {
+                // Aggregate timeline data from all projects
+                timelineData = aggregateTimelineData();
+            }
+        }
+
+        if (timelineData.length === 0) {
+            ctx.fillStyle = '#97A0AF';
+            ctx.font = '14px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('No timeline data available', canvas.width / 2, canvas.height / 2);
+            return;
+        }
+
+        // Chart dimensions
+        const padding = { top: 40, right: 40, bottom: 60, left: 70 };
+        const chartWidth = canvas.width - padding.left - padding.right;
+        const chartHeight = canvas.height - padding.top - padding.bottom;
+
+        // Find max values for scaling
+        const maxCreated = Math.max(...timelineData.map(d => d.created));
+        const maxResolved = Math.max(...timelineData.map(d => d.resolved));
+        const maxActive = Math.max(...timelineData.map(d => d.active));
+        const maxValue = Math.max(maxCreated, maxResolved, maxActive, 1);
+
+        // Scale functions
+        const scaleX = (i) => padding.left + (i / (timelineData.length - 1 || 1)) * chartWidth;
+        const scaleY = (val) => padding.top + chartHeight - (val / maxValue) * chartHeight;
+
+        // Draw grid lines
+        ctx.strokeStyle = '#DFE1E6';
+        ctx.lineWidth = 1;
+        const gridLines = 5;
+        for (let i = 0; i <= gridLines; i++) {
+            const y = padding.top + (i / gridLines) * chartHeight;
+            ctx.beginPath();
+            ctx.moveTo(padding.left, y);
+            ctx.lineTo(padding.left + chartWidth, y);
+            ctx.stroke();
+
+            // Y-axis labels
+            const value = Math.round(maxValue * (1 - i / gridLines));
+            ctx.fillStyle = '#97A0AF';
+            ctx.font = '11px sans-serif';
+            ctx.textAlign = 'right';
+            ctx.fillText(value.toString(), padding.left - 10, y + 4);
+        }
+
+        // Draw X-axis labels (show selected dates)
+        ctx.fillStyle = '#97A0AF';
+        ctx.font = '10px sans-serif';
+        ctx.textAlign = 'center';
+        const labelStep = Math.max(1, Math.floor(timelineData.length / 10));
+        timelineData.forEach((point, i) => {
+            if (i % labelStep === 0 || i === timelineData.length - 1) {
+                const x = scaleX(i);
+                ctx.save();
+                ctx.translate(x, padding.top + chartHeight + 15);
+                ctx.rotate(-Math.PI / 6);
+                ctx.fillText(point.date, 0, 0);
+                ctx.restore();
+            }
+        });
+
+        // Draw lines - Total Created (blue)
+        ctx.beginPath();
+        ctx.strokeStyle = '#0052CC';
+        ctx.lineWidth = 2.5;
+        timelineData.forEach((point, i) => {
+            const x = scaleX(i);
+            const y = scaleY(point.created);
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+
+        // Draw lines - Resolved (green)
+        ctx.beginPath();
+        ctx.strokeStyle = '#36B37E';
+        ctx.lineWidth = 2.5;
+        timelineData.forEach((point, i) => {
+            const x = scaleX(i);
+            const y = scaleY(point.resolved);
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+
+        // Draw lines - Active/Open (red) - this is the burndown line
+        ctx.beginPath();
+        ctx.strokeStyle = '#FF5630';
+        ctx.lineWidth = 3;
+        timelineData.forEach((point, i) => {
+            const x = scaleX(i);
+            const y = scaleY(point.active);
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+
+        // Fill area under active line for visual emphasis
+        ctx.beginPath();
+        ctx.fillStyle = 'rgba(255, 86, 48, 0.1)';
+        ctx.moveTo(scaleX(0), scaleY(0));
+        timelineData.forEach((point, i) => {
+            ctx.lineTo(scaleX(i), scaleY(point.active));
+        });
+        ctx.lineTo(scaleX(timelineData.length - 1), scaleY(0));
+        ctx.closePath();
+        ctx.fill();
+
+        // Draw points on lines
+        const drawPoints = (data, field, color) => {
+            const pointStep = Math.max(1, Math.floor(timelineData.length / 30));
+            data.forEach((point, i) => {
+                if (i % pointStep === 0 || i === data.length - 1) {
+                    const x = scaleX(i);
+                    const y = scaleY(point[field]);
+                    ctx.beginPath();
+                    ctx.fillStyle = color;
+                    ctx.arc(x, y, 4, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.fillStyle = '#FFFFFF';
+                    ctx.arc(x, y, 2, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            });
+        };
+
+        drawPoints(timelineData, 'created', '#0052CC');
+        drawPoints(timelineData, 'resolved', '#36B37E');
+        drawPoints(timelineData, 'active', '#FF5630');
+
+        // Show latest values
+        const latest = timelineData[timelineData.length - 1];
+        ctx.font = 'bold 12px sans-serif';
+        ctx.textAlign = 'left';
+        const infoX = padding.left + 10;
+        const infoY = padding.top + 20;
+        ctx.fillStyle = '#0052CC';
+        ctx.fillText(`Total Created: ${latest.created}`, infoX, infoY);
+        ctx.fillStyle = '#36B37E';
+        ctx.fillText(`Resolved: ${latest.resolved}`, infoX + 150, infoY);
+        ctx.fillStyle = '#FF5630';
+        ctx.fillText(`Active (Open): ${latest.active}`, infoX + 280, infoY);
+    }
+
+    function aggregateTimelineData() {
+        // Aggregate timeline data from all projects
+        const dateMap = new Map();
+
+        REPORT_DATA.projects.forEach(project => {
+            if (!project.timeline_data) return;
+            project.timeline_data.forEach(point => {
+                if (dateMap.has(point.date)) {
+                    const existing = dateMap.get(point.date);
+                    existing.created += point.created;
+                    existing.resolved += point.resolved;
+                    existing.active += point.active;
+                } else {
+                    dateMap.set(point.date, {
+                        date: point.date,
+                        created: point.created,
+                        resolved: point.resolved,
+                        active: point.active
+                    });
+                }
+            });
+        });
+
+        // Sort by date and return
+        return Array.from(dateMap.values()).sort((a, b) => a.date.localeCompare(b.date));
     }
 
     function getDistribution(field, limit = null) {
