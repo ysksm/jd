@@ -11,6 +11,43 @@ impl Schema {
         Self::create_metadata_tables(conn)?;
         Self::create_change_history_table(conn)?;
         Self::create_indexes(conn)?;
+        Self::run_migrations(conn)?;
+        Ok(())
+    }
+
+    /// 既存のデータベースに対してマイグレーションを実行
+    fn run_migrations(conn: &Connection) -> DomainResult<()> {
+        // Migration: issuesテーブルにsprintカラムを追加
+        Self::add_column_if_not_exists(conn, "issues", "sprint", "VARCHAR")?;
+        Ok(())
+    }
+
+    /// カラムが存在しない場合に追加する
+    fn add_column_if_not_exists(
+        conn: &Connection,
+        table: &str,
+        column: &str,
+        column_type: &str,
+    ) -> DomainResult<()> {
+        // DuckDBでカラムの存在を確認
+        let check_sql = format!(
+            "SELECT COUNT(*) FROM information_schema.columns WHERE table_name = '{}' AND column_name = '{}'",
+            table, column
+        );
+
+        let mut stmt = conn.prepare(&check_sql)
+            .map_err(|e| DomainError::Repository(format!("Failed to prepare statement: {}", e)))?;
+
+        let count: i64 = stmt.query_row([], |row| row.get(0))
+            .map_err(|e| DomainError::Repository(format!("Failed to check column existence: {}", e)))?;
+
+        if count == 0 {
+            let alter_sql = format!("ALTER TABLE {} ADD COLUMN {} {}", table, column, column_type);
+            conn.execute(&alter_sql, [])
+                .map_err(|e| DomainError::Repository(format!("Failed to add column {}.{}: {}", table, column, e)))?;
+            log::info!("Migration: Added column {}.{}", table, column);
+        }
+
         Ok(())
     }
 
