@@ -115,6 +115,13 @@ async fn run() -> DomainResult<()> {
             ConfigAction::Show => handler.handle_config_show()?,
             ConfigAction::Set { key, value } => handler.handle_config_set(&key, &value)?,
         },
+        Commands::Report {
+            project,
+            interactive,
+            output,
+        } => {
+            handler.handle_report(project, interactive, output)?;
+        }
     }
 
     Ok(())

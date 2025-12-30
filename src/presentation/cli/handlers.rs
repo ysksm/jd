@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -11,8 +12,8 @@ use log::{info, warn};
 
 use crate::application::services::JiraService;
 use crate::application::use_cases::{
-    CreateTestTicketUseCase, GetChangeHistoryUseCase, GetProjectMetadataUseCase,
-    SearchIssuesUseCase, SyncProjectListUseCase, SyncProjectUseCase,
+    CreateTestTicketUseCase, GenerateReportUseCase, GetChangeHistoryUseCase,
+    GetProjectMetadataUseCase, SearchIssuesUseCase, SyncProjectListUseCase, SyncProjectUseCase,
 };
 use crate::domain::error::{DomainError, DomainResult};
 use crate::domain::repositories::{
@@ -20,6 +21,7 @@ use crate::domain::repositories::{
     SearchParams, SyncHistoryRepository,
 };
 use crate::infrastructure::config::{ProjectConfig, Settings};
+use crate::presentation::report::{generate_interactive_report, generate_static_report};
 
 pub struct CliHandler<P, I, M, C, S, J>
 where
@@ -631,6 +633,94 @@ where
 
         settings.save(&self.settings_path)?;
         println!("Updated {} = {}", key, value);
+
+        Ok(())
+    }
+
+    pub fn handle_report(
+        &self,
+        project_key: Option<String>,
+        interactive: bool,
+        output_path: Option<String>,
+    ) -> DomainResult<()> {
+        let settings = Settings::load(&self.settings_path)?;
+
+        // Determine which projects to include
+        let projects_to_report: Vec<(&str, &str, &str)> = if let Some(ref key) = project_key {
+            let project = settings.find_project(key).ok_or_else(|| {
+                DomainError::NotFound(format!("Project not found: {}", key))
+            })?;
+            vec![(&project.id, &project.key, &project.name)]
+        } else {
+            // All enabled projects
+            let enabled = settings.sync_enabled_projects();
+            if enabled.is_empty() {
+                return Err(DomainError::Validation(
+                    "No projects enabled for sync. Use 'jira-db project enable <KEY>' first.".into(),
+                ));
+            }
+            enabled
+                .iter()
+                .map(|p| (p.id.as_str(), p.key.as_str(), p.name.as_str()))
+                .collect()
+        };
+
+        // Generate report data
+        let use_case = GenerateReportUseCase::new(
+            self.issue_repository.clone(),
+            self.change_history_repository.clone(),
+        );
+
+        println!("Generating report for {} project(s)...", projects_to_report.len());
+        let report_data = use_case.execute(&projects_to_report)?;
+
+        if report_data.total_issues == 0 {
+            println!("No issues found. Run 'jira-db sync' first to fetch issues.");
+            return Ok(());
+        }
+
+        // Generate HTML
+        let html = if interactive {
+            generate_interactive_report(&report_data)
+        } else {
+            generate_static_report(&report_data)
+        };
+
+        // Determine output path
+        let output_file = if let Some(path) = output_path {
+            PathBuf::from(path)
+        } else {
+            let reports_dir = PathBuf::from("reports");
+            if !reports_dir.exists() {
+                fs::create_dir_all(&reports_dir)
+                    .map_err(|e| DomainError::Repository(format!("Failed to create reports directory: {}", e)))?;
+            }
+
+            let timestamp = Utc::now().format("%Y%m%d_%H%M%S");
+            let suffix = if interactive { "interactive" } else { "static" };
+            reports_dir.join(format!("report_{}_{}.html", timestamp, suffix))
+        };
+
+        // Ensure parent directory exists
+        if let Some(parent) = output_file.parent() {
+            if !parent.exists() {
+                fs::create_dir_all(parent)
+                    .map_err(|e| DomainError::Repository(format!("Failed to create directory: {}", e)))?;
+            }
+        }
+
+        // Write file
+        fs::write(&output_file, html)
+            .map_err(|e| DomainError::Repository(format!("Failed to write report file: {}", e)))?;
+
+        println!("Report generated successfully!");
+        println!("Output: {}", output_file.display());
+        println!("Total issues: {}", report_data.total_issues);
+        println!("Projects: {}", report_data.projects.iter().map(|p| p.key.as_str()).collect::<Vec<_>>().join(", "));
+
+        if interactive {
+            println!("\nOpen the file in a web browser to view the interactive report.");
+        }
 
         Ok(())
     }
