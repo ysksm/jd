@@ -58,6 +58,12 @@ pub fn generate_interactive_report(data: &ReportData) -> String {
                     </select>
                 </div>
                 <div class="filter-group">
+                    <label for="sprint-filter">Sprint</label>
+                    <select id="sprint-filter">
+                        <option value="">All Sprints</option>
+                    </select>
+                </div>
+                <div class="filter-group">
                     <label for="date-from">From</label>
                     <input type="date" id="date-from">
                 </div>
@@ -879,6 +885,7 @@ fn get_interactive_js() -> &'static str {
         const priorities = new Set();
         const assignees = new Set();
         const types = new Set();
+        const sprints = new Set();
 
         allIssues.forEach(issue => {
             projects.add(issue.project_key);
@@ -886,6 +893,7 @@ fn get_interactive_js() -> &'static str {
             priorities.add(issue.priority);
             assignees.add(issue.assignee);
             types.add(issue.issue_type);
+            if (issue.sprint) sprints.add(issue.sprint);
         });
 
         populateSelect('project-filter', Array.from(projects).sort());
@@ -893,6 +901,7 @@ fn get_interactive_js() -> &'static str {
         populateSelect('priority-filter', Array.from(priorities).sort());
         populateSelect('assignee-filter', Array.from(assignees).sort());
         populateSelect('type-filter', Array.from(types).sort());
+        populateSelect('sprint-filter', Array.from(sprints).sort());
     }
 
     function populateSelect(id, options) {
@@ -910,7 +919,7 @@ fn get_interactive_js() -> &'static str {
 
     function bindEvents() {
         // Filter events
-        ['project-filter', 'status-filter', 'priority-filter', 'assignee-filter', 'type-filter'].forEach(id => {
+        ['project-filter', 'status-filter', 'priority-filter', 'assignee-filter', 'type-filter', 'sprint-filter'].forEach(id => {
             document.getElementById(id).addEventListener('change', () => {
                 activeChartFilter = null;
                 applyFilters();
@@ -972,6 +981,7 @@ fn get_interactive_js() -> &'static str {
         const priorityFilter = document.getElementById('priority-filter').value;
         const assigneeFilter = document.getElementById('assignee-filter').value;
         const typeFilter = document.getElementById('type-filter').value;
+        const sprintFilter = document.getElementById('sprint-filter').value;
         const dateFrom = document.getElementById('date-from').value;
         const dateTo = document.getElementById('date-to').value;
         const searchQuery = document.getElementById('search-input').value.toLowerCase();
@@ -982,6 +992,7 @@ fn get_interactive_js() -> &'static str {
             if (priorityFilter && issue.priority !== priorityFilter) return false;
             if (assigneeFilter && issue.assignee !== assigneeFilter) return false;
             if (typeFilter && issue.issue_type !== typeFilter) return false;
+            if (sprintFilter && issue.sprint !== sprintFilter) return false;
 
             if (dateFrom && issue.created_date) {
                 const createdDate = new Date(issue.created_date).toISOString().split('T')[0];
@@ -1510,6 +1521,7 @@ fn get_interactive_js() -> &'static str {
         document.getElementById('priority-filter').value = '';
         document.getElementById('assignee-filter').value = '';
         document.getElementById('type-filter').value = '';
+        document.getElementById('sprint-filter').value = '';
         document.getElementById('date-from').value = '';
         document.getElementById('date-to').value = '';
         document.getElementById('search-input').value = '';
@@ -1519,7 +1531,7 @@ fn get_interactive_js() -> &'static str {
     }
 
     function exportCsv() {
-        const headers = ['Key', 'Summary', 'Status', 'Priority', 'Assignee', 'Reporter', 'Type', 'Components', 'Labels', 'Created', 'Updated', 'Project'];
+        const headers = ['Key', 'Summary', 'Status', 'Priority', 'Assignee', 'Reporter', 'Type', 'Sprint', 'Components', 'Labels', 'Created', 'Updated', 'Project'];
         const rows = filteredIssues.map(issue => [
             issue.key,
             `"${(issue.summary || '').replace(/"/g, '""')}"`,
@@ -1528,6 +1540,7 @@ fn get_interactive_js() -> &'static str {
             issue.assignee,
             issue.reporter,
             issue.issue_type,
+            issue.sprint || '',
             `"${(issue.components || []).join(', ')}"`,
             `"${(issue.labels || []).join(', ')}"`,
             formatDate(issue.created_date),

@@ -36,6 +36,8 @@ impl IssueRepository for DuckDbIssueRepository {
                 .as_ref()
                 .map(|v| serde_json::to_string(v).unwrap_or_default());
 
+            let sprint = issue.sprint.clone();
+
             let raw_data = issue
                 .raw_json
                 .as_ref()
@@ -47,10 +49,10 @@ impl IssueRepository for DuckDbIssueRepository {
                 INSERT INTO issues (
                     id, project_id, key, summary, description,
                     status, priority, assignee, reporter,
-                    issue_type, resolution, labels, components, fix_versions, parent_key,
+                    issue_type, resolution, labels, components, fix_versions, sprint, parent_key,
                     created_date, updated_date, raw_data, synced_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (id) DO UPDATE SET
                     project_id = excluded.project_id,
                     key = excluded.key,
@@ -65,6 +67,7 @@ impl IssueRepository for DuckDbIssueRepository {
                     labels = excluded.labels,
                     components = excluded.components,
                     fix_versions = excluded.fix_versions,
+                    sprint = excluded.sprint,
                     parent_key = excluded.parent_key,
                     created_date = excluded.created_date,
                     updated_date = excluded.updated_date,
@@ -86,6 +89,7 @@ impl IssueRepository for DuckDbIssueRepository {
                     &labels_json,
                     &components_json,
                     &fix_versions_json,
+                    &sprint,
                     &issue.parent_key,
                     &issue.created_date.map(|d| d.to_rfc3339()),
                     &issue.updated_date.map(|d| d.to_rfc3339()),
@@ -106,7 +110,7 @@ impl IssueRepository for DuckDbIssueRepository {
                 r#"
             SELECT id, project_id, key, summary, description,
                    status, priority, assignee, reporter,
-                   issue_type, resolution, labels, components, fix_versions, parent_key,
+                   issue_type, resolution, labels, components, fix_versions, sprint, parent_key,
                    created_date, updated_date
             FROM issues
             WHERE project_id = ?
@@ -141,12 +145,13 @@ impl IssueRepository for DuckDbIssueRepository {
                     labels,
                     components,
                     fix_versions,
-                    parent_key: row.get(14)?,
+                    sprint: row.get(14)?,
+                    parent_key: row.get(15)?,
                     created_date: row
-                        .get::<_, Option<String>>(15)?
+                        .get::<_, Option<String>>(16)?
                         .and_then(|s| DateTime::parse_from_rfc3339(&s).ok().map(|dt| dt.with_timezone(&Utc))),
                     updated_date: row
-                        .get::<_, Option<String>>(16)?
+                        .get::<_, Option<String>>(17)?
                         .and_then(|s| DateTime::parse_from_rfc3339(&s).ok().map(|dt| dt.with_timezone(&Utc))),
                     raw_json: None,
                 })
@@ -181,7 +186,7 @@ impl IssueRepository for DuckDbIssueRepository {
             r#"
             SELECT i.id, i.project_id, i.key, i.summary, i.description,
                    i.status, i.priority, i.assignee, i.reporter,
-                   i.issue_type, i.resolution, i.labels, i.components, i.fix_versions, i.parent_key,
+                   i.issue_type, i.resolution, i.labels, i.components, i.fix_versions, i.sprint, i.parent_key,
                    i.created_date, i.updated_date
             FROM issues i
             LEFT JOIN projects p ON i.project_id = p.id
@@ -262,12 +267,13 @@ impl IssueRepository for DuckDbIssueRepository {
                     labels,
                     components,
                     fix_versions,
-                    parent_key: row.get(14)?,
+                    sprint: row.get(14)?,
+                    parent_key: row.get(15)?,
                     created_date: row
-                        .get::<_, Option<String>>(15)?
+                        .get::<_, Option<String>>(16)?
                         .and_then(|s| DateTime::parse_from_rfc3339(&s).ok().map(|dt| dt.with_timezone(&Utc))),
                     updated_date: row
-                        .get::<_, Option<String>>(16)?
+                        .get::<_, Option<String>>(17)?
                         .and_then(|s| DateTime::parse_from_rfc3339(&s).ok().map(|dt| dt.with_timezone(&Utc))),
                     raw_json: None,
                 })

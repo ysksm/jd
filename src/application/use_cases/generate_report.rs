@@ -25,6 +25,7 @@ pub struct ProjectReportData {
     pub assignee_counts: HashMap<String, usize>,
     pub issue_type_counts: HashMap<String, usize>,
     pub component_counts: HashMap<String, usize>,
+    pub sprint_counts: HashMap<String, usize>,
     pub timeline_data: Vec<TimelineDataPoint>,
 }
 
@@ -45,6 +46,7 @@ pub struct IssueReportData {
     pub assignee: String,
     pub reporter: String,
     pub issue_type: String,
+    pub sprint: String,
     pub components: Vec<String>,
     pub labels: Vec<String>,
     pub created_date: Option<DateTime<Utc>>,
@@ -112,6 +114,7 @@ where
         let mut assignee_counts: HashMap<String, usize> = HashMap::new();
         let mut issue_type_counts: HashMap<String, usize> = HashMap::new();
         let mut component_counts: HashMap<String, usize> = HashMap::new();
+        let mut sprint_counts: HashMap<String, usize> = HashMap::new();
 
         let mut issue_data_list = Vec::new();
 
@@ -120,6 +123,7 @@ where
             let priority = issue.priority.clone().unwrap_or_else(|| "Unknown".to_string());
             let assignee = issue.assignee.clone().unwrap_or_else(|| "Unassigned".to_string());
             let issue_type = issue.issue_type.clone().unwrap_or_else(|| "Unknown".to_string());
+            let sprint = issue.sprint.clone().unwrap_or_else(|| "No Sprint".to_string());
             let components = issue.components.clone().unwrap_or_default();
             let labels = issue.labels.clone().unwrap_or_default();
             let reporter = issue.reporter.clone().unwrap_or_else(|| "Unknown".to_string());
@@ -128,6 +132,7 @@ where
             *priority_counts.entry(priority.clone()).or_insert(0) += 1;
             *assignee_counts.entry(assignee.clone()).or_insert(0) += 1;
             *issue_type_counts.entry(issue_type.clone()).or_insert(0) += 1;
+            *sprint_counts.entry(sprint.clone()).or_insert(0) += 1;
 
             for component in &components {
                 *component_counts.entry(component.clone()).or_insert(0) += 1;
@@ -156,6 +161,7 @@ where
                 assignee,
                 reporter,
                 issue_type,
+                sprint,
                 components,
                 labels,
                 created_date: issue.created_date,
@@ -176,6 +182,7 @@ where
             assignee_counts,
             issue_type_counts,
             component_counts,
+            sprint_counts,
             timeline_data,
         })
     }

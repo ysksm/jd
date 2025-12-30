@@ -96,6 +96,60 @@ impl JiraApiClient {
             auth_header,
         })
     }
+
+    /// Extract sprint name from JIRA fields
+    /// Sprint is typically stored in a custom field (customfield_XXXXX)
+    /// The format can be either:
+    /// - An array of sprint objects with "name" field
+    /// - A string in format "com.atlassian.greenhopper.service.sprint.Sprint@xxx[name=Sprint Name,...]"
+    fn extract_sprint(fields: &serde_json::Value) -> Option<String> {
+        // Common sprint custom field IDs
+        let sprint_field_ids = [
+            "sprint",
+            "customfield_10020", // Common default
+            "customfield_10104",
+            "customfield_10000",
+        ];
+
+        for field_id in sprint_field_ids {
+            if let Some(sprint_value) = fields.get(field_id) {
+                // Case 1: Array of sprint objects
+                if let Some(sprints) = sprint_value.as_array() {
+                    // Get the most recent active sprint (last in array is usually most recent)
+                    for sprint in sprints.iter().rev() {
+                        if let Some(name) = sprint.get("name").and_then(|n| n.as_str()) {
+                            // Check if sprint is active (state = "active") or just return name
+                            let state = sprint.get("state").and_then(|s| s.as_str()).unwrap_or("");
+                            if state == "active" || state == "closed" || state.is_empty() {
+                                return Some(name.to_string());
+                            }
+                        }
+                    }
+                    // If no active sprint found, return the first one with a name
+                    for sprint in sprints {
+                        if let Some(name) = sprint.get("name").and_then(|n| n.as_str()) {
+                            return Some(name.to_string());
+                        }
+                    }
+                }
+
+                // Case 2: String format (legacy)
+                if let Some(sprint_str) = sprint_value.as_str() {
+                    // Parse "name=Sprint Name" from the string
+                    if let Some(name_start) = sprint_str.find("name=") {
+                        let name_portion = &sprint_str[name_start + 5..];
+                        if let Some(comma_pos) = name_portion.find(',') {
+                            return Some(name_portion[..comma_pos].to_string());
+                        } else if let Some(bracket_pos) = name_portion.find(']') {
+                            return Some(name_portion[..bracket_pos].to_string());
+                        }
+                    }
+                }
+            }
+        }
+
+        None
+    }
 }
 
 #[async_trait]
@@ -212,6 +266,10 @@ impl JiraService for JiraApiClient {
                                 .collect::<Vec<String>>()
                         }).filter(|v| !v.is_empty());
 
+                        // Extract sprint - JIRA stores sprints in customfield_10020 or similar
+                        // Sprint can be an array of sprint objects with "name" field
+                        let sprint = Self::extract_sprint(fields);
+
                         let parent_key = fields["parent"]["key"].as_str().map(|s| s.to_string());
 
                         let created_date = fields["created"]
@@ -241,6 +299,7 @@ impl JiraService for JiraApiClient {
                             labels,
                             components,
                             fix_versions,
+                            sprint,
                             parent_key,
                             created_date,
                             updated_date,

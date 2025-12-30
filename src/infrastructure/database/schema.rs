@@ -50,6 +50,7 @@ impl Schema {
                 labels VARCHAR,
                 components VARCHAR,
                 fix_versions VARCHAR,
+                sprint VARCHAR,
                 parent_key VARCHAR,
                 created_date TIMESTAMP,
                 updated_date TIMESTAMP,
