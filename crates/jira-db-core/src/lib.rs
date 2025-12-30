@@ -32,7 +32,11 @@ pub use domain::repositories::{
 pub use infrastructure::config::{DatabaseConfig, JiraConfig, ProjectConfig, Settings};
 pub use infrastructure::database::{
     Database, DuckDbChangeHistoryRepository, DuckDbIssueRepository, DuckDbMetadataRepository,
-    DuckDbProjectRepository, DuckDbSyncHistoryRepository,
+    DuckDbProjectRepository, DuckDbSyncHistoryRepository, EmbeddingsRepository,
+    SemanticSearchResult,
+};
+pub use infrastructure::external::embeddings::{
+    EmbeddingConfig, EmbeddingProvider, EmbeddingResult, OpenAIEmbeddingClient,
 };
 pub use infrastructure::external::jira::JiraApiClient;
 

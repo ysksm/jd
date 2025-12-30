@@ -431,7 +431,6 @@ impl ToolHandler for ExecuteSqlTool {
 //=============================================================================
 
 pub struct SemanticSearchTool {
-    #[allow(dead_code)]
     db_conn: Arc<Mutex<Connection>>,
 }
 
@@ -446,13 +445,44 @@ impl ToolHandler for SemanticSearchTool {
     fn definition(&self) -> Tool {
         build_tool_definition::<SemanticSearchParams>(
             "semantic_search",
-            "Search for issues using natural language semantic search (requires embeddings to be generated)",
+            "Search for issues using natural language semantic search (requires embeddings to be generated during sync)",
         )
     }
 
-    async fn execute(&self, _arguments: Value) -> Result<CallToolResult> {
-        Ok(CallToolResult::error(
-            "Semantic search is not yet configured. Please run 'jira-db sync' with embedding generation enabled.",
-        ))
+    async fn execute(&self, arguments: Value) -> Result<CallToolResult> {
+        let params: SemanticSearchParams = serde_json::from_value(arguments)?;
+
+        // Check if embeddings table exists and has data
+        let embeddings_repo = jira_db_core::EmbeddingsRepository::new(self.db_conn.clone());
+
+        // Check if we have embeddings
+        let count = match embeddings_repo.count() {
+            Ok(c) => c,
+            Err(_) => {
+                return Ok(CallToolResult::error(
+                    "Semantic search is not available. Embeddings table not initialized. Please run 'jira-db sync' with embedding generation enabled.",
+                ));
+            }
+        };
+
+        if count == 0 {
+            return Ok(CallToolResult::error(
+                "No embeddings found. Please run 'jira-db sync' with embedding generation enabled to generate embeddings for issues.",
+            ));
+        }
+
+        // For now, return info about embeddings
+        // Full implementation requires OpenAI API key to embed the query
+        let result = serde_json::json!({
+            "status": "embeddings_available",
+            "embedding_count": count,
+            "message": "Semantic search requires an OpenAI API key to embed the query. This feature will be fully available when embedding configuration is added to the MCP server.",
+            "query": params.query,
+            "project_filter": params.project,
+            "limit": params.limit.unwrap_or(10)
+        });
+
+        let json = serde_json::to_string_pretty(&result)?;
+        Ok(CallToolResult::text(json))
     }
 }

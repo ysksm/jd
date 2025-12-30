@@ -13,6 +13,9 @@ pub enum DomainError {
 
     #[error("External service error: {0}")]
     ExternalService(String),
+
+    #[error("Configuration error: {0}")]
+    Configuration(String),
 }
 
 pub type DomainResult<T> = std::result::Result<T, DomainError>;
