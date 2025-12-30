@@ -5,6 +5,7 @@
 
 use std::sync::Arc;
 
+use actix_web::{web, App, HttpServer};
 use anyhow::Result;
 use duckdb::Connection;
 use std::sync::Mutex;
@@ -15,6 +16,7 @@ use crate::config::McpConfig;
 use crate::handlers::RequestHandler;
 use crate::protocol::ProtocolError;
 use crate::tools::ToolRegistry;
+use crate::transport::http::{configure_routes, HttpState};
 use crate::transport::{StdioTransport, Transport};
 
 /// MCP Server for JIRA Database
@@ -35,6 +37,25 @@ impl McpServer {
             db_conn: db.connection(),
             config,
         })
+    }
+
+    /// Run the server over HTTP transport
+    pub async fn run_http(self, host: &str, port: u16) -> Result<()> {
+        tracing::info!("Starting MCP HTTP server on {}:{}", host, port);
+
+        let tool_registry = ToolRegistry::new(self.db_conn.clone());
+        let state = Arc::new(HttpState::new(tool_registry));
+
+        HttpServer::new(move || {
+            App::new()
+                .app_data(web::Data::new(state.clone()))
+                .configure(configure_routes)
+        })
+        .bind((host, port))?
+        .run()
+        .await?;
+
+        Ok(())
     }
 
     /// Run the server over stdio transport

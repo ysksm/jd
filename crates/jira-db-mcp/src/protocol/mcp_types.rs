@@ -187,6 +187,7 @@ pub struct ToolInputSchema {
 
 impl ToolInputSchema {
     /// Create an empty object schema
+    #[allow(dead_code)]
     pub fn empty() -> Self {
         Self {
             schema_type: "object".to_string(),

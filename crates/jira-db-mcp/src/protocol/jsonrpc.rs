@@ -46,6 +46,7 @@ pub struct JsonRpcRequest {
 
 impl JsonRpcRequest {
     /// Create a new request with an ID
+    #[allow(dead_code)]
     pub fn new(method: impl Into<String>, params: Option<Value>, id: RequestId) -> Self {
         Self {
             jsonrpc: JSONRPC_VERSION.to_string(),
@@ -56,6 +57,7 @@ impl JsonRpcRequest {
     }
 
     /// Create a notification (no ID, no response expected)
+    #[allow(dead_code)]
     pub fn notification(method: impl Into<String>, params: Option<Value>) -> Self {
         Self {
             jsonrpc: JSONRPC_VERSION.to_string(),
@@ -201,6 +203,7 @@ impl JsonRpcError {
 /// A message that could be either a request or response
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
+#[allow(dead_code)]
 pub enum JsonRpcMessage {
     Request(JsonRpcRequest),
     Response(JsonRpcResponse),

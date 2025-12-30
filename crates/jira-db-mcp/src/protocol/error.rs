@@ -6,6 +6,7 @@ use super::jsonrpc::{JsonRpcError, JsonRpcErrorResponse, RequestId};
 
 /// Protocol errors
 #[derive(Debug, Error)]
+#[allow(dead_code)]
 pub enum ProtocolError {
     /// JSON parsing error
     #[error("JSON parse error: {0}")]

@@ -27,7 +27,7 @@ struct Args {
     #[arg(short, long)]
     config: Option<PathBuf>,
 
-    /// Enable HTTP server mode instead of stdio (not yet implemented)
+    /// Enable HTTP server mode instead of stdio
     #[arg(long)]
     http: bool,
 
@@ -91,12 +91,12 @@ async fn main() -> Result<()> {
         config.database_path = db_path;
     }
 
-    // Check for HTTP mode
-    if args.http {
-        anyhow::bail!("HTTP mode is not yet implemented. Please use stdio mode (default).");
-    }
-
     // Create and run server
     let server = McpServer::new(config).context("Failed to create MCP server")?;
-    server.run_stdio().await
+
+    if args.http {
+        server.run_http(&args.host, args.port).await
+    } else {
+        server.run_stdio().await
+    }
 }

@@ -60,6 +60,7 @@ pub struct GetIssueHistoryParams {
 
 /// Parameters for listing projects
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
+#[allow(dead_code)]
 pub struct ListProjectsParams {
     /// Filter to only show enabled projects
     #[schemars(description = "Only show projects enabled for sync")]
@@ -100,6 +101,7 @@ pub struct ExecuteSqlParams {
 
 /// Parameters for semantic search
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
+#[allow(dead_code)]
 pub struct SemanticSearchParams {
     /// Search query for semantic matching
     #[schemars(description = "Natural language query for semantic search")]
