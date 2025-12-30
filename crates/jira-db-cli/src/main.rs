@@ -53,6 +53,9 @@ async fn run() -> DomainResult<()> {
     // Create JIRA service (DIP: implements application service trait)
     let jira_service = Arc::new(JiraApiClient::new(&settings.jira)?);
 
+    // Clone issue_repository for later use in embeddings command
+    let issue_repository_for_embeddings = issue_repository.clone();
+
     // Create CLI handler with all dependencies injected
     let handler = CliHandler::new(
         project_repository,
@@ -120,6 +123,21 @@ async fn run() -> DomainResult<()> {
         } => {
             handler.handle_report(project, interactive, output)?;
         }
+        Commands::Embeddings {
+            project,
+            force,
+            batch_size,
+        } => {
+            handle_embeddings_command(
+                &settings,
+                conn.clone(),
+                issue_repository_for_embeddings,
+                project,
+                force,
+                batch_size,
+            )
+            .await?;
+        }
     }
 
     Ok(())
@@ -176,6 +194,7 @@ async fn handle_init_command(
             database: DatabaseConfig {
                 path: std::path::PathBuf::from(db_path),
             },
+            embeddings: None,
         };
 
         println!("\nTesting JIRA connection...");
@@ -213,6 +232,88 @@ async fn handle_init_command(
         info!("     - api_key: Your JIRA API key");
         info!("  2. Run: jira-db project init");
     }
+
+    Ok(())
+}
+
+async fn handle_embeddings_command(
+    settings: &Settings,
+    conn: jira_db_core::infrastructure::database::DbConnection,
+    issue_repository: Arc<DuckDbIssueRepository>,
+    project: Option<String>,
+    force: bool,
+    batch_size: usize,
+) -> DomainResult<()> {
+    use jira_db_core::application::use_cases::{
+        EmbeddingGenerationConfig, GenerateEmbeddingsUseCase,
+    };
+    use jira_db_core::domain::error::DomainError;
+    use jira_db_core::infrastructure::database::EmbeddingsRepository;
+    use jira_db_core::infrastructure::external::embeddings::{EmbeddingConfig, OpenAIEmbeddingClient};
+    use std::env;
+
+    // Get OpenAI API key from settings or environment
+    let api_key = settings
+        .embeddings
+        .as_ref()
+        .and_then(|e| e.openai_api_key.clone())
+        .or_else(|| env::var("OPENAI_API_KEY").ok())
+        .ok_or_else(|| {
+            DomainError::Configuration(
+                "OpenAI API key not found. Set OPENAI_API_KEY environment variable or add embeddings.openai_api_key to settings.json".into()
+            )
+        })?;
+
+    // Get model from settings
+    let model = settings
+        .embeddings
+        .as_ref()
+        .map(|e| e.model.clone())
+        .unwrap_or_else(|| "text-embedding-3-small".to_string());
+
+    println!("Generating embeddings using model: {}", model);
+
+    // Create embedding client with builder pattern
+    let mut embedding_config = EmbeddingConfig::new(api_key)
+        .with_batch_size(batch_size);
+
+    // Apply model if specified (currently only supports small/large by name)
+    if model.contains("large") {
+        embedding_config = embedding_config.with_large_model();
+    }
+
+    let embedding_provider = Arc::new(OpenAIEmbeddingClient::new(embedding_config)?);
+
+    // Create embeddings repository
+    let embeddings_repository = Arc::new(EmbeddingsRepository::new(conn));
+
+    // Create config
+    let config = EmbeddingGenerationConfig {
+        batch_size,
+        force_regenerate: force,
+    };
+
+    // Create and execute use case
+    let use_case = GenerateEmbeddingsUseCase::new(
+        issue_repository,
+        embeddings_repository,
+        embedding_provider,
+        config,
+    );
+
+    let result = use_case.execute(project.as_deref()).await?;
+
+    // Print results
+    println!("\nEmbedding Generation Results:");
+    println!("  Total issues:        {}", result.total_issues);
+    println!("  Embeddings generated: {}", result.embeddings_generated);
+    println!("  Embeddings skipped:   {}", result.embeddings_skipped);
+    println!("  Errors:              {}", result.errors);
+    println!("  Total time:          {:.2}s", result.duration_secs);
+    println!("\nTiming breakdown:");
+    println!("  Fetch issues:        {:.2}s", result.timing.fetch_issues_secs);
+    println!("  Embedding API:       {:.2}s", result.timing.embedding_api_secs);
+    println!("  Store embeddings:    {:.2}s", result.timing.store_embeddings_secs);
 
     Ok(())
 }

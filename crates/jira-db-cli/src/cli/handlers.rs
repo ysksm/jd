@@ -129,6 +129,7 @@ where
             database: DatabaseConfig {
                 path: PathBuf::from(db_path),
             },
+            embeddings: None,
         };
 
         println!("\nTesting JIRA connection...");
