@@ -586,6 +586,7 @@ impl JiraClient {
 
 /// Response from creating a new issue
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct CreatedIssue {
     pub id: String,
     pub key: String,
