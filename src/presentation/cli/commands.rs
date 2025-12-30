@@ -114,6 +114,21 @@ pub enum Commands {
         #[arg(short = 'n', long, default_value = "1")]
         count: usize,
     },
+
+    /// Generate HTML report
+    Report {
+        /// Project key (or "all" for all enabled projects)
+        #[arg(short, long)]
+        project: Option<String>,
+
+        /// Generate interactive report with JavaScript
+        #[arg(short, long)]
+        interactive: bool,
+
+        /// Output file path (default: reports/report_YYYYMMDD_HHMMSS.html)
+        #[arg(short, long)]
+        output: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
