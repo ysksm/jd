@@ -1,22 +1,20 @@
-mod application;
-mod domain;
-mod infrastructure;
-mod presentation;
+mod cli;
 
 use std::sync::Arc;
 
 use clap::Parser;
 use log::error;
 
-use application::services::JiraService;
-use domain::error::DomainResult;
-use infrastructure::config::Settings;
-use infrastructure::database::{
+use jira_db_core::application::services::JiraService;
+use jira_db_core::domain::error::DomainResult;
+use jira_db_core::infrastructure::config::Settings;
+use jira_db_core::infrastructure::database::{
     Database, DuckDbChangeHistoryRepository, DuckDbIssueRepository, DuckDbMetadataRepository,
     DuckDbProjectRepository, DuckDbSyncHistoryRepository,
 };
-use infrastructure::external::jira::JiraApiClient;
-use presentation::cli::{Cli, CliHandler, Commands, ConfigAction, ProjectAction};
+use jira_db_core::infrastructure::external::jira::JiraApiClient;
+
+use cli::{Cli, CliHandler, Commands, ConfigAction, ProjectAction};
 
 #[tokio::main]
 async fn main() {
@@ -132,7 +130,8 @@ async fn handle_init_command(
     interactive: bool,
 ) -> DomainResult<()> {
     use dialoguer::{Confirm, Input};
-    use domain::error::DomainError;
+    use jira_db_core::domain::error::DomainError;
+    use jira_db_core::infrastructure::config::{DatabaseConfig, JiraConfig};
     use log::info;
 
     if Settings::exists(settings_path) {
@@ -168,13 +167,13 @@ async fn handle_init_command(
             .map_err(|e| DomainError::Repository(format!("Input error: {}", e)))?;
 
         let settings = Settings {
-            jira: infrastructure::config::JiraConfig {
+            jira: JiraConfig {
                 endpoint: endpoint.clone(),
                 username: username.clone(),
                 api_key: api_key.clone(),
             },
             projects: Vec::new(),
-            database: infrastructure::config::DatabaseConfig {
+            database: DatabaseConfig {
                 path: std::path::PathBuf::from(db_path),
             },
         };

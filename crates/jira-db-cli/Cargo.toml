@@ -1,0 +1,24 @@
+[package]
+name = "jira-db-cli"
+version.workspace = true
+edition.workspace = true
+description = "CLI tool for JIRA data synchronization"
+
+[[bin]]
+name = "jira-db"
+path = "src/main.rs"
+
+[dependencies]
+jira-db-core = { path = "../jira-db-core" }
+
+# CLI
+clap.workspace = true
+dialoguer.workspace = true
+comfy-table.workspace = true
+
+# Async
+tokio.workspace = true
+
+# Logging
+log.workspace = true
+env_logger.workspace = true
