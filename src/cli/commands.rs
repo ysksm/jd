@@ -109,6 +109,10 @@ pub enum Commands {
         /// Issue type (e.g., Task, Bug, Story)
         #[arg(short = 't', long, default_value = "Task")]
         issue_type: String,
+
+        /// Number of tickets to create (1-10)
+        #[arg(short = 'n', long, default_value = "1")]
+        count: usize,
     },
 }
 

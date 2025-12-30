@@ -50,7 +50,8 @@ async fn run() -> Result<()> {
             summary,
             description,
             issue_type,
-        } => handle_test_ticket(project, summary, description, issue_type).await,
+            count,
+        } => handle_test_ticket(project, summary, description, issue_type, count).await,
     }
 }
 
@@ -681,6 +682,7 @@ async fn handle_test_ticket(
     summary: String,
     description: Option<String>,
     issue_type: String,
+    count: usize,
 ) -> Result<()> {
     let settings_path = Settings::default_path()?;
     let settings = Settings::load(&settings_path)?;
@@ -692,31 +694,69 @@ async fn handle_test_ticket(
         return Err(JiraDbError::ProjectNotFound(project_key));
     }
 
-    info!("Creating test ticket in project {}...", project_key);
+    // Validate count (1-10)
+    let count = count.clamp(1, 10);
+
+    info!("Creating {} test ticket(s) in project {}...", count, project_key);
     info!("  Summary: {}", summary);
     info!("  Issue Type: {}", issue_type);
     if let Some(ref desc) = description {
         info!("  Description: {}", desc);
     }
+    info!("");
 
     let client = JiraClient::new(&settings.jira)?;
 
     // Test connection first
     client.test_connection().await?;
 
-    // Create the issue
-    let created = client
-        .create_issue(&project_key, &summary, description.as_deref(), &issue_type)
-        .await?;
+    let mut created_tickets = Vec::new();
+
+    for i in 1..=count {
+        // Add number suffix for multiple tickets
+        let ticket_summary = if count > 1 {
+            format!("{} #{}", summary, i)
+        } else {
+            summary.clone()
+        };
+
+        let ticket_description = description.as_ref().map(|d| {
+            if count > 1 {
+                format!("{} (#{}/{})", d, i, count)
+            } else {
+                d.clone()
+            }
+        });
+
+        // Create the issue
+        match client
+            .create_issue(&project_key, &ticket_summary, ticket_description.as_deref(), &issue_type)
+            .await
+        {
+            Ok(created) => {
+                info!("[{}/{}] Created: {}", i, count, created.key);
+                created_tickets.push(created);
+            }
+            Err(e) => {
+                error!("[{}/{}] Failed to create ticket: {}", i, count, e);
+            }
+        }
+    }
 
     info!("");
-    info!("Test ticket created successfully!");
-    info!("  Key: {}", created.key);
-    info!("  ID: {}", created.id);
-    if let Some(url) = created.self_url {
-        // Convert API URL to browse URL
-        let browse_url = url.replace("/rest/api/3/issue/", "/browse/");
-        info!("  URL: {}", browse_url);
+    info!("Created {} of {} test ticket(s):", created_tickets.len(), count);
+    for ticket in &created_tickets {
+        info!("  - {}", ticket.key);
+    }
+
+    if !created_tickets.is_empty() {
+        // Show browse URL for first ticket
+        if let Some(ref url) = created_tickets[0].self_url {
+            let browse_url = url.replace("/rest/api/3/issue/", "/browse/");
+            let base_url = browse_url.rsplit_once('/').map(|(base, _)| base).unwrap_or(&browse_url);
+            info!("");
+            info!("Browse: {}", base_url);
+        }
     }
 
     Ok(())
