@@ -129,6 +129,33 @@ pub enum Commands {
         #[arg(short, long)]
         output: Option<String>,
     },
+
+    /// Generate embeddings for semantic search
+    Embeddings {
+        /// Project key (or all enabled projects if not specified)
+        #[arg(short, long)]
+        project: Option<String>,
+
+        /// Regenerate existing embeddings
+        #[arg(short, long)]
+        force: bool,
+
+        /// Batch size for API calls
+        #[arg(short, long, default_value = "50")]
+        batch_size: usize,
+
+        /// Embedding provider: openai, ollama, cohere
+        #[arg(long)]
+        provider: Option<String>,
+
+        /// Model name (provider-specific)
+        #[arg(short, long)]
+        model: Option<String>,
+
+        /// API endpoint (for Ollama: default http://localhost:11434)
+        #[arg(long)]
+        endpoint: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]

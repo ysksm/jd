@@ -9,6 +9,8 @@ pub struct Settings {
     pub jira: JiraConfig,
     pub projects: Vec<ProjectConfig>,
     pub database: DatabaseConfig,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub embeddings: Option<EmbeddingsConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -30,6 +32,57 @@ pub struct ProjectConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DatabaseConfig {
     pub path: PathBuf,
+}
+
+/// Configuration for embedding generation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EmbeddingsConfig {
+    /// Embedding provider: "openai", "ollama", or "cohere"
+    #[serde(default = "default_provider")]
+    pub provider: String,
+    /// API key (for OpenAI: OPENAI_API_KEY, for Cohere: COHERE_API_KEY)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub api_key: Option<String>,
+    /// OpenAI API key (deprecated, use api_key instead)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub openai_api_key: Option<String>,
+    /// Embedding model to use
+    #[serde(default = "default_embedding_model")]
+    pub model: String,
+    /// Endpoint URL (for Ollama, default: http://localhost:11434)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub endpoint: Option<String>,
+    /// Whether to generate embeddings during sync
+    #[serde(default)]
+    pub auto_generate: bool,
+}
+
+fn default_provider() -> String {
+    "openai".to_string()
+}
+
+fn default_embedding_model() -> String {
+    "text-embedding-3-small".to_string()
+}
+
+impl Default for EmbeddingsConfig {
+    fn default() -> Self {
+        Self {
+            provider: default_provider(),
+            api_key: None,
+            openai_api_key: None,
+            model: default_embedding_model(),
+            endpoint: None,
+            auto_generate: false,
+        }
+    }
+}
+
+impl EmbeddingsConfig {
+    /// Get the effective API key (prefers api_key over openai_api_key)
+    pub fn get_api_key(&self) -> Option<&String> {
+        self.api_key.as_ref().or(self.openai_api_key.as_ref())
+    }
 }
 
 impl Settings {
@@ -77,6 +130,7 @@ impl Settings {
             database: DatabaseConfig {
                 path: PathBuf::from("./data/jira.duckdb"),
             },
+            embeddings: None,
         };
 
         settings.save(&path)?;
@@ -150,6 +204,7 @@ mod tests {
             database: DatabaseConfig {
                 path: PathBuf::from("./test.db"),
             },
+            embeddings: None,
         };
 
         let json = serde_json::to_string(&settings).unwrap();
@@ -170,6 +225,7 @@ mod tests {
             database: DatabaseConfig {
                 path: PathBuf::from("./test.db"),
             },
+            embeddings: None,
         };
 
         assert!(settings.validate().is_ok());

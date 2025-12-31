@@ -14,6 +14,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Metadata management (statuses, priorities, issue types, labels, components, versions)
 - Complete issue data capture (all fields + changelog)
 - Direct JIRA REST API v3 integration with reqwest
+- **MCP Server**: Model Context Protocol server for AI integration (stdio + HTTP)
+- **Vector Search**: Semantic search using DuckDB VSS with multiple embedding providers (OpenAI, Ollama, Cohere)
 
 ## Prerequisites
 
@@ -40,7 +42,7 @@ cargo build
 export LIBRARY_PATH="/opt/homebrew/lib:$LIBRARY_PATH" && cargo build --release
 ```
 
-### Running
+### Running CLI
 ```bash
 cargo run -- init              # Initialize configuration file
 cargo run -- project init      # Initialize project list from JIRA
@@ -51,6 +53,17 @@ cargo run -- search "bug"      # Search issues
 cargo run -- metadata --project PROJ  # View project metadata
 cargo run -- history PROJ-123  # View change history for an issue
 cargo run -- config show       # Show configuration
+cargo run -- embeddings        # Generate embeddings for semantic search
+cargo run -- report --interactive  # Generate interactive HTML report
+```
+
+### Running MCP Server
+```bash
+# Stdio mode (for Claude Desktop, VS Code, etc.)
+cargo run -p jira-db-mcp -- --database ./data/jira.duckdb
+
+# HTTP mode (for web clients)
+cargo run -p jira-db-mcp -- --database ./data/jira.duckdb --http --port 8080
 ```
 
 ### Testing
@@ -69,13 +82,13 @@ cargo fmt            # Format code
 
 ## Architecture
 
-The project is organized as a Cargo workspace with two crates, designed for future GUI support (Tauri, Web server):
+The project is organized as a Cargo workspace with three crates:
 
 ```
 jira-db/
 ├── Cargo.toml                    # Workspace definition
 ├── crates/
-│   ├── jira-db-core/             # Core library (reusable by GUI)
+│   ├── jira-db-core/             # Core library (reusable by GUI/MCP)
 │   │   ├── Cargo.toml
 │   │   └── src/
 │   │       ├── lib.rs            # Public API exports
@@ -84,23 +97,33 @@ jira-db/
 │   │       │   ├── repositories/ # Abstract repository interfaces
 │   │       │   └── error.rs      # DomainError, DomainResult
 │   │       ├── application/      # Use cases & services
-│   │       │   ├── use_cases/    # SyncProject, SearchIssues, etc.
+│   │       │   ├── use_cases/    # SyncProject, SearchIssues, GenerateEmbeddings, etc.
 │   │       │   ├── services/     # JiraService trait
 │   │       │   └── dto/          # SyncResult, CreatedIssueDto
 │   │       ├── infrastructure/   # External integrations
 │   │       │   ├── config/       # Settings (JSON-based)
-│   │       │   ├── database/     # DuckDB repositories
-│   │       │   └── external/     # JIRA API client
+│   │       │   ├── database/     # DuckDB repositories + EmbeddingsRepository
+│   │       │   └── external/     # JIRA API client + OpenAI embeddings
 │   │       └── report/           # HTML report generation
 │   │           ├── static_report.rs
 │   │           └── interactive/  # JavaScript-based dashboard
-│   └── jira-db-cli/              # CLI binary
+│   ├── jira-db-cli/              # CLI binary
+│   │   ├── Cargo.toml
+│   │   └── src/
+│   │       ├── main.rs           # Entry point
+│   │       └── cli/              # Command handlers (clap)
+│   │           ├── commands.rs   # CLI command definitions
+│   │           └── handlers.rs   # Command implementations
+│   └── jira-db-mcp/              # MCP Server binary
 │       ├── Cargo.toml
 │       └── src/
 │           ├── main.rs           # Entry point
-│           └── cli/              # Command handlers (clap)
-│               ├── commands.rs   # CLI command definitions
-│               └── handlers.rs   # Command implementations
+│           ├── config.rs         # Server configuration
+│           ├── server.rs         # MCP server logic
+│           ├── protocol/         # JSON-RPC 2.0 + MCP types
+│           ├── handlers/         # Request handlers
+│           ├── tools/            # Tool definitions & implementations
+│           └── transport/        # Stdio + HTTP transports
 ```
 
 ### Crate Responsibilities
@@ -115,6 +138,73 @@ jira-db/
 - CLI-specific code (clap, dialoguer, comfy-table)
 - Command routing and user interaction
 - Binary name: `jira-db`
+
+#### jira-db-mcp (Binary)
+- MCP (Model Context Protocol) server for AI integration
+- JSON-RPC 2.0 based communication
+- Supports stdio (Claude Desktop) and HTTP (web clients) transports
+- Read-only tools for issue search, metadata access, SQL execution
+- Binary name: `jira-db-mcp`
+
+### MCP Server Tools
+
+The MCP server provides these tools for AI assistants:
+
+| Tool | Description |
+|------|-------------|
+| `search_issues` | Full-text search with filters (project, status, assignee) |
+| `get_issue` | Get issue details by key |
+| `get_issue_history` | Get change history for an issue |
+| `list_projects` | List all synced projects |
+| `get_project_metadata` | Get project metadata (statuses, priorities, etc.) |
+| `get_schema` | Get database schema for SQL queries |
+| `execute_sql` | Execute read-only SQL queries |
+| `semantic_search` | Vector similarity search using embeddings |
+
+### Vector Search (Embeddings)
+
+The system supports semantic search using DuckDB VSS extension with multiple embedding providers:
+
+#### Supported Providers
+
+| Provider | Environment Variable | Default Model | Dimensions |
+|----------|---------------------|---------------|------------|
+| OpenAI | `OPENAI_API_KEY` | text-embedding-3-small | 1536 |
+| Ollama | - (local) | nomic-embed-text | 768 |
+| Cohere | `COHERE_API_KEY` | embed-multilingual-v3.0 | 1024 |
+
+#### Usage
+
+```bash
+# Ollama (free, local)
+jira-db embeddings --provider ollama
+
+# OpenAI
+jira-db embeddings --project PROJ
+
+# Cohere (good for Japanese)
+jira-db embeddings --provider cohere
+```
+
+#### Configuration
+
+```json
+{
+  "embeddings": {
+    "provider": "ollama",
+    "model": "nomic-embed-text",
+    "endpoint": "http://localhost:11434",
+    "auto_generate": false
+  }
+}
+```
+
+#### Embedding Details
+- Distance: Cosine similarity
+- Index: HNSW (Hierarchical Navigable Small World)
+- Text: Concatenated issue fields (key, summary, description, status, priority, etc.)
+
+See [docs/EMBEDDINGS.md](docs/EMBEDDINGS.md) for detailed provider documentation.
 
 ### Using Core in Future GUI
 
@@ -231,6 +321,13 @@ The CLI is organized with clear separation of concerns:
   - Shows all field changes with timestamps and authors
   - Supports filtering by field name (`--field status`)
   - Pagination with `--limit`
+- **`embeddings`** - Generate embeddings for semantic search
+  - Requires OpenAI API key (env or settings.json)
+  - Supports `--project`, `--force`, `--batch-size` options
+  - Displays timing breakdown
+- **`report`** - Generate HTML reports
+  - Supports `--interactive` for JavaScript dashboard
+  - Custom output with `--output`
 
 This design ensures:
 - Each command has a single, clear purpose
@@ -289,6 +386,11 @@ Metadata is NOT extracted from issues - it's fetched from API to ensure complete
 - ✅ Progress bars for sync operations
 - ✅ Comprehensive error handling
 - ✅ HTML reports (static & interactive dashboard)
+- ✅ **MCP Server** with stdio and HTTP/SSE transports
+- ✅ **Vector Search** with DuckDB VSS and OpenAI embeddings
+- ✅ **Semantic Search** tool via MCP
+- ✅ **SQL Execution** tool via MCP (read-only)
+- ✅ **Multiple Embedding Providers** (OpenAI, Ollama, Cohere)
 
 ## Future Enhancements
 
@@ -297,4 +399,5 @@ Metadata is NOT extracted from issues - it's fetched from API to ensure complete
 - Multiple JIRA instance support
 - Export capabilities (CSV, Excel)
 - Webhook-based real-time sync
-- Unit and integration tests
+- Automatic embedding generation during sync
+- Azure OpenAI / Voyage AI embedding providers

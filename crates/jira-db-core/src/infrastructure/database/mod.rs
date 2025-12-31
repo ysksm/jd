@@ -1,12 +1,10 @@
 mod connection;
-mod schema;
 mod repositories;
+mod schema;
 
-pub use connection::Database;
+pub use connection::{Database, DbConnection};
 pub use repositories::{
-    DuckDbProjectRepository,
-    DuckDbIssueRepository,
-    DuckDbMetadataRepository,
-    DuckDbChangeHistoryRepository,
-    DuckDbSyncHistoryRepository,
+    DuckDbChangeHistoryRepository, DuckDbIssueRepository, DuckDbMetadataRepository,
+    DuckDbProjectRepository, DuckDbSyncHistoryRepository, EmbeddingsRepository, IssueEmbedding,
+    SemanticSearchResult,
 };

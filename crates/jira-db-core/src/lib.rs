@@ -15,7 +15,8 @@ pub mod report;
 pub use application::dto::{CreatedIssueDto, SyncResult};
 pub use application::services::JiraService;
 pub use application::use_cases::{
-    CreateTestTicketUseCase, GenerateReportUseCase, GetChangeHistoryUseCase,
+    CreateTestTicketUseCase, EmbeddingGenerationConfig, EmbeddingGenerationResult,
+    EmbeddingTiming, GenerateEmbeddingsUseCase, GenerateReportUseCase, GetChangeHistoryUseCase,
     GetProjectMetadataUseCase, ReportData, SearchIssuesUseCase, SyncProjectListUseCase,
     SyncProjectUseCase,
 };
@@ -29,10 +30,16 @@ pub use domain::repositories::{
     SyncHistoryRepository,
 };
 
-pub use infrastructure::config::{DatabaseConfig, JiraConfig, ProjectConfig, Settings};
+pub use infrastructure::config::{DatabaseConfig, EmbeddingsConfig, JiraConfig, ProjectConfig, Settings};
 pub use infrastructure::database::{
-    Database, DuckDbChangeHistoryRepository, DuckDbIssueRepository, DuckDbMetadataRepository,
-    DuckDbProjectRepository, DuckDbSyncHistoryRepository,
+    Database, DbConnection, DuckDbChangeHistoryRepository, DuckDbIssueRepository,
+    DuckDbMetadataRepository, DuckDbProjectRepository, DuckDbSyncHistoryRepository,
+    EmbeddingsRepository, SemanticSearchResult,
+};
+pub use infrastructure::external::embeddings::{
+    create_provider, CohereConfig, CohereEmbeddingClient, EmbeddingConfig, EmbeddingProvider,
+    EmbeddingProviderType, EmbeddingResult, OllamaConfig, OllamaEmbeddingClient,
+    OpenAIEmbeddingClient, ProviderConfig,
 };
 pub use infrastructure::external::jira::JiraApiClient;
 

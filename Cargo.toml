@@ -2,8 +2,10 @@
 members = [
     "crates/jira-db-core",
     "crates/jira-db-cli",
+    "crates/jira-db-mcp",
 ]
 resolver = "2"
+default-members = ["crates/jira-db-cli"]
 
 [workspace.package]
 version = "0.1.0"
@@ -41,3 +43,5 @@ log = "0.4"
 env_logger = "0.11"
 indicatif = "0.17"
 dirs = "5.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }

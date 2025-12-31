@@ -53,6 +53,9 @@ async fn run() -> DomainResult<()> {
     // Create JIRA service (DIP: implements application service trait)
     let jira_service = Arc::new(JiraApiClient::new(&settings.jira)?);
 
+    // Clone issue_repository for later use in embeddings command
+    let issue_repository_for_embeddings = issue_repository.clone();
+
     // Create CLI handler with all dependencies injected
     let handler = CliHandler::new(
         project_repository,
@@ -120,6 +123,27 @@ async fn run() -> DomainResult<()> {
         } => {
             handler.handle_report(project, interactive, output)?;
         }
+        Commands::Embeddings {
+            project,
+            force,
+            batch_size,
+            provider,
+            model,
+            endpoint,
+        } => {
+            handle_embeddings_command(
+                &settings,
+                conn.clone(),
+                issue_repository_for_embeddings,
+                project,
+                force,
+                batch_size,
+                provider,
+                model,
+                endpoint,
+            )
+            .await?;
+        }
     }
 
     Ok(())
@@ -176,6 +200,7 @@ async fn handle_init_command(
             database: DatabaseConfig {
                 path: std::path::PathBuf::from(db_path),
             },
+            embeddings: None,
         };
 
         println!("\nTesting JIRA connection...");
@@ -213,6 +238,108 @@ async fn handle_init_command(
         info!("     - api_key: Your JIRA API key");
         info!("  2. Run: jira-db project init");
     }
+
+    Ok(())
+}
+
+async fn handle_embeddings_command(
+    settings: &Settings,
+    conn: jira_db_core::infrastructure::database::DbConnection,
+    issue_repository: Arc<DuckDbIssueRepository>,
+    project: Option<String>,
+    force: bool,
+    batch_size: usize,
+    cli_provider: Option<String>,
+    cli_model: Option<String>,
+    cli_endpoint: Option<String>,
+) -> DomainResult<()> {
+    use jira_db_core::application::use_cases::{
+        EmbeddingGenerationConfig, GenerateEmbeddingsUseCase,
+    };
+    use jira_db_core::infrastructure::database::EmbeddingsRepository;
+    use jira_db_core::infrastructure::external::embeddings::{
+        create_provider, EmbeddingProviderType, ProviderConfig,
+    };
+
+    // Determine provider type (CLI > settings > default)
+    let provider_str = cli_provider
+        .or_else(|| settings.embeddings.as_ref().map(|e| e.provider.clone()))
+        .unwrap_or_else(|| "openai".to_string());
+
+    let provider_type: EmbeddingProviderType = provider_str.parse()?;
+
+    // Get model (CLI > settings > provider default)
+    let model = cli_model.or_else(|| {
+        settings.embeddings.as_ref().map(|e| e.model.clone())
+    });
+
+    // Get endpoint (CLI > settings)
+    let endpoint = cli_endpoint.or_else(|| {
+        settings.embeddings.as_ref().and_then(|e| e.endpoint.clone())
+    });
+
+    // Get API key from settings or environment
+    let api_key = settings
+        .embeddings
+        .as_ref()
+        .and_then(|e| e.get_api_key().cloned());
+
+    // Build provider configuration
+    let provider_config = ProviderConfig {
+        provider: provider_type,
+        api_key,
+        model: model.clone(),
+        endpoint,
+    };
+
+    // Display what we're using
+    let display_model = model.clone().unwrap_or_else(|| match provider_type {
+        EmbeddingProviderType::OpenAI => "text-embedding-3-small".to_string(),
+        EmbeddingProviderType::Ollama => "nomic-embed-text".to_string(),
+        EmbeddingProviderType::Cohere => "embed-multilingual-v3.0".to_string(),
+    });
+
+    println!("Generating embeddings using:");
+    println!("  Provider: {}", provider_type);
+    println!("  Model:    {}", display_model);
+    if let Some(ref ep) = provider_config.endpoint {
+        println!("  Endpoint: {}", ep);
+    }
+    println!();
+
+    // Create embedding provider
+    let embedding_provider = create_provider(provider_config)?;
+
+    // Create embeddings repository
+    let embeddings_repository = Arc::new(EmbeddingsRepository::new(conn));
+
+    // Create config
+    let config = EmbeddingGenerationConfig {
+        batch_size,
+        force_regenerate: force,
+    };
+
+    // Create and execute use case
+    let use_case = GenerateEmbeddingsUseCase::new(
+        issue_repository,
+        embeddings_repository,
+        Arc::new(embedding_provider),
+        config,
+    );
+
+    let result = use_case.execute(project.as_deref()).await?;
+
+    // Print results
+    println!("\nEmbedding Generation Results:");
+    println!("  Total issues:        {}", result.total_issues);
+    println!("  Embeddings generated: {}", result.embeddings_generated);
+    println!("  Embeddings skipped:   {}", result.embeddings_skipped);
+    println!("  Errors:              {}", result.errors);
+    println!("  Total time:          {:.2}s", result.duration_secs);
+    println!("\nTiming breakdown:");
+    println!("  Fetch issues:        {:.2}s", result.timing.fetch_issues_secs);
+    println!("  Embedding API:       {:.2}s", result.timing.embedding_api_secs);
+    println!("  Store embeddings:    {:.2}s", result.timing.store_embeddings_secs);
 
     Ok(())
 }

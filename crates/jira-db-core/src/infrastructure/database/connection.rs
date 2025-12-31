@@ -4,6 +4,9 @@ use std::sync::{Arc, Mutex};
 use crate::domain::error::{DomainError, DomainResult};
 use super::schema::Schema;
 
+/// Type alias for the database connection handle
+pub type DbConnection = Arc<Mutex<Connection>>;
+
 #[derive(Clone)]
 pub struct Database {
     conn: Arc<Mutex<Connection>>,
