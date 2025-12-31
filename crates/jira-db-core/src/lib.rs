@@ -30,14 +30,16 @@ pub use domain::repositories::{
     SyncHistoryRepository,
 };
 
-pub use infrastructure::config::{DatabaseConfig, JiraConfig, ProjectConfig, Settings};
+pub use infrastructure::config::{DatabaseConfig, EmbeddingsConfig, JiraConfig, ProjectConfig, Settings};
 pub use infrastructure::database::{
     Database, DbConnection, DuckDbChangeHistoryRepository, DuckDbIssueRepository,
     DuckDbMetadataRepository, DuckDbProjectRepository, DuckDbSyncHistoryRepository,
     EmbeddingsRepository, SemanticSearchResult,
 };
 pub use infrastructure::external::embeddings::{
-    EmbeddingConfig, EmbeddingProvider, EmbeddingResult, OpenAIEmbeddingClient,
+    create_provider, CohereConfig, CohereEmbeddingClient, EmbeddingConfig, EmbeddingProvider,
+    EmbeddingProviderType, EmbeddingResult, OllamaConfig, OllamaEmbeddingClient,
+    OpenAIEmbeddingClient, ProviderConfig,
 };
 pub use infrastructure::external::jira::JiraApiClient;
 

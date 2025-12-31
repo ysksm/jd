@@ -127,6 +127,9 @@ async fn run() -> DomainResult<()> {
             project,
             force,
             batch_size,
+            provider,
+            model,
+            endpoint,
         } => {
             handle_embeddings_command(
                 &settings,
@@ -135,6 +138,9 @@ async fn run() -> DomainResult<()> {
                 project,
                 force,
                 batch_size,
+                provider,
+                model,
+                endpoint,
             )
             .await?;
         }
@@ -243,46 +249,66 @@ async fn handle_embeddings_command(
     project: Option<String>,
     force: bool,
     batch_size: usize,
+    cli_provider: Option<String>,
+    cli_model: Option<String>,
+    cli_endpoint: Option<String>,
 ) -> DomainResult<()> {
     use jira_db_core::application::use_cases::{
         EmbeddingGenerationConfig, GenerateEmbeddingsUseCase,
     };
-    use jira_db_core::domain::error::DomainError;
     use jira_db_core::infrastructure::database::EmbeddingsRepository;
-    use jira_db_core::infrastructure::external::embeddings::{EmbeddingConfig, OpenAIEmbeddingClient};
-    use std::env;
+    use jira_db_core::infrastructure::external::embeddings::{
+        create_provider, EmbeddingProviderType, ProviderConfig,
+    };
 
-    // Get OpenAI API key from settings or environment
+    // Determine provider type (CLI > settings > default)
+    let provider_str = cli_provider
+        .or_else(|| settings.embeddings.as_ref().map(|e| e.provider.clone()))
+        .unwrap_or_else(|| "openai".to_string());
+
+    let provider_type: EmbeddingProviderType = provider_str.parse()?;
+
+    // Get model (CLI > settings > provider default)
+    let model = cli_model.or_else(|| {
+        settings.embeddings.as_ref().map(|e| e.model.clone())
+    });
+
+    // Get endpoint (CLI > settings)
+    let endpoint = cli_endpoint.or_else(|| {
+        settings.embeddings.as_ref().and_then(|e| e.endpoint.clone())
+    });
+
+    // Get API key from settings or environment
     let api_key = settings
         .embeddings
         .as_ref()
-        .and_then(|e| e.openai_api_key.clone())
-        .or_else(|| env::var("OPENAI_API_KEY").ok())
-        .ok_or_else(|| {
-            DomainError::Configuration(
-                "OpenAI API key not found. Set OPENAI_API_KEY environment variable or add embeddings.openai_api_key to settings.json".into()
-            )
-        })?;
+        .and_then(|e| e.get_api_key().cloned());
 
-    // Get model from settings
-    let model = settings
-        .embeddings
-        .as_ref()
-        .map(|e| e.model.clone())
-        .unwrap_or_else(|| "text-embedding-3-small".to_string());
+    // Build provider configuration
+    let provider_config = ProviderConfig {
+        provider: provider_type,
+        api_key,
+        model: model.clone(),
+        endpoint,
+    };
 
-    println!("Generating embeddings using model: {}", model);
+    // Display what we're using
+    let display_model = model.clone().unwrap_or_else(|| match provider_type {
+        EmbeddingProviderType::OpenAI => "text-embedding-3-small".to_string(),
+        EmbeddingProviderType::Ollama => "nomic-embed-text".to_string(),
+        EmbeddingProviderType::Cohere => "embed-multilingual-v3.0".to_string(),
+    });
 
-    // Create embedding client with builder pattern
-    let mut embedding_config = EmbeddingConfig::new(api_key)
-        .with_batch_size(batch_size);
-
-    // Apply model if specified (currently only supports small/large by name)
-    if model.contains("large") {
-        embedding_config = embedding_config.with_large_model();
+    println!("Generating embeddings using:");
+    println!("  Provider: {}", provider_type);
+    println!("  Model:    {}", display_model);
+    if let Some(ref ep) = provider_config.endpoint {
+        println!("  Endpoint: {}", ep);
     }
+    println!();
 
-    let embedding_provider = Arc::new(OpenAIEmbeddingClient::new(embedding_config)?);
+    // Create embedding provider
+    let embedding_provider = create_provider(provider_config)?;
 
     // Create embeddings repository
     let embeddings_repository = Arc::new(EmbeddingsRepository::new(conn));
@@ -297,7 +323,7 @@ async fn handle_embeddings_command(
     let use_case = GenerateEmbeddingsUseCase::new(
         issue_repository,
         embeddings_repository,
-        embedding_provider,
+        Arc::new(embedding_provider),
         config,
     );
 

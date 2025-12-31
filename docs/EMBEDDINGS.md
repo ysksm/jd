@@ -66,37 +66,27 @@ jira-db embeddings --project PROJ --batch-size 100
 | text-embedding-3-small | $0.02 / 1M tokens |
 | text-embedding-3-large | $0.13 / 1M tokens |
 
-## 代替プロバイダー
+## サポートされているプロバイダー
 
-jira-dbは現在OpenAIをプライマリサポートしていますが、将来的に以下のプロバイダーへの対応を計画しています。各プロバイダーの特徴と設定方法を以下に示します。
+jira-dbは3つのEmbeddingプロバイダーをサポートしています。
 
-### Azure OpenAI
+### Ollama (ローカル実行) - 推奨
 
-Azure上でホストされるOpenAIモデル。エンタープライズ向けのセキュリティとコンプライアンス。
+ローカルマシンでLLMを実行するためのオープンソースツール。**無料で利用可能**です。
 
-```json
-{
-  "embedding": {
-    "provider": "azureopenai",
-    "api_key": "your-azure-key",
-    "endpoint": "https://your-resource.openai.azure.com",
-    "model": "your-deployment-name"
-  }
-}
-```
+#### セットアップ
 
-**特徴:**
-- エンタープライズグレードのセキュリティ
-- リージョン選択可能
-- SLA保証
+1. Ollamaをインストール: https://ollama.ai/
+2. Embeddingモデルをダウンロード:
+   ```bash
+   ollama pull nomic-embed-text
+   ```
 
-### Ollama (ローカル実行)
-
-ローカルマシンでLLMを実行するためのオープンソースツール。
+#### 設定
 
 ```json
 {
-  "embedding": {
+  "embeddings": {
     "provider": "ollama",
     "endpoint": "http://localhost:11434",
     "model": "nomic-embed-text"
@@ -104,23 +94,38 @@ Azure上でホストされるOpenAIモデル。エンタープライズ向けの
 }
 ```
 
+#### CLIでの使用
+
+```bash
+# Ollamaを使用してembeddings生成
+jira-db embeddings --provider ollama
+
+# カスタムモデルとエンドポイント
+jira-db embeddings --provider ollama --model mxbai-embed-large --endpoint http://localhost:11434
+```
+
 **利用可能なモデル:**
-- `nomic-embed-text`: 768次元、高速
-- `mxbai-embed-large`: 1024次元、高品質
-- `snowflake-arctic-embed`: 1024次元
+
+| モデル | 次元数 | 特徴 |
+|--------|--------|------|
+| nomic-embed-text | 768 | 高速、デフォルト |
+| mxbai-embed-large | 1024 | 高品質 |
+| snowflake-arctic-embed | 1024 | 高品質 |
 
 **特徴:**
 - 無料（ローカル実行）
-- データがローカルに留まる
-- GPU推奨
+- データがローカルに留まる（プライバシー保護）
+- GPU推奨（CPUでも動作）
 
 ### Cohere
 
-Cohere社のEmbed API。多言語サポートが優れている。
+Cohere社のEmbed API。**多言語サポートが優れている**ため、日本語の課題に最適です。
+
+#### 設定
 
 ```json
 {
-  "embedding": {
+  "embeddings": {
     "provider": "cohere",
     "api_key": "your-cohere-key",
     "model": "embed-multilingual-v3.0"
@@ -128,46 +133,52 @@ Cohere社のEmbed API。多言語サポートが優れている。
 }
 ```
 
-**モデル:**
-- `embed-multilingual-v3.0`: 1024次元、100+言語対応
-- `embed-english-v3.0`: 1024次元、英語最適化
+または環境変数で:
 
-**特徴:**
-- 多言語対応が優秀
-- 日本語サポート良好
-- 検索用途に最適化されたモデル
+```bash
+export COHERE_API_KEY="your-cohere-key"
+```
 
-### Voyage AI
+#### CLIでの使用
 
-検索タスクに特化したEmbeddingモデル。
+```bash
+# Cohereを使用してembeddings生成
+jira-db embeddings --provider cohere
 
-```json
-{
-  "embedding": {
-    "provider": "voyageai",
-    "api_key": "your-voyage-key",
-    "model": "voyage-large-2-instruct"
-  }
-}
+# 英語最適化モデルを使用
+jira-db embeddings --provider cohere --model embed-english-v3.0
 ```
 
 **モデル:**
-- `voyage-large-2-instruct`: 1536次元、高品質
-- `voyage-code-2`: コード検索に最適化
+
+| モデル | 次元数 | 特徴 |
+|--------|--------|------|
+| embed-multilingual-v3.0 | 1024 | 100+言語対応、デフォルト |
+| embed-english-v3.0 | 1024 | 英語最適化 |
+| embed-multilingual-light-v3.0 | 384 | 高速 |
+| embed-english-light-v3.0 | 384 | 高速、英語 |
 
 **特徴:**
-- 検索タスクで高いパフォーマンス
-- コード理解に優れる
+- 多言語対応が優秀（特に日本語）
+- 検索用途に最適化されたモデル
+- バッチサイズ: 最大96
+
+### 将来のプロバイダー
+
+以下のプロバイダーは将来的なサポートを計画しています:
+
+- **Azure OpenAI**: エンタープライズグレードのセキュリティ
+- **Voyage AI**: 検索タスクに特化
 
 ## プロバイダー比較
 
-| プロバイダー | 次元数 | コスト | 日本語 | ローカル | 特徴 |
-|------------|--------|--------|--------|----------|------|
-| OpenAI | 1536/3072 | $$ | ◎ | × | バランス良好 |
-| Azure OpenAI | 1536/3072 | $$ | ◎ | × | エンタープライズ |
-| Ollama | 768-1024 | 無料 | ○ | ◎ | プライバシー |
-| Cohere | 1024 | $$ | ◎ | × | 多言語 |
-| Voyage AI | 1536 | $$ | ○ | × | 検索特化 |
+| プロバイダー | 次元数 | コスト | 日本語 | ローカル | 特徴 | 状態 |
+|------------|--------|--------|--------|----------|------|------|
+| OpenAI | 1536/3072 | $$ | ◎ | × | バランス良好 | ✅ 対応済 |
+| Ollama | 768-1024 | 無料 | ○ | ◎ | プライバシー | ✅ 対応済 |
+| Cohere | 1024 | $$ | ◎ | × | 多言語 | ✅ 対応済 |
+| Azure OpenAI | 1536/3072 | $$ | ◎ | × | エンタープライズ | 🔜 予定 |
+| Voyage AI | 1536 | $$ | ○ | × | 検索特化 | 🔜 予定 |
 
 ## ベクトル検索の仕組み
 

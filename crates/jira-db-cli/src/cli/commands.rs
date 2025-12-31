@@ -143,6 +143,18 @@ pub enum Commands {
         /// Batch size for API calls
         #[arg(short, long, default_value = "50")]
         batch_size: usize,
+
+        /// Embedding provider: openai, ollama, cohere
+        #[arg(long)]
+        provider: Option<String>,
+
+        /// Model name (provider-specific)
+        #[arg(short, long)]
+        model: Option<String>,
+
+        /// API endpoint (for Ollama: default http://localhost:11434)
+        #[arg(long)]
+        endpoint: Option<String>,
     },
 }
 

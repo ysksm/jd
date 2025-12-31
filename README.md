@@ -12,7 +12,7 @@ JIRAのプロジェクトとイシューをローカルのDuckDBデータベー�
 - 🛠️ 使いやすいCLIインターフェース
 - 🔍 高速なフルテキスト検索とフィルタリング
 - 🤖 **MCPサーバー**: AIアシスタント（Claude Desktop等）との連携
-- 🧠 **セマンティック検索**: OpenAI埋め込みとDuckDB VSSによるベクトル検索
+- 🧠 **セマンティック検索**: 複数の埋め込みプロバイダー（OpenAI、Ollama、Cohere）とDuckDB VSSによるベクトル検索
 
 ## 前提条件
 
@@ -202,18 +202,33 @@ jira-db sync --project PROJ
 
 自然言語によるセマンティック検索を使用する場合は、埋め込みを生成します。
 
+**方法1: Ollama（無料、ローカル実行）**
+```bash
+# Ollamaをインストールしてモデルをダウンロード
+ollama pull nomic-embed-text
+
+# 埋め込みの生成
+jira-db embeddings --provider ollama
+cargo run -- embeddings --provider ollama
+```
+
+**方法2: OpenAI（クラウドAPI）**
 ```bash
 # OpenAI APIキーの設定
 export OPENAI_API_KEY="sk-..."
 
 # 埋め込みの生成
 jira-db embeddings --project PROJ
-
-# cargo run で実行する場合
 cargo run -- embeddings --project PROJ
+```
 
-# 全プロジェクトの埋め込みを生成
-cargo run -- embeddings
+**方法3: Cohere（多言語に強い）**
+```bash
+# Cohere APIキーの設定
+export COHERE_API_KEY="..."
+
+# 埋め込みの生成
+jira-db embeddings --provider cohere
 ```
 
 ### 8. MCPサーバーの起動（オプション）
@@ -344,25 +359,44 @@ jira-db search "api" --limit 20 --offset 20
 **オプション：**
 - `-p, --project <PROJECT_KEY>` - 特定のプロジェクトのみ処理
 - `-f, --force` - 既存の埋め込みを再生成
-- `-b, --batch-size <SIZE>` - バッチサイズ（デフォルト: 100）
+- `-b, --batch-size <SIZE>` - バッチサイズ（デフォルト: 50）
+- `--provider <PROVIDER>` - プロバイダーを指定: `openai`, `ollama`, `cohere`
+- `-m, --model <MODEL>` - モデル名を指定（プロバイダー固有）
+- `--endpoint <URL>` - エンドポイントURL（Ollama用）
 
 **例：**
 ```bash
-# 特定プロジェクトの埋め込みを生成
+# Ollama（無料、ローカル）を使用
+jira-db embeddings --provider ollama
+
+# OpenAIを使用
 jira-db embeddings --project PROJ
 
+# Cohereを使用（日本語に強い）
+jira-db embeddings --provider cohere
+
 # cargo runで実行
-cargo run -- embeddings --project PROJ
+cargo run -- embeddings --provider ollama
 
 # 強制再生成
 cargo run -- embeddings --project PROJ --force
 
 # バッチサイズを指定
 cargo run -- embeddings --batch-size 50
+
+# カスタムモデルとエンドポイント
+jira-db embeddings --provider ollama --model mxbai-embed-large --endpoint http://localhost:11434
 ```
 
-**環境変数：**
-- `OPENAI_API_KEY` - OpenAI APIキー（必須）
+**利用可能なプロバイダー：**
+
+| プロバイダー | 環境変数 | デフォルトモデル | 特徴 |
+|-------------|----------|-----------------|------|
+| `openai` | `OPENAI_API_KEY` | text-embedding-3-small | バランス良好 |
+| `ollama` | 不要 | nomic-embed-text | 無料、ローカル実行 |
+| `cohere` | `COHERE_API_KEY` | embed-multilingual-v3.0 | 多言語に強い |
+
+**詳細なドキュメント：** [docs/EMBEDDINGS.md](./docs/EMBEDDINGS.md)
 
 ### `jira-db metadata [OPTIONS]`
 プロジェクトのメタデータ（ステータス、優先度、イシュータイプなど）を表示します。
@@ -718,8 +752,9 @@ Issue報告やPull Requestを歓迎します！
 - ✅ **メタデータ管理**（ステータス、優先度、イシュータイプ、ラベル、コンポーネント、バージョンの同期・表示）
 - ✅ **完全なイシューデータ取得**（全フィールド、変更履歴を含む完全なJSON保存）
 - ✅ **MCPサーバー**（stdioおよびHTTPトランスポート、8種類のツール）
-- ✅ **セマンティック検索**（OpenAI埋め込み + DuckDB VSS拡張）
+- ✅ **セマンティック検索**（OpenAI/Ollama/Cohere埋め込み + DuckDB VSS拡張）
 - ✅ **HTMLレポート**（静的/インタラクティブダッシュボード）
+- ✅ **複数の埋め込みプロバイダー**（OpenAI、Ollama、Cohere対応）
 
 ## 今後の実装予定
 

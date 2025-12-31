@@ -15,7 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Complete issue data capture (all fields + changelog)
 - Direct JIRA REST API v3 integration with reqwest
 - **MCP Server**: Model Context Protocol server for AI integration (stdio + HTTP)
-- **Vector Search**: Semantic search using DuckDB VSS and OpenAI embeddings
+- **Vector Search**: Semantic search using DuckDB VSS with multiple embedding providers (OpenAI, Ollama, Cohere)
 
 ## Prerequisites
 
@@ -163,27 +163,48 @@ The MCP server provides these tools for AI assistants:
 
 ### Vector Search (Embeddings)
 
-The system supports semantic search using OpenAI embeddings and DuckDB VSS extension:
+The system supports semantic search using DuckDB VSS extension with multiple embedding providers:
 
-1. **Generate Embeddings**: `jira-db embeddings --project PROJ`
-2. **Use via MCP**: AI assistants can call `semantic_search` tool
-3. **Configuration**: Set `OPENAI_API_KEY` or add to settings.json
+#### Supported Providers
+
+| Provider | Environment Variable | Default Model | Dimensions |
+|----------|---------------------|---------------|------------|
+| OpenAI | `OPENAI_API_KEY` | text-embedding-3-small | 1536 |
+| Ollama | - (local) | nomic-embed-text | 768 |
+| Cohere | `COHERE_API_KEY` | embed-multilingual-v3.0 | 1024 |
+
+#### Usage
+
+```bash
+# Ollama (free, local)
+jira-db embeddings --provider ollama
+
+# OpenAI
+jira-db embeddings --project PROJ
+
+# Cohere (good for Japanese)
+jira-db embeddings --provider cohere
+```
+
+#### Configuration
 
 ```json
 {
   "embeddings": {
-    "openai_api_key": "sk-...",
-    "model": "text-embedding-3-small",
+    "provider": "ollama",
+    "model": "nomic-embed-text",
+    "endpoint": "http://localhost:11434",
     "auto_generate": false
   }
 }
 ```
 
 #### Embedding Details
-- Model: `text-embedding-3-small` (1536 dimensions)
 - Distance: Cosine similarity
 - Index: HNSW (Hierarchical Navigable Small World)
 - Text: Concatenated issue fields (key, summary, description, status, priority, etc.)
+
+See [docs/EMBEDDINGS.md](docs/EMBEDDINGS.md) for detailed provider documentation.
 
 ### Using Core in Future GUI
 
@@ -369,6 +390,7 @@ Metadata is NOT extracted from issues - it's fetched from API to ensure complete
 - ✅ **Vector Search** with DuckDB VSS and OpenAI embeddings
 - ✅ **Semantic Search** tool via MCP
 - ✅ **SQL Execution** tool via MCP (read-only)
+- ✅ **Multiple Embedding Providers** (OpenAI, Ollama, Cohere)
 
 ## Future Enhancements
 
@@ -377,5 +399,5 @@ Metadata is NOT extracted from issues - it's fetched from API to ensure complete
 - Multiple JIRA instance support
 - Export capabilities (CSV, Excel)
 - Webhook-based real-time sync
-- Additional embedding providers (Anthropic, local models)
 - Automatic embedding generation during sync
+- Azure OpenAI / Voyage AI embedding providers

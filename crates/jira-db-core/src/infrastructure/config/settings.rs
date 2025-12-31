@@ -37,15 +37,28 @@ pub struct DatabaseConfig {
 /// Configuration for embedding generation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EmbeddingsConfig {
-    /// OpenAI API key (can also use OPENAI_API_KEY env var)
+    /// Embedding provider: "openai", "ollama", or "cohere"
+    #[serde(default = "default_provider")]
+    pub provider: String,
+    /// API key (for OpenAI: OPENAI_API_KEY, for Cohere: COHERE_API_KEY)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub api_key: Option<String>,
+    /// OpenAI API key (deprecated, use api_key instead)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub openai_api_key: Option<String>,
-    /// Embedding model to use (default: text-embedding-3-small)
+    /// Embedding model to use
     #[serde(default = "default_embedding_model")]
     pub model: String,
+    /// Endpoint URL (for Ollama, default: http://localhost:11434)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub endpoint: Option<String>,
     /// Whether to generate embeddings during sync
     #[serde(default)]
     pub auto_generate: bool,
+}
+
+fn default_provider() -> String {
+    "openai".to_string()
 }
 
 fn default_embedding_model() -> String {
@@ -55,10 +68,20 @@ fn default_embedding_model() -> String {
 impl Default for EmbeddingsConfig {
     fn default() -> Self {
         Self {
+            provider: default_provider(),
+            api_key: None,
             openai_api_key: None,
             model: default_embedding_model(),
+            endpoint: None,
             auto_generate: false,
         }
+    }
+}
+
+impl EmbeddingsConfig {
+    /// Get the effective API key (prefers api_key over openai_api_key)
+    pub fn get_api_key(&self) -> Option<&String> {
+        self.api_key.as_ref().or(self.openai_api_key.as_ref())
     }
 }
 
