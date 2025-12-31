@@ -5,6 +5,7 @@ members = [
     "crates/jira-db-mcp",
 ]
 resolver = "2"
+default-members = ["crates/jira-db-cli"]
 
 [workspace.package]
 version = "0.1.0"
