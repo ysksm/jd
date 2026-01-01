@@ -1,0 +1,96 @@
+<div class="sync">
+  <h2>Sync</h2>
+
+  @if (loading()) {
+    <p class="loading">Loading projects...</p>
+  } @else {
+    @if (error()) {
+      <div class="alert alert-error">{{ error() }}</div>
+    }
+
+    <div class="sync-controls">
+      <div class="project-selector">
+        <label>Sync Target:</label>
+        <select [ngModel]="selectedProject()" (ngModelChange)="selectProject($event)">
+          <option [ngValue]="null">All Enabled Projects</option>
+          @for (project of enabledProjects; track project.key) {
+            <option [value]="project.key">{{ project.key }} - {{ project.name }}</option>
+          }
+        </select>
+      </div>
+
+      <button
+        class="btn btn-primary"
+        (click)="startSync()"
+        [disabled]="syncing() || enabledProjects.length === 0"
+      >
+        @if (syncing()) {
+          <span class="spinner"></span> Syncing...
+        } @else {
+          Start Sync
+        }
+      </button>
+    </div>
+
+    @if (enabledProjects.length === 0) {
+      <div class="alert alert-warning">
+        No projects enabled for sync. Enable projects in the Projects page first.
+      </div>
+    }
+
+    <!-- Project Status -->
+    <div class="project-status">
+      <h3>Enabled Projects</h3>
+      @if (enabledProjects.length > 0) {
+        <div class="status-grid">
+          @for (project of enabledProjects; track project.key) {
+            <div class="status-card">
+              <div class="project-key">{{ project.key }}</div>
+              <div class="project-name">{{ project.name }}</div>
+              <div class="last-synced">
+                Last synced: {{ formatDate(project.lastSyncedAt) }}
+              </div>
+            </div>
+          }
+        </div>
+      }
+    </div>
+
+    <!-- Sync Results -->
+    @if (syncResults().length > 0) {
+      <div class="sync-results">
+        <h3>Sync Results</h3>
+        <div class="results-grid">
+          @for (result of syncResults(); track result.projectKey) {
+            <div class="result-card" [class.success]="result.success" [class.error]="!result.success">
+              <div class="result-header">
+                <span class="project-key">{{ result.projectKey }}</span>
+                <span class="status-badge" [class.success]="result.success" [class.error]="!result.success">
+                  {{ result.success ? 'Success' : 'Failed' }}
+                </span>
+              </div>
+              @if (result.success) {
+                <div class="result-stats">
+                  <div class="stat">
+                    <span class="label">Issues:</span>
+                    <span class="value">{{ result.issueCount }}</span>
+                  </div>
+                  <div class="stat">
+                    <span class="label">Duration:</span>
+                    <span class="value">{{ formatDuration(result.duration) }}</span>
+                  </div>
+                  <div class="stat">
+                    <span class="label">Metadata:</span>
+                    <span class="value">{{ result.metadataUpdated ? 'Updated' : 'Unchanged' }}</span>
+                  </div>
+                </div>
+              } @else {
+                <div class="error-message">{{ result.error }}</div>
+              }
+            </div>
+          }
+        </div>
+      </div>
+    }
+  }
+</div>
