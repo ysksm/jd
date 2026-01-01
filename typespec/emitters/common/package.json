@@ -1,17 +1,18 @@
 {
-  "name": "@jira-db/emit-tauri",
+  "name": "@jira-db/emitter-common",
   "version": "1.0.0",
   "type": "module",
   "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "exports": {
-    ".": "./dist/index.js"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
   },
   "scripts": {
     "build": "tsc",
     "watch": "tsc --watch"
-  },
-  "dependencies": {
-    "@jira-db/emitter-common": "file:../common"
   },
   "peerDependencies": {
     "@typespec/compiler": "^0.62.0"

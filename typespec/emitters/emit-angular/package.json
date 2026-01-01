@@ -10,6 +10,9 @@
     "build": "tsc",
     "watch": "tsc --watch"
   },
+  "dependencies": {
+    "@jira-db/emitter-common": "file:../common"
+  },
   "peerDependencies": {
     "@typespec/compiler": "^0.62.0"
   },
