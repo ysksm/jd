@@ -4,10 +4,10 @@
   "version": "0.1.0",
   "identifier": "com.jiradb.app",
   "build": {
-    "beforeDevCommand": "",
+    "beforeDevCommand": "npm run start",
     "devUrl": "http://localhost:4200",
-    "beforeBuildCommand": "",
-    "frontendDist": "../dist"
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist/jira-db-frontend/browser"
   },
   "app": {
     "windows": [
