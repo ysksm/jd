@@ -5,8 +5,8 @@ use tauri::State;
 
 use jira_db_core::{
     create_provider, DuckDbIssueRepository, EmbeddingGenerationConfig, EmbeddingProviderType,
-    EmbeddingsRepository, GenerateEmbeddingsUseCase, IssueRepository, ProviderConfig,
-    SearchIssuesUseCase, SearchParams,
+    EmbeddingsRepository, GenerateEmbeddingsUseCase, ProviderConfig, SearchIssuesUseCase,
+    SearchParams,
 };
 
 use crate::generated::*;
@@ -44,9 +44,7 @@ pub async fn embeddings_generate(
     // Create provider config
     let provider_config = ProviderConfig {
         provider: provider_type,
-        model: request
-            .model_name
-            .or_else(|| Some(embedding_config.model.clone())),
+        model: Some(embedding_config.model.clone()),
         endpoint: embedding_config.endpoint.clone(),
         api_key: None, // Will use env var
     };
@@ -73,30 +71,9 @@ pub async fn embeddings_generate(
         config,
     );
 
-    // Get projects to process
-    let projects_to_process: Vec<_> = if let Some(ref project_key) = request.project_key {
-        settings
-            .projects
-            .iter()
-            .filter(|p| &p.key == project_key)
-            .collect()
-    } else {
-        settings
-            .projects
-            .iter()
-            .filter(|p| p.sync_enabled)
-            .collect()
-    };
-
-    if projects_to_process.is_empty() {
-        return Err("No projects to process".to_string());
-    }
-
-    let project_ids: Vec<_> = projects_to_process.iter().map(|p| p.id.as_str()).collect();
-
-    // Execute
+    // Execute with optional project key filter
     let result = use_case
-        .execute(&project_ids)
+        .execute(request.project_key.as_deref())
         .await
         .map_err(|e| e.to_string())?;
 

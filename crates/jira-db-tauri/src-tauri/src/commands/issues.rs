@@ -4,7 +4,8 @@ use std::sync::Arc;
 use tauri::State;
 
 use jira_db_core::{
-    DuckDbChangeHistoryRepository, DuckDbIssueRepository, SearchIssuesUseCase, SearchParams,
+    ChangeHistoryRepository, DuckDbChangeHistoryRepository, DuckDbIssueRepository,
+    SearchIssuesUseCase, SearchParams,
 };
 
 use crate::generated::*;
