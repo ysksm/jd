@@ -1,5 +1,6 @@
 //! Configuration command handlers
 
+use std::path::PathBuf;
 use tauri::State;
 
 use crate::generated::*;
@@ -11,9 +12,7 @@ pub async fn config_get(
     state: State<'_, AppState>,
     _request: ConfigGetRequest,
 ) -> Result<ConfigGetResponse, String> {
-    let settings = state
-        .get_settings()
-        .ok_or("Not initialized")?;
+    let settings = state.get_settings().ok_or("Not initialized")?;
 
     Ok(ConfigGetResponse {
         settings: settings.into(),
@@ -23,19 +22,75 @@ pub async fn config_get(
 /// Update configuration
 #[tauri::command]
 pub async fn config_update(
-    _state: State<'_, AppState>,
-    _request: ConfigUpdateRequest,
+    state: State<'_, AppState>,
+    request: ConfigUpdateRequest,
 ) -> Result<ConfigUpdateResponse, String> {
-    Err("Not implemented".to_string())
+    let updated = state
+        .update_settings(|settings| {
+            // Update JIRA config if provided
+            if let Some(jira) = request.jira {
+                settings.jira.endpoint = jira.endpoint;
+                settings.jira.username = jira.username;
+                settings.jira.api_key = jira.api_key;
+            }
+
+            // Update database config if provided
+            if let Some(database) = request.database {
+                settings.database.path = PathBuf::from(database.path);
+            }
+
+            // Update embeddings config if provided
+            if let Some(embeddings) = request.embeddings {
+                settings.embeddings = Some(jira_db_core::EmbeddingsConfig {
+                    provider: embeddings.provider,
+                    api_key: None,
+                    openai_api_key: None,
+                    model: embeddings.model_name.unwrap_or_default(),
+                    endpoint: embeddings.endpoint,
+                    auto_generate: embeddings.auto_generate,
+                });
+            }
+        })
+        .map_err(|e| e.to_string())?;
+
+    Ok(ConfigUpdateResponse {
+        success: true,
+        settings: updated.into(),
+    })
 }
 
 /// Initialize configuration
 #[tauri::command]
 pub async fn config_init(
-    _state: State<'_, AppState>,
-    _request: ConfigInitRequest,
+    state: State<'_, AppState>,
+    request: ConfigInitRequest,
 ) -> Result<ConfigInitResponse, String> {
-    Err("Not implemented".to_string())
+    let settings_path = PathBuf::from("./settings.json");
+
+    let database_path = request
+        .database_path
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("./data/jira.duckdb"));
+
+    let settings = jira_db_core::Settings {
+        jira: jira_db_core::JiraConfig {
+            endpoint: request.endpoint,
+            username: request.username,
+            api_key: request.api_key,
+        },
+        projects: Vec::new(),
+        database: jira_db_core::DatabaseConfig { path: database_path },
+        embeddings: None,
+    };
+
+    state
+        .create_settings(settings_path, settings.clone())
+        .map_err(|e| e.to_string())?;
+
+    Ok(ConfigInitResponse {
+        success: true,
+        settings: settings.into(),
+    })
 }
 
 // Conversion from jira-db-core types to generated types
@@ -60,7 +115,7 @@ impl From<jira_db_core::Settings> for Settings {
                 .collect(),
             embeddings: s.embeddings.map(|e| EmbeddingsConfig {
                 provider: e.provider,
-                model_name: e.model,
+                model_name: Some(e.model),
                 endpoint: e.endpoint,
                 auto_generate: e.auto_generate,
             }),
