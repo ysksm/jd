@@ -1,0 +1,135 @@
+.projects {
+  h2 {
+    margin: 0;
+    color: #333;
+  }
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.stats {
+  margin-bottom: 1rem;
+  color: #666;
+
+  .stat {
+    font-weight: 500;
+  }
+
+  .separator {
+    margin: 0 0.5rem;
+    color: #ccc;
+  }
+}
+
+.loading {
+  color: #666;
+  font-style: italic;
+}
+
+.alert {
+  padding: 1rem;
+  border-radius: 6px;
+  margin-bottom: 1rem;
+
+  &.alert-error {
+    background-color: #fef2f2;
+    color: #dc2626;
+    border: 1px solid #fecaca;
+  }
+
+  &.alert-success {
+    background-color: #f0fdf4;
+    color: #16a34a;
+    border: 1px solid #bbf7d0;
+  }
+}
+
+.empty-state {
+  text-align: center;
+  padding: 3rem;
+  background: white;
+  border-radius: 8px;
+  color: #666;
+
+  p {
+    margin: 0.5rem 0;
+  }
+}
+
+.project-list {
+  display: grid;
+  gap: 1rem;
+}
+
+.project-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: white;
+  border-radius: 8px;
+  padding: 1rem 1.5rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  border-left: 4px solid #e5e7eb;
+  transition: border-color 0.2s;
+
+  &.enabled {
+    border-left-color: #22c55e;
+  }
+
+  .project-info {
+    .project-key {
+      font-weight: 600;
+      color: #4a4ae0;
+      font-size: 1.125rem;
+    }
+
+    .project-name {
+      color: #333;
+      margin-top: 0.25rem;
+    }
+
+    .project-synced {
+      font-size: 0.875rem;
+      color: #666;
+      margin-top: 0.5rem;
+    }
+  }
+}
+
+.btn {
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: background-color 0.2s, opacity 0.2s;
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  &.btn-primary {
+    background-color: #4a4ae0;
+    color: white;
+
+    &:hover:not(:disabled) {
+      background-color: #3a3ad0;
+    }
+  }
+
+  &.btn-secondary {
+    background-color: #e5e7eb;
+    color: #374151;
+
+    &:hover:not(:disabled) {
+      background-color: #d1d5db;
+    }
+  }
+}

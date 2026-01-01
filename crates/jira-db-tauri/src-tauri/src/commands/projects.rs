@@ -1,6 +1,9 @@
 //! Project command handlers
 
+use std::sync::Arc;
 use tauri::State;
+
+use jira_db_core::{JiraApiClient, JiraService, SyncProjectListUseCase, DuckDbProjectRepository};
 
 use crate::generated::*;
 use crate::state::AppState;
@@ -8,35 +11,143 @@ use crate::state::AppState;
 /// List all projects
 #[tauri::command]
 pub async fn projects_list(
-    _state: State<'_, AppState>,
+    state: State<'_, AppState>,
     _request: ProjectListRequest,
 ) -> Result<ProjectListResponse, String> {
-    Err("Not implemented".to_string())
+    let settings = state.get_settings().ok_or("Not initialized")?;
+
+    let projects = settings
+        .projects
+        .into_iter()
+        .map(|p| Project {
+            id: p.id,
+            key: p.key.clone(),
+            name: p.name,
+            description: None,
+            enabled: p.sync_enabled,
+            last_synced_at: p.last_synced.map(|dt| dt.to_rfc3339()),
+        })
+        .collect();
+
+    Ok(ProjectListResponse { projects })
 }
 
 /// Initialize projects from JIRA
 #[tauri::command]
 pub async fn projects_init(
-    _state: State<'_, AppState>,
+    state: State<'_, AppState>,
     _request: ProjectInitRequest,
 ) -> Result<ProjectInitResponse, String> {
-    Err("Not implemented".to_string())
+    let settings = state.get_settings().ok_or("Not initialized")?;
+    let db = state.get_db().ok_or("Database not initialized")?;
+
+    // Create JIRA client
+    let jira_client = Arc::new(
+        JiraApiClient::new(&settings.jira.endpoint, &settings.jira.username, &settings.jira.api_key)
+            .map_err(|e| e.to_string())?
+    );
+
+    // Create project repository
+    let project_repo = Arc::new(DuckDbProjectRepository::new(db));
+
+    // Execute use case
+    let use_case = SyncProjectListUseCase::new(project_repo, jira_client);
+    let fetched_projects = use_case.execute().await.map_err(|e| e.to_string())?;
+
+    let new_count = fetched_projects.len() as i32;
+
+    // Update settings with new projects
+    let updated_settings = state
+        .update_settings(|s| {
+            for project in &fetched_projects {
+                let exists = s.projects.iter().any(|p| p.key == project.key);
+                if !exists {
+                    s.projects.push(jira_db_core::ProjectConfig {
+                        id: project.id.clone(),
+                        key: project.key.clone(),
+                        name: project.name.clone(),
+                        sync_enabled: false,
+                        last_synced: None,
+                    });
+                }
+            }
+        })
+        .map_err(|e| e.to_string())?;
+
+    let projects = updated_settings
+        .projects
+        .into_iter()
+        .map(|p| Project {
+            id: p.id,
+            key: p.key.clone(),
+            name: p.name,
+            description: None,
+            enabled: p.sync_enabled,
+            last_synced_at: p.last_synced.map(|dt| dt.to_rfc3339()),
+        })
+        .collect();
+
+    Ok(ProjectInitResponse { projects, new_count })
 }
 
 /// Enable project sync
 #[tauri::command]
 pub async fn projects_enable(
-    _state: State<'_, AppState>,
-    _request: ProjectEnableRequest,
+    state: State<'_, AppState>,
+    request: ProjectEnableRequest,
 ) -> Result<ProjectEnableResponse, String> {
-    Err("Not implemented".to_string())
+    let updated_settings = state
+        .update_settings(|s| {
+            if let Some(project) = s.find_project_mut(&request.key) {
+                project.sync_enabled = true;
+            }
+        })
+        .map_err(|e| e.to_string())?;
+
+    let project = updated_settings
+        .projects
+        .into_iter()
+        .find(|p| p.key == request.key)
+        .map(|p| Project {
+            id: p.id,
+            key: p.key.clone(),
+            name: p.name,
+            description: None,
+            enabled: p.sync_enabled,
+            last_synced_at: p.last_synced.map(|dt| dt.to_rfc3339()),
+        })
+        .ok_or("Project not found")?;
+
+    Ok(ProjectEnableResponse { project })
 }
 
 /// Disable project sync
 #[tauri::command]
 pub async fn projects_disable(
-    _state: State<'_, AppState>,
-    _request: ProjectDisableRequest,
+    state: State<'_, AppState>,
+    request: ProjectDisableRequest,
 ) -> Result<ProjectDisableResponse, String> {
-    Err("Not implemented".to_string())
+    let updated_settings = state
+        .update_settings(|s| {
+            if let Some(project) = s.find_project_mut(&request.key) {
+                project.sync_enabled = false;
+            }
+        })
+        .map_err(|e| e.to_string())?;
+
+    let project = updated_settings
+        .projects
+        .into_iter()
+        .find(|p| p.key == request.key)
+        .map(|p| Project {
+            id: p.id,
+            key: p.key.clone(),
+            name: p.name,
+            description: None,
+            enabled: p.sync_enabled,
+            last_synced_at: p.last_synced.map(|dt| dt.to_rfc3339()),
+        })
+        .ok_or("Project not found")?;
+
+    Ok(ProjectDisableResponse { project })
 }
