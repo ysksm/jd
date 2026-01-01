@@ -1,0 +1,17 @@
+{
+  "name": "@jira-db/typespec",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "tsp compile .",
+    "watch": "tsp compile . --watch",
+    "format": "tsp format **/*.tsp"
+  },
+  "dependencies": {
+    "@typespec/compiler": "^0.62.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0"
+  }
+}
