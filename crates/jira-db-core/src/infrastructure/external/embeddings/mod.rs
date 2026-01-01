@@ -153,14 +153,32 @@ impl ProviderConfig {
 pub fn create_provider(config: ProviderConfig) -> DomainResult<Box<dyn EmbeddingProvider>> {
     match config.provider {
         EmbeddingProviderType::OpenAI => {
-            let api_key = config.api_key.or_else(|| std::env::var("OPENAI_API_KEY").ok())
-                .ok_or_else(|| DomainError::Configuration(
-                    "OpenAI API key not found. Set OPENAI_API_KEY environment variable or provide api_key".to_string()
-                ))?;
+            // Check if using a local/custom endpoint
+            let is_local = config.endpoint.as_ref()
+                .map(|e| e.contains("localhost") || e.contains("127.0.0.1"))
+                .unwrap_or(false);
 
-            let mut openai_config = EmbeddingConfig::new(api_key);
+            // Create config based on whether it's local or remote
+            let mut openai_config = if is_local {
+                // For local servers (LM Studio, LocalAI, etc.), API key is optional
+                EmbeddingConfig::local(config.endpoint.clone().unwrap())
+            } else {
+                // For OpenAI API, require API key
+                let api_key = config.api_key.or_else(|| std::env::var("OPENAI_API_KEY").ok())
+                    .ok_or_else(|| DomainError::Configuration(
+                        "OpenAI API key not found. Set OPENAI_API_KEY environment variable or provide api_key".to_string()
+                    ))?;
+                let mut cfg = EmbeddingConfig::new(api_key);
+                if let Some(endpoint) = config.endpoint {
+                    cfg = cfg.with_api_base(endpoint);
+                }
+                cfg
+            };
+
+            // Set model if specified
             if let Some(model) = config.model {
                 openai_config.model = model;
+                openai_config.dimension = None; // Auto-detect for custom models
             }
 
             let client = OpenAIEmbeddingClient::new(openai_config)?;
