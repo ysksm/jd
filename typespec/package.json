@@ -9,7 +9,11 @@
     "format": "tsp format **/*.tsp"
   },
   "dependencies": {
-    "@typespec/compiler": "^0.62.0"
+    "@typespec/compiler": "^0.62.0",
+    "@jira-db/emitter-common": "file:./emitters/common",
+    "@jira-db/emit-rust": "file:./emitters/emit-rust",
+    "@jira-db/emit-tauri": "file:./emitters/emit-tauri",
+    "@jira-db/emit-angular": "file:./emitters/emit-angular"
   },
   "devDependencies": {
     "typescript": "^5.6.0"

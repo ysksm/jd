@@ -146,7 +146,7 @@ model DatabaseConfig {
 
 model EmbeddingsConfig {
   provider: string;
-  model?: string;
+  modelName?: string;
   endpoint?: string;
   autoGenerate: boolean;
 }
@@ -334,7 +334,7 @@ namespace Config {
   op update(request: ConfigUpdateRequest): ConfigUpdateResponse;
 
   @doc("Initialize configuration")
-  op init(request: ConfigInitRequest): ConfigInitResponse;
+  op initialize(request: ConfigInitRequest): ConfigInitResponse;
 }
 
 @doc("Project management operations")
@@ -343,7 +343,7 @@ namespace Projects {
   op list(request: ProjectListRequest): ProjectListResponse;
 
   @doc("Initialize projects from JIRA")
-  op init(request: ProjectInitRequest): ProjectInitResponse;
+  op initialize(request: ProjectInitRequest): ProjectInitResponse;
 
   @doc("Enable project sync")
   op enable(request: ProjectEnableRequest): ProjectEnableResponse;

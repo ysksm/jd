@@ -4,6 +4,7 @@ members = [
     "crates/jira-db-cli",
     "crates/jira-db-mcp",
     "crates/jira-db-api",
+    "crates/jira-db-tauri/src-tauri",
 ]
 resolver = "2"
 default-members = ["crates/jira-db-cli"]
@@ -51,3 +52,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 axum = { version = "0.7", features = ["macros"] }
 tower = "0.4"
 tower-http = { version = "0.5", features = ["cors", "trace"] }
+
+# Tauri
+tauri = { version = "2.0", features = [] }
+tauri-build = { version = "2.0" }

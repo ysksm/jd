@@ -17,6 +17,7 @@
     "@typespec/compiler": "^0.62.0"
   },
   "devDependencies": {
+    "@types/node": "^20.0.0",
     "@typespec/compiler": "^0.62.0",
     "typescript": "^5.6.0"
   }

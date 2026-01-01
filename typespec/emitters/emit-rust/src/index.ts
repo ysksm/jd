@@ -7,6 +7,7 @@
 import { EmitContext } from "@typespec/compiler";
 import { parseProgram } from "@jira-db/emitter-common";
 import { generateRust } from "./generator.js";
+import * as fs from "fs";
 
 export async function $onEmit(context: EmitContext) {
   const { program, emitterOutputDir } = context;
@@ -16,6 +17,11 @@ export async function $onEmit(context: EmitContext) {
 
   // Generate Rust code from IR
   const files = generateRust(schema);
+
+  // Ensure output directory exists
+  if (!fs.existsSync(emitterOutputDir)) {
+    fs.mkdirSync(emitterOutputDir, { recursive: true });
+  }
 
   // Write output files
   for (const [filename, content] of Object.entries(files)) {

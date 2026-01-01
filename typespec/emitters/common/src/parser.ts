@@ -76,10 +76,30 @@ export function parseProgram(program: Program): IRSchema {
   };
 }
 
+/** List of TypeSpec internal type names to skip */
+const SKIP_MODELS = [
+  "Scalar",
+  "ModelProperty",
+  "EnumMember",
+  "Model",
+  "Union",
+  "Operation",
+  "Namespace",
+  "Interface",
+  "Enum",
+  "UnionVariant",
+  "StringTemplate",
+];
+
 /**
  * Parse a TypeSpec Model into IR Model
  */
 function parseModel(model: Model, program: Program): IRModel | null {
+  // Skip TypeSpec internal types
+  if (SKIP_MODELS.includes(model.name)) {
+    return null;
+  }
+
   const fields: IRField[] = [];
 
   for (const [fieldName, field] of model.properties) {
@@ -150,22 +170,35 @@ function parseOperation(
   namespaceName: string,
   program: Program
 ): IROperation | null {
-  // Derive request/response type names from namespace and operation name
-  const baseName = capitalize(name);
-
-  // Handle naming conventions
-  let singular: string;
-  if (namespaceName === "Config") {
-    singular = "Config";
-  } else if (namespaceName.endsWith("s")) {
-    // Projects -> Project, Issues -> Issue, etc.
-    singular = namespaceName.slice(0, -1);
-  } else {
-    singular = namespaceName;
+  // Extract actual request type from operation parameters
+  let requestType = "";
+  for (const [paramName, param] of op.parameters.properties) {
+    if (paramName === "request" && param.type.kind === "Model") {
+      requestType = param.type.name;
+      break;
+    }
   }
 
-  const requestType = `${singular}${baseName}Request`;
-  const responseType = `${singular}${baseName}Response`;
+  // Extract actual response type from operation return type
+  let responseType = "";
+  if (op.returnType.kind === "Model") {
+    responseType = op.returnType.name;
+  }
+
+  // Fallback to derived names if not found
+  if (!requestType || !responseType) {
+    const baseName = capitalize(name);
+    let singular: string;
+    if (namespaceName === "Config") {
+      singular = "Config";
+    } else if (namespaceName.endsWith("s")) {
+      singular = namespaceName.slice(0, -1);
+    } else {
+      singular = namespaceName;
+    }
+    if (!requestType) requestType = `${singular}${baseName}Request`;
+    if (!responseType) responseType = `${singular}${baseName}Response`;
+  }
 
   return {
     name,

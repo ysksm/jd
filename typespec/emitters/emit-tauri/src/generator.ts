@@ -61,7 +61,11 @@ function generateModel(model: IRModel): string {
   let output = "";
 
   if (model.doc) {
-    output += `/// ${model.doc}\n`;
+    // Handle multiline doc comments properly
+    const docLines = model.doc.split("\n");
+    for (const line of docLines) {
+      output += `/// ${line.trim()}\n`;
+    }
   }
   output += `#[derive(Debug, Clone, Serialize, Deserialize)]\n`;
   output += `#[serde(rename_all = "camelCase")]\n`;
@@ -75,12 +79,26 @@ function generateModel(model: IRModel): string {
   return output;
 }
 
+/** Rust reserved words that need to be escaped */
+const RUST_RESERVED = [
+  "type", "struct", "enum", "fn", "let", "mut", "const", "static", "ref",
+  "self", "super", "crate", "mod", "pub", "use", "as", "where", "impl",
+  "trait", "for", "in", "loop", "while", "if", "else", "match", "return",
+  "break", "continue", "move", "box", "dyn", "unsafe", "async", "await", "try",
+];
+
 function generateField(field: IRField): string {
   let output = "";
   const rustType = typeRefToRust(field.type, field.optional);
-  const snakeName = toSnakeCase(field.name);
+  const snakeCaseName = toSnakeCase(field.name);
 
-  if (snakeName !== field.name) {
+  // Handle Rust reserved words by using raw identifier
+  const fieldName = RUST_RESERVED.includes(snakeCaseName)
+    ? `r#${snakeCaseName}`
+    : snakeCaseName;
+
+  // Add serde rename if snake_case differs from original or if reserved word
+  if (snakeCaseName !== field.name || RUST_RESERVED.includes(snakeCaseName)) {
     output += `    #[serde(rename = "${field.name}")]\n`;
   }
 
@@ -88,7 +106,7 @@ function generateField(field: IRField): string {
     output += `    #[serde(skip_serializing_if = "Option::is_none")]\n`;
   }
 
-  output += `    pub ${snakeName}: ${rustType},\n`;
+  output += `    pub ${fieldName}: ${rustType},\n`;
   return output;
 }
 
