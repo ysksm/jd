@@ -70,11 +70,11 @@ pub async fn reports_generate(
             PathBuf::from(format!("jira_report_{}_{}.html", suffix, timestamp))
         });
 
-    // Generate HTML
+    // Generate HTML - these functions return String directly, not Result
     let html_content = if request.interactive.unwrap_or(false) {
-        generate_interactive_report(&report_data).map_err(|e| e.to_string())?
+        generate_interactive_report(&report_data)
     } else {
-        generate_static_report(&report_data).map_err(|e| e.to_string())?
+        generate_static_report(&report_data)
     };
 
     // Write to file

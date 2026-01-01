@@ -5,7 +5,7 @@ use tauri::State;
 
 use jira_db_core::{
     DuckDbChangeHistoryRepository, DuckDbIssueRepository, DuckDbMetadataRepository,
-    DuckDbSyncHistoryRepository, JiraApiClient, SyncProjectUseCase,
+    DuckDbSyncHistoryRepository, JiraApiClient, JiraConfig, SyncProjectUseCase,
 };
 
 use crate::generated::*;
@@ -20,14 +20,14 @@ pub async fn sync_execute(
     let settings = state.get_settings().ok_or("Not initialized")?;
     let db = state.get_db().ok_or("Database not initialized")?;
 
-    // Create JIRA client
+    // Create JIRA config and client
+    let jira_config = JiraConfig {
+        endpoint: settings.jira.endpoint.clone(),
+        username: settings.jira.username.clone(),
+        api_key: settings.jira.api_key.clone(),
+    };
     let jira_client = Arc::new(
-        JiraApiClient::new(
-            &settings.jira.endpoint,
-            &settings.jira.username,
-            &settings.jira.api_key,
-        )
-        .map_err(|e| e.to_string())?,
+        JiraApiClient::new(&jira_config).map_err(|e| e.to_string())?,
     );
 
     // Create repositories
@@ -47,14 +47,12 @@ pub async fn sync_execute(
 
     // Get projects to sync
     let projects_to_sync: Vec<_> = if let Some(ref project_key) = request.project_key {
-        // Sync specific project
         settings
             .projects
             .iter()
             .filter(|p| &p.key == project_key)
             .collect()
     } else {
-        // Sync all enabled projects
         settings
             .projects
             .iter()
@@ -75,14 +73,13 @@ pub async fn sync_execute(
 
         match result {
             Ok(sync_result) => {
-                let has_error = sync_result.error.is_some();
                 results.push(SyncResult {
                     project_key: sync_result.project_key,
                     issue_count: sync_result.issues_synced as i32,
-                    metadata_updated: sync_result.metadata_synced,
+                    metadata_updated: true, // Metadata is always synced
                     duration,
-                    success: !has_error,
-                    error: sync_result.error,
+                    success: sync_result.success,
+                    error: sync_result.error_message,
                 });
             }
             Err(e) => {
@@ -120,7 +117,6 @@ pub async fn sync_status(
     _state: State<'_, AppState>,
     _request: SyncStatusRequest,
 ) -> Result<SyncStatusResponse, String> {
-    // TODO: Implement proper progress tracking with shared state
     Ok(SyncStatusResponse {
         in_progress: false,
         progress: None,

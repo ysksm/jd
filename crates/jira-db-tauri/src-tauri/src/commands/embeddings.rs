@@ -4,12 +4,20 @@ use std::sync::Arc;
 use tauri::State;
 
 use jira_db_core::{
-    create_provider, DuckDbIssueRepository, EmbeddingGenerationConfig, EmbeddingsRepository,
-    GenerateEmbeddingsUseCase, IssueRepository, ProviderConfig,
+    create_provider, DuckDbIssueRepository, EmbeddingGenerationConfig, EmbeddingProviderType,
+    EmbeddingsRepository, GenerateEmbeddingsUseCase, IssueRepository, ProviderConfig,
+    SearchIssuesUseCase, SearchParams,
 };
 
 use crate::generated::*;
 use crate::state::AppState;
+
+/// Parse provider string to EmbeddingProviderType
+fn parse_provider(provider_str: &str) -> Result<EmbeddingProviderType, String> {
+    provider_str
+        .parse::<EmbeddingProviderType>()
+        .map_err(|e| e.to_string())
+}
 
 /// Generate embeddings for semantic search
 #[tauri::command]
@@ -26,28 +34,30 @@ pub async fn embeddings_generate(
         .as_ref()
         .ok_or("Embedding configuration not found in settings")?;
 
+    // Determine provider type from request or settings
+    let provider_str = request
+        .provider
+        .as_deref()
+        .unwrap_or(&embedding_config.provider);
+    let provider_type = parse_provider(provider_str)?;
+
     // Create provider config
     let provider_config = ProviderConfig {
-        provider: request
-            .provider
-            .unwrap_or_else(|| embedding_config.provider.clone()),
+        provider: provider_type,
         model: request
             .model_name
-            .or_else(|| embedding_config.model.clone()),
+            .or_else(|| Some(embedding_config.model.clone())),
         endpoint: embedding_config.endpoint.clone(),
         api_key: None, // Will use env var
     };
 
-    // Create embedding provider
-    let embedding_provider = Arc::new(
-        create_provider(provider_config)
-            .await
-            .map_err(|e| e.to_string())?,
-    );
+    // Create embedding provider (not async)
+    let embedding_provider =
+        Arc::new(create_provider(provider_config).map_err(|e| e.to_string())?);
 
     // Create repositories
     let issue_repo = Arc::new(DuckDbIssueRepository::new(db.clone()));
-    let embeddings_repo = Arc::new(EmbeddingsRepository::new(db).map_err(|e| e.to_string())?);
+    let embeddings_repo = Arc::new(EmbeddingsRepository::new(db));
 
     // Configure
     let config = EmbeddingGenerationConfig {
@@ -114,18 +124,19 @@ pub async fn embeddings_search(
         .as_ref()
         .ok_or("Embedding configuration not found in settings")?;
 
+    // Parse provider type
+    let provider_type = parse_provider(&embedding_config.provider)?;
+
     // Create provider config
     let provider_config = ProviderConfig {
-        provider: embedding_config.provider.clone(),
-        model: embedding_config.model.clone(),
+        provider: provider_type,
+        model: Some(embedding_config.model.clone()),
         endpoint: embedding_config.endpoint.clone(),
         api_key: None,
     };
 
-    // Create embedding provider
-    let embedding_provider = create_provider(provider_config)
-        .await
-        .map_err(|e| e.to_string())?;
+    // Create embedding provider (not async)
+    let embedding_provider = create_provider(provider_config).map_err(|e| e.to_string())?;
 
     // Generate query embedding
     let query_embedding = embedding_provider
@@ -134,10 +145,11 @@ pub async fn embeddings_search(
         .map_err(|e| e.to_string())?;
 
     // Create embeddings repository
-    let embeddings_repo = EmbeddingsRepository::new(db.clone()).map_err(|e| e.to_string())?;
+    let embeddings_repo = EmbeddingsRepository::new(db.clone());
 
     // Get issue repository for fetching full issues
-    let issue_repo = DuckDbIssueRepository::new(db);
+    let issue_repo = Arc::new(DuckDbIssueRepository::new(db));
+    let search_use_case = SearchIssuesUseCase::new(issue_repo);
 
     // Perform semantic search
     let search_results = embeddings_repo
@@ -151,27 +163,39 @@ pub async fn embeddings_search(
     // Convert to response format with full issue data
     let mut results = Vec::new();
     for sr in search_results {
-        if let Ok(Some(issue)) = issue_repo.find_by_key(&sr.issue_key) {
-            results.push(SemanticSearchResult {
-                issue: Issue {
-                    id: issue.id,
-                    key: issue.key,
-                    project_key: issue.project_key,
-                    summary: issue.summary,
-                    description: issue.description,
-                    status: issue.status,
-                    priority: issue.priority,
-                    issue_type: issue.issue_type,
-                    assignee: issue.assignee,
-                    reporter: issue.reporter,
-                    labels: issue.labels.unwrap_or_default(),
-                    components: issue.components.unwrap_or_default(),
-                    fix_versions: issue.fix_versions.unwrap_or_default(),
-                    created_at: issue.created_date.map(|d| d.to_rfc3339()).unwrap_or_default(),
-                    updated_at: issue.updated_date.map(|d| d.to_rfc3339()).unwrap_or_default(),
-                },
-                score: sr.similarity,
-            });
+        // Search for the issue by key
+        let params = SearchParams {
+            query: Some(sr.issue_key.clone()),
+            project_key: None,
+            status: None,
+            assignee: None,
+            limit: Some(1),
+            offset: None,
+        };
+
+        if let Ok(issues) = search_use_case.execute(params) {
+            if let Some(issue) = issues.into_iter().find(|i| i.key == sr.issue_key) {
+                results.push(SemanticSearchResult {
+                    issue: Issue {
+                        id: issue.id,
+                        key: issue.key.clone(),
+                        project_key: issue.key.split('-').next().unwrap_or("").to_string(),
+                        summary: issue.summary,
+                        description: issue.description,
+                        status: issue.status.unwrap_or_default(),
+                        priority: issue.priority.unwrap_or_default(),
+                        issue_type: issue.issue_type.unwrap_or_default(),
+                        assignee: issue.assignee,
+                        reporter: issue.reporter,
+                        labels: issue.labels.unwrap_or_default(),
+                        components: issue.components.unwrap_or_default(),
+                        fix_versions: issue.fix_versions.unwrap_or_default(),
+                        created_at: issue.created_date.unwrap_or_else(chrono::Utc::now),
+                        updated_at: issue.updated_date.unwrap_or_else(chrono::Utc::now),
+                    },
+                    score: sr.similarity_score as f64,
+                });
+            }
         }
     }
 

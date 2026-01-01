@@ -3,7 +3,7 @@
 use std::sync::Arc;
 use tauri::State;
 
-use jira_db_core::{JiraApiClient, JiraService, SyncProjectListUseCase, DuckDbProjectRepository};
+use jira_db_core::{DuckDbProjectRepository, JiraApiClient, JiraConfig, SyncProjectListUseCase};
 
 use crate::generated::*;
 use crate::state::AppState;
@@ -21,11 +21,11 @@ pub async fn projects_list(
         .into_iter()
         .map(|p| Project {
             id: p.id,
-            key: p.key.clone(),
+            key: p.key,
             name: p.name,
             description: None,
             enabled: p.sync_enabled,
-            last_synced_at: p.last_synced.map(|dt| dt.to_rfc3339()),
+            last_synced_at: p.last_synced,
         })
         .collect();
 
@@ -41,10 +41,14 @@ pub async fn projects_init(
     let settings = state.get_settings().ok_or("Not initialized")?;
     let db = state.get_db().ok_or("Database not initialized")?;
 
-    // Create JIRA client
+    // Create JIRA config and client
+    let jira_config = JiraConfig {
+        endpoint: settings.jira.endpoint.clone(),
+        username: settings.jira.username.clone(),
+        api_key: settings.jira.api_key.clone(),
+    };
     let jira_client = Arc::new(
-        JiraApiClient::new(&settings.jira.endpoint, &settings.jira.username, &settings.jira.api_key)
-            .map_err(|e| e.to_string())?
+        JiraApiClient::new(&jira_config).map_err(|e| e.to_string())?,
     );
 
     // Create project repository
@@ -79,11 +83,11 @@ pub async fn projects_init(
         .into_iter()
         .map(|p| Project {
             id: p.id,
-            key: p.key.clone(),
+            key: p.key,
             name: p.name,
             description: None,
             enabled: p.sync_enabled,
-            last_synced_at: p.last_synced.map(|dt| dt.to_rfc3339()),
+            last_synced_at: p.last_synced,
         })
         .collect();
 
@@ -110,11 +114,11 @@ pub async fn projects_enable(
         .find(|p| p.key == request.key)
         .map(|p| Project {
             id: p.id,
-            key: p.key.clone(),
+            key: p.key,
             name: p.name,
             description: None,
             enabled: p.sync_enabled,
-            last_synced_at: p.last_synced.map(|dt| dt.to_rfc3339()),
+            last_synced_at: p.last_synced,
         })
         .ok_or("Project not found")?;
 
@@ -141,11 +145,11 @@ pub async fn projects_disable(
         .find(|p| p.key == request.key)
         .map(|p| Project {
             id: p.id,
-            key: p.key.clone(),
+            key: p.key,
             name: p.name,
             description: None,
             enabled: p.sync_enabled,
-            last_synced_at: p.last_synced.map(|dt| dt.to_rfc3339()),
+            last_synced_at: p.last_synced,
         })
         .ok_or("Project not found")?;
 
