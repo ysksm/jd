@@ -1,6 +1,7 @@
 //! OpenAI Embedding API client
 //!
 //! Provides integration with OpenAI's text embedding API.
+//! Also supports OpenAI-compatible APIs like LM Studio, LocalAI, etc.
 //! Default model: text-embedding-3-small (1536 dimensions)
 
 use async_trait::async_trait;
@@ -25,17 +26,20 @@ pub mod models {
     /// text-embedding-ada-002 - 1536 dimensions, legacy model
     pub const TEXT_EMBEDDING_ADA_002: &str = "text-embedding-ada-002";
     pub const TEXT_EMBEDDING_ADA_002_DIM: usize = 1536;
+
+    /// nomic-embed-text - 768 dimensions (common for local models)
+    pub const NOMIC_EMBED_TEXT_DIM: usize = 768;
 }
 
 /// Configuration for OpenAI embedding client
 #[derive(Debug, Clone)]
 pub struct EmbeddingConfig {
-    /// OpenAI API key
-    pub api_key: String,
+    /// OpenAI API key (optional for local servers like LM Studio)
+    pub api_key: Option<String>,
     /// Model to use for embeddings
     pub model: String,
-    /// Embedding dimension
-    pub dimension: usize,
+    /// Embedding dimension (None = auto-detect from first response)
+    pub dimension: Option<usize>,
     /// API endpoint (default: https://api.openai.com/v1)
     pub api_base: String,
     /// Request timeout
@@ -47,9 +51,9 @@ pub struct EmbeddingConfig {
 impl Default for EmbeddingConfig {
     fn default() -> Self {
         Self {
-            api_key: String::new(),
+            api_key: None,
             model: models::TEXT_EMBEDDING_3_SMALL.to_string(),
-            dimension: models::TEXT_EMBEDDING_3_SMALL_DIM,
+            dimension: Some(models::TEXT_EMBEDDING_3_SMALL_DIM),
             api_base: "https://api.openai.com/v1".to_string(),
             timeout: Duration::from_secs(60),
             batch_size: 100,
@@ -61,7 +65,17 @@ impl EmbeddingConfig {
     /// Create a new configuration with the specified API key
     pub fn new(api_key: impl Into<String>) -> Self {
         Self {
-            api_key: api_key.into(),
+            api_key: Some(api_key.into()),
+            ..Default::default()
+        }
+    }
+
+    /// Create a new configuration for a local server (no API key required)
+    pub fn local(api_base: impl Into<String>) -> Self {
+        Self {
+            api_key: None,
+            api_base: api_base.into(),
+            dimension: None, // Auto-detect
             ..Default::default()
         }
     }
@@ -69,20 +83,33 @@ impl EmbeddingConfig {
     /// Use text-embedding-3-small model (default)
     pub fn with_small_model(mut self) -> Self {
         self.model = models::TEXT_EMBEDDING_3_SMALL.to_string();
-        self.dimension = models::TEXT_EMBEDDING_3_SMALL_DIM;
+        self.dimension = Some(models::TEXT_EMBEDDING_3_SMALL_DIM);
         self
     }
 
     /// Use text-embedding-3-large model
     pub fn with_large_model(mut self) -> Self {
         self.model = models::TEXT_EMBEDDING_3_LARGE.to_string();
-        self.dimension = models::TEXT_EMBEDDING_3_LARGE_DIM;
+        self.dimension = Some(models::TEXT_EMBEDDING_3_LARGE_DIM);
         self
     }
 
-    /// Set custom API base URL (for Azure OpenAI or other compatible APIs)
+    /// Set custom model with dimension
+    pub fn with_model(mut self, model: impl Into<String>, dimension: Option<usize>) -> Self {
+        self.model = model.into();
+        self.dimension = dimension;
+        self
+    }
+
+    /// Set custom API base URL (for LM Studio, LocalAI, or other compatible APIs)
     pub fn with_api_base(mut self, api_base: impl Into<String>) -> Self {
         self.api_base = api_base.into();
+        self
+    }
+
+    /// Set API key
+    pub fn with_api_key(mut self, api_key: impl Into<String>) -> Self {
+        self.api_key = Some(api_key.into());
         self
     }
 
@@ -97,6 +124,11 @@ impl EmbeddingConfig {
         self.batch_size = batch_size;
         self
     }
+
+    /// Check if this is configured for a local server
+    pub fn is_local(&self) -> bool {
+        self.api_base.contains("localhost") || self.api_base.contains("127.0.0.1")
+    }
 }
 
 /// Result from embedding generation
@@ -109,17 +141,21 @@ pub struct EmbeddingResult {
 }
 
 /// OpenAI Embedding API client
+/// Also works with OpenAI-compatible APIs like LM Studio, LocalAI, etc.
 pub struct OpenAIEmbeddingClient {
     client: Client,
     config: EmbeddingConfig,
+    /// Cached dimension (auto-detected from first response if not specified)
+    detected_dimension: std::sync::RwLock<Option<usize>>,
 }
 
 impl OpenAIEmbeddingClient {
     /// Create a new OpenAI embedding client
     pub fn new(config: EmbeddingConfig) -> DomainResult<Self> {
-        if config.api_key.is_empty() {
+        // Only require API key for non-local servers
+        if config.api_key.is_none() && !config.is_local() {
             return Err(DomainError::Configuration(
-                "OpenAI API key is required".to_string(),
+                "OpenAI API key is required for non-local servers".to_string(),
             ));
         }
 
@@ -128,7 +164,11 @@ impl OpenAIEmbeddingClient {
             .build()
             .map_err(|e| DomainError::ExternalService(format!("Failed to create HTTP client: {}", e)))?;
 
-        Ok(Self { client, config })
+        Ok(Self {
+            client,
+            config,
+            detected_dimension: std::sync::RwLock::new(None),
+        })
     }
 
     /// Create embeddings for a batch of texts
@@ -144,11 +184,19 @@ impl OpenAIEmbeddingClient {
         };
 
         let url = format!("{}/embeddings", self.config.api_base);
-        let response = self
+
+        // Build request with optional authorization
+        let mut req = self
             .client
             .post(&url)
-            .header("Authorization", format!("Bearer {}", self.config.api_key))
-            .header("Content-Type", "application/json")
+            .header("Content-Type", "application/json");
+
+        // Add authorization header if API key is present
+        if let Some(ref api_key) = self.config.api_key {
+            req = req.header("Authorization", format!("Bearer {}", api_key));
+        }
+
+        let response = req
             .json(&request)
             .send()
             .await
@@ -161,7 +209,7 @@ impl OpenAIEmbeddingClient {
                 .await
                 .unwrap_or_else(|_| "Unknown error".to_string());
             return Err(DomainError::ExternalService(format!(
-                "OpenAI API error ({}): {}",
+                "Embedding API error ({}): {}",
                 status, error_text
             )));
         }
@@ -171,12 +219,26 @@ impl OpenAIEmbeddingClient {
             .await
             .map_err(|e| DomainError::ExternalService(format!("Failed to parse embedding response: {}", e)))?;
 
+        // Auto-detect dimension from first response
+        if let Some(first) = response.data.first() {
+            let dim = first.embedding.len();
+            if let Ok(mut detected) = self.detected_dimension.write() {
+                if detected.is_none() {
+                    *detected = Some(dim);
+                }
+            }
+        }
+
+        let token_count = response.usage.as_ref()
+            .map(|u| u.prompt_tokens / texts.len())
+            .unwrap_or(0);
+
         let results: Vec<EmbeddingResult> = response
             .data
             .into_iter()
             .map(|d| EmbeddingResult {
                 embedding: d.embedding,
-                token_count: response.usage.prompt_tokens / texts.len(),
+                token_count,
             })
             .collect();
 
@@ -213,7 +275,10 @@ impl EmbeddingProvider for OpenAIEmbeddingClient {
     }
 
     fn dimension(&self) -> usize {
+        // Return configured dimension, detected dimension, or default
         self.config.dimension
+            .or_else(|| self.detected_dimension.read().ok().and_then(|d| *d))
+            .unwrap_or(models::TEXT_EMBEDDING_3_SMALL_DIM)
     }
 }
 
@@ -229,7 +294,8 @@ struct EmbeddingRequest<'a> {
 #[derive(Deserialize)]
 struct EmbeddingResponse {
     data: Vec<EmbeddingData>,
-    usage: EmbeddingUsage,
+    /// Usage info (optional, some local servers don't return this)
+    usage: Option<EmbeddingUsage>,
 }
 
 #[derive(Deserialize)]

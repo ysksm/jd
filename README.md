@@ -231,6 +231,12 @@ export COHERE_API_KEY="..."
 jira-db embeddings --provider cohere
 ```
 
+**方法4: LM Studio（無料、ローカル、GUI）**
+```bash
+# LM Studioでサーバーを起動後
+jira-db embeddings --provider openai --endpoint http://localhost:1234/v1 --model nomic-embed-text-v1.5
+```
+
 ### 8. MCPサーバーの起動（オプション）
 
 AIアシスタント（Claude Desktop等）からJIRAデータにアクセスする場合は、MCPサーバーを起動します。
@@ -384,8 +390,11 @@ cargo run -- embeddings --project PROJ --force
 # バッチサイズを指定
 cargo run -- embeddings --batch-size 50
 
-# カスタムモデルとエンドポイント
+# カスタムモデルとエンドポイント（Ollama）
 jira-db embeddings --provider ollama --model mxbai-embed-large --endpoint http://localhost:11434
+
+# LM Studio（OpenAI互換）
+jira-db embeddings --provider openai --endpoint http://localhost:1234/v1 --model nomic-embed-text-v1.5
 ```
 
 **利用可能なプロバイダー：**
@@ -395,6 +404,10 @@ jira-db embeddings --provider ollama --model mxbai-embed-large --endpoint http:/
 | `openai` | `OPENAI_API_KEY` | text-embedding-3-small | バランス良好 |
 | `ollama` | 不要 | nomic-embed-text | 無料、ローカル実行 |
 | `cohere` | `COHERE_API_KEY` | embed-multilingual-v3.0 | 多言語に強い |
+
+**OpenAI互換サーバー（LM Studio等）：**
+- `--provider openai --endpoint http://localhost:1234/v1` でローカルサーバーを使用
+- APIキー不要（ローカルサーバーの場合）
 
 **詳細なドキュメント：** [docs/EMBEDDINGS.md](./docs/EMBEDDINGS.md)
 
