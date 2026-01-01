@@ -1,6 +1,46 @@
 # jira-db
 
-JIRAのプロジェクトとイシューをローカルのDuckDBデータベースに同期し、オフラインで高速に検索・分析できるコマンドラインツールです。
+JIRAのプロジェクトとイシューをローカルのDuckDBデータベースに同期し、オフラインで高速に検索・分析できるツールです。CLI、デスクトップアプリ（Tauri）、Webサーバーの3つのインターフェースを提供します。
+
+## クイックスタート
+
+```bash
+# 1. リポジトリをクローンしてビルド
+git clone https://github.com/ysksm/jira-db.git
+cd jira-db
+cargo build --release
+
+# 2. 設定ファイルを初期化
+./target/release/jira-db init --interactive
+
+# 3. プロジェクト一覧を取得
+./target/release/jira-db project init
+
+# 4. 同期するプロジェクトを有効化
+./target/release/jira-db project enable <PROJECT_KEY>
+
+# 5. データを同期
+./target/release/jira-db sync
+
+# 6. 検索
+./target/release/jira-db search "バグ"
+```
+
+## 目次
+
+- [特徴](#特徴)
+- [前提条件](#前提条件)
+- [インストール](#インストール)
+- [使い方](#使い方)
+  - [CLI](#cli)
+  - [デスクトップアプリ（Tauri）](#デスクトップアプリtauri)
+  - [MCPサーバー](#mcpサーバー)
+- [コマンドリファレンス](#コマンドリファレンス)
+- [セマンティック検索](#セマンティック検索)
+- [データベーススキーマ](#データベーススキーマ)
+- [トラブルシューティング](#トラブルシューティング)
+- [開発](#開発)
+- [ライセンス](#ライセンス)
 
 ## 特徴
 
@@ -10,6 +50,8 @@ JIRAのプロジェクトとイシューをローカルのDuckDBデータベー�
 - 📊 RAWデータとしてJSON形式で完全なAPIレスポンス（全フィールド・変更履歴含む）を保存
 - 🏷️ プロジェクトのメタデータ（ステータス、優先度、イシュータイプ、ラベル等）を自動同期
 - 🛠️ 使いやすいCLIインターフェース
+- 🖥️ **デスクトップアプリ**: Tauriベースのクロスプラットフォームアプリ
+- 🌐 **Webサーバー**: チーム共有用のHTTP API
 - 🔍 高速なフルテキスト検索とフィルタリング
 - 🤖 **MCPサーバー**: AIアシスタント（Claude Desktop等）との連携
 - 🧠 **セマンティック検索**: 複数の埋め込みプロバイダー（OpenAI、Ollama、Cohere）とDuckDB VSSによるベクトル検索
@@ -59,46 +101,27 @@ cargo build --release
 cp target/release/jira-db /usr/local/bin/
 ```
 
-ビルドに成功すると、`target/release/jira-db` に実行可能ファイルが生成されます。
+ビルドに成功すると、以下の実行可能ファイルが生成されます：
+- `target/release/jira-db` - CLI
+- `target/release/jira-db-mcp` - MCPサーバー
+- `target/release/jira-db-tauri` - デスクトップアプリ
 
 ## 使い方
 
-### 1. 設定ファイルの初期化
+### CLI
 
-初回起動時に設定ファイルを生成します。
+#### 1. 設定ファイルの初期化
 
 ```bash
+# 対話的に設定（推奨）
+jira-db init --interactive
+
+# または、設定ファイルを手動編集
 jira-db init
-```
-
-これにより現在のディレクトリに `./settings.json` が作成されます。
-
-**出力例：**
-```
-[INFO] Initializing jira-db configuration...
-[INFO] Created configuration file at: ./settings.json
-[INFO]
-[INFO] Next steps:
-[INFO]   1. Edit the configuration file and set your JIRA credentials:
-[INFO]      - endpoint: Your JIRA instance URL
-[INFO]      - username: Your JIRA username/email
-[INFO]      - api_key: Your JIRA API key
-[INFO]   2. Run: jira-db project init
-```
-
-### 2. 認証情報の設定
-
-生成された設定ファイルを編集して、JIRA接続情報を入力します。
-
-```bash
-# エディタで設定ファイルを開く
 vim ./settings.json
-# または
-code ./settings.json
 ```
 
-以下の項目を実際の値に変更してください：
-
+設定ファイル例（`./settings.json`）:
 ```json
 {
   "jira": {
@@ -113,127 +136,62 @@ code ./settings.json
 }
 ```
 
-### 3. プロジェクト一覧の初期化
-
-設定が完了したら、JIRAからプロジェクト一覧を取得します。
+#### 2. プロジェクトの設定と同期
 
 ```bash
+# JIRAからプロジェクト一覧を取得
 jira-db project init
-```
 
-**出力例：**
-```
-[INFO] Initializing project list from JIRA...
-[INFO] Connecting to JIRA...
-[INFO] Connected successfully!
-[INFO] Found 5 projects
-[INFO]
-[INFO] Project list initialized successfully!
-[INFO] Run 'jira-db project list' to see all projects
-[INFO] Use 'jira-db project enable <PROJECT_KEY>' to enable sync for specific projects
-```
-
-### 4. プロジェクト一覧の確認
-
-取得したプロジェクトを確認します。
-
-```bash
-# シンプルな一覧表示
+# プロジェクト一覧を確認
 jira-db project list
 
-# 詳細情報を表示
-jira-db project list --verbose
-```
-
-**出力例：**
-```
-Projects:
-
-  [ ] PROJ - My Project
-  [ ] TEST - Test Project
-  [ ] DEMO - Demo Project
-
-Use --verbose for detailed information
-Use 'jira-db project enable <PROJECT_KEY>' to enable syncing for a project
-```
-
-### 5. 同期するプロジェクトを有効化
-
-同期したいプロジェクトを選択します。
-
-```bash
-# プロジェクトの同期を有効化
+# 同期するプロジェクトを有効化
 jira-db project enable PROJ
 
-# 複数のプロジェクトを有効化する場合
-jira-db project enable TEST
-jira-db project enable DEMO
-```
-
-**出力例：**
-```
-[INFO] Enabled sync for project: PROJ
-```
-
-### 6. データの同期
-
-有効化したプロジェクトのイシューを同期します。
-
-```bash
-# すべての有効なプロジェクトを同期
+# データを同期
 jira-db sync
-
-# 特定のプロジェクトのみ同期
-jira-db sync --project PROJ
 ```
 
-**出力例：**
-```
-[INFO] Connecting to JIRA...
-[INFO] Connected successfully!
-[INFO] Syncing 2 projects
-[INFO] Syncing project: PROJ
-[INFO] Fetching issues for project: PROJ
-[INFO] Fetched 150 issues, saving to database...
-[INFO] Successfully synced 150 issues for project PROJ
-```
+#### 3. 検索とデータ活用
 
-### 7. セマンティック検索の設定（オプション）
-
-自然言語によるセマンティック検索を使用する場合は、埋め込みを生成します。
-
-**方法1: Ollama（無料、ローカル実行）**
 ```bash
-# Ollamaをインストールしてモデルをダウンロード
-ollama pull nomic-embed-text
+# イシューを検索
+jira-db search "バグ" --project PROJ
 
-# 埋め込みの生成
-jira-db embeddings --provider ollama
-cargo run -- embeddings --provider ollama
+# メタデータを確認
+jira-db metadata --project PROJ
+
+# 変更履歴を確認
+jira-db history PROJ-123
+
+# HTMLレポートを生成
+jira-db report --interactive
 ```
 
-**方法2: OpenAI（クラウドAPI）**
+### デスクトップアプリ（Tauri）
+
+Angularベースのモダンなデスクトップアプリを提供します。
+
 ```bash
-# OpenAI APIキーの設定
-export OPENAI_API_KEY="sk-..."
+# デスクトップアプリをビルド
+cd crates/jira-db-tauri
+npm install
+npm run tauri build
 
-# 埋め込みの生成
-jira-db embeddings --project PROJ
-cargo run -- embeddings --project PROJ
+# 開発モードで起動
+npm run tauri dev
 ```
 
-**方法3: Cohere（多言語に強い）**
-```bash
-# Cohere APIキーの設定
-export COHERE_API_KEY="..."
+**機能:**
+- プロジェクト管理（一覧、有効化/無効化）
+- イシュー検索（フィルタ、詳細表示）
+- データ同期（進捗表示）
+- 設定管理
+- レポート生成
 
-# 埋め込みの生成
-jira-db embeddings --provider cohere
-```
+### MCPサーバー
 
-### 8. MCPサーバーの起動（オプション）
-
-AIアシスタント（Claude Desktop等）からJIRAデータにアクセスする場合は、MCPサーバーを起動します。
+AIアシスタント（Claude Desktop等）からJIRAデータにアクセスできます。
 
 ```bash
 # stdioモード（Claude Desktop、VS Code等用）
@@ -241,9 +199,6 @@ cargo run -p jira-db-mcp -- --database ./data/jira.duckdb
 
 # HTTPモード（Webクライアント用）
 cargo run -p jira-db-mcp -- --database ./data/jira.duckdb --http --port 3000
-
-# リリースビルドを直接実行
-./target/release/jira-db-mcp --database ./data/jira.duckdb
 ```
 
 **Claude Desktopでの設定例:**
@@ -263,201 +218,7 @@ cargo run -p jira-db-mcp -- --database ./data/jira.duckdb --http --port 3000
 }
 ```
 
-### 9. 設定の確認・変更
-
-#### 現在の設定を表示
-
-```bash
-jira-db config show
-```
-
-#### 設定値の変更
-
-```bash
-# エンドポイントの変更
-jira-db config set jira.endpoint https://new-domain.atlassian.net
-
-# ユーザー名の変更
-jira-db config set jira.username new-email@example.com
-
-# APIキーの変更
-jira-db config set jira.api_key new-api-token
-```
-
-#### プロジェクトの同期を無効化
-
-```bash
-jira-db project disable PROJ
-```
-
-## コマンドリファレンス
-
-### `jira-db init [OPTIONS]`
-設定ファイルを初期化します。`./settings.json` を作成します。
-
-**オプション：**
-- `-i, --interactive` - 対話的に設定を入力（エンドポイント、ユーザー名、APIキーなど）
-
-### `jira-db project <SUBCOMMAND>`
-プロジェクト管理コマンド。
-
-**サブコマンド：**
-- `init` - JIRAからプロジェクト一覧を取得して初期化
-- `list [--verbose]` - プロジェクト一覧を表示
-  - `-v, --verbose` - 詳細情報を表示（ID、同期ステータス、最終同期日時）
-- `enable <PROJECT_KEY>` - プロジェクトの同期を有効化
-- `disable <PROJECT_KEY>` - プロジェクトの同期を無効化
-
-### `jira-db sync [OPTIONS]`
-有効化されたプロジェクトのJIRAデータを同期します。
-
-**オプション：**
-- `-p, --project <PROJECT_KEY>` - 特定のプロジェクトのみ同期
-- `-f, --force` - フル同期を強制（将来的に増分同期実装時に使用）
-
-**注意：** プロジェクトが初期化されていない場合はエラーになります。先に `jira-db project init` を実行してください。
-
-### `jira-db config <SUBCOMMAND>`
-設定を管理します。
-
-**サブコマンド：**
-- `show` - 現在の設定を表示
-- `set <KEY> <VALUE>` - 設定値を変更
-  - 有効なキー: `jira.endpoint`, `jira.username`, `jira.api_key`
-
-### `jira-db search <QUERY> [OPTIONS]`
-同期済みのイシューを検索します。
-
-**引数：**
-- `QUERY` - 検索キーワード（summaryとdescriptionから検索）
-
-**オプション：**
-- `-p, --project <PROJECT_KEY>` - プロジェクトで絞り込み
-- `-s, --status <STATUS>` - ステータスで絞り込み
-- `-a, --assignee <NAME>` - 担当者で絞り込み
-- `-l, --limit <NUM>` - 表示件数（デフォルト: 20）
-- `-o, --offset <NUM>` - オフセット（ページネーション用、デフォルト: 0）
-
-**例：**
-```bash
-# "bug"を含むイシューを検索
-jira-db search bug
-
-# 特定プロジェクトのオープンなイシューを検索
-jira-db search "" --project PROJ --status "Open"
-
-# 担当者で絞り込み
-jira-db search "performance" --assignee "john"
-
-# 2ページ目を表示（21〜40件目）
-jira-db search "api" --limit 20 --offset 20
-```
-
-### `jira-db embeddings [OPTIONS]`
-セマンティック検索用の埋め込み（embedding）を生成します。
-
-**オプション：**
-- `-p, --project <PROJECT_KEY>` - 特定のプロジェクトのみ処理
-- `-f, --force` - 既存の埋め込みを再生成
-- `-b, --batch-size <SIZE>` - バッチサイズ（デフォルト: 50）
-- `--provider <PROVIDER>` - プロバイダーを指定: `openai`, `ollama`, `cohere`
-- `-m, --model <MODEL>` - モデル名を指定（プロバイダー固有）
-- `--endpoint <URL>` - エンドポイントURL（Ollama用）
-
-**例：**
-```bash
-# Ollama（無料、ローカル）を使用
-jira-db embeddings --provider ollama
-
-# OpenAIを使用
-jira-db embeddings --project PROJ
-
-# Cohereを使用（日本語に強い）
-jira-db embeddings --provider cohere
-
-# cargo runで実行
-cargo run -- embeddings --provider ollama
-
-# 強制再生成
-cargo run -- embeddings --project PROJ --force
-
-# バッチサイズを指定
-cargo run -- embeddings --batch-size 50
-
-# カスタムモデルとエンドポイント
-jira-db embeddings --provider ollama --model mxbai-embed-large --endpoint http://localhost:11434
-```
-
-**利用可能なプロバイダー：**
-
-| プロバイダー | 環境変数 | デフォルトモデル | 特徴 |
-|-------------|----------|-----------------|------|
-| `openai` | `OPENAI_API_KEY` | text-embedding-3-small | バランス良好 |
-| `ollama` | 不要 | nomic-embed-text | 無料、ローカル実行 |
-| `cohere` | `COHERE_API_KEY` | embed-multilingual-v3.0 | 多言語に強い |
-
-**詳細なドキュメント：** [docs/EMBEDDINGS.md](./docs/EMBEDDINGS.md)
-
-### `jira-db metadata [OPTIONS]`
-プロジェクトのメタデータ（ステータス、優先度、イシュータイプなど）を表示します。
-
-**オプション：**
-- `-p, --project <PROJECT_KEY>` - プロジェクトキーを指定（必須）
-- `-t, --type <TYPE>` - メタデータタイプを指定（オプション）
-  - `status` - ステータス一覧
-  - `priority` - 優先度一覧
-  - `issue-type` - イシュータイプ一覧
-  - `label` - ラベル一覧
-  - `component` - コンポーネント一覧
-  - `version` - バージョン（フィックスバージョン）一覧
-
-**例：**
-```bash
-# プロジェクト全体のメタデータサマリーを表示
-jira-db metadata --project PROJ
-
-# ステータス一覧を表示
-jira-db metadata --project PROJ --type status
-
-# 優先度一覧を表示
-jira-db metadata --project PROJ --type priority
-
-# イシュータイプ一覧を表示
-jira-db metadata --project PROJ --type issue-type
-
-# ラベル一覧を表示
-jira-db metadata --project PROJ --type label
-```
-
-**注意：** メタデータは `jira-db sync` の実行時にJIRA APIから自動的に取得・保存されます。
-
-### `jira-db-mcp [OPTIONS]`
-MCPサーバーを起動します（別バイナリ）。
-
-**オプション：**
-- `--database <PATH>` - データベースファイルのパス
-- `--http` - HTTPモードで起動（デフォルトはstdioモード）
-- `--port <PORT>` - HTTPポート番号（デフォルト: 3000）
-- `--host <HOST>` - HTTPホスト（デフォルト: 127.0.0.1）
-- `-c, --config <PATH>` - 設定ファイルのパス
-- `--init` - 設定ファイルを初期化
-
-**例：**
-```bash
-# stdioモード（Claude Desktop用）
-cargo run -p jira-db-mcp -- --database ./data/jira.duckdb
-
-# HTTPモード
-cargo run -p jira-db-mcp -- --database ./data/jira.duckdb --http --port 8080
-
-# リリースビルドを実行
-./target/release/jira-db-mcp --database ./data/jira.duckdb
-
-# 設定ファイルの初期化
-cargo run -p jira-db-mcp -- --init
-```
-
-**利用可能なツール：**
+**利用可能なツール:**
 | ツール名 | 説明 |
 |---------|------|
 | `search_issues` | テキスト検索（プロジェクト、ステータス、担当者フィルタ） |
@@ -469,62 +230,105 @@ cargo run -p jira-db-mcp -- --init
 | `execute_sql` | 読み取り専用SQL実行 |
 | `semantic_search` | セマンティック検索（要埋め込み生成） |
 
-## データの保存場所
+## コマンドリファレンス
 
-- **設定ファイル**: `./settings.json`（カレントディレクトリ）
-- **データベース**: デフォルトは `./data/jira.duckdb`（設定ファイルで変更可能）
+### 基本コマンド
 
-## ワークフロー図
+| コマンド | 説明 |
+|---------|------|
+| `jira-db init [--interactive]` | 設定ファイルを初期化 |
+| `jira-db project init` | JIRAからプロジェクト一覧を取得 |
+| `jira-db project list [--verbose]` | プロジェクト一覧を表示 |
+| `jira-db project enable <KEY>` | プロジェクトの同期を有効化 |
+| `jira-db project disable <KEY>` | プロジェクトの同期を無効化 |
+| `jira-db sync [--project <KEY>]` | データを同期 |
+| `jira-db config show` | 現在の設定を表示 |
+| `jira-db config set <KEY> <VALUE>` | 設定値を変更 |
 
+### 検索・分析コマンド
+
+| コマンド | 説明 |
+|---------|------|
+| `jira-db search <QUERY> [OPTIONS]` | イシューを検索 |
+| `jira-db metadata --project <KEY> [--type <TYPE>]` | メタデータを表示 |
+| `jira-db history <ISSUE_KEY> [--field <FIELD>]` | 変更履歴を表示 |
+| `jira-db embeddings [--provider <PROVIDER>]` | 埋め込みを生成 |
+| `jira-db report [--interactive]` | HTMLレポートを生成 |
+
+### 検索オプション
+
+```bash
+jira-db search <QUERY> [OPTIONS]
+
+オプション:
+  -p, --project <KEY>     プロジェクトで絞り込み
+  -s, --status <STATUS>   ステータスで絞り込み
+  -a, --assignee <NAME>   担当者で絞り込み
+  -l, --limit <NUM>       表示件数（デフォルト: 20）
+  -o, --offset <NUM>      オフセット（ページネーション用）
 ```
-┌─────────────────────┐
-│  jira-db init       │  設定ファイル作成
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│  settings.json編集  │  JIRA認証情報入力
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│ jira-db project init│  プロジェクト一覧取得
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│jira-db project list │  プロジェクト確認
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│jira-db project      │  同期対象を選択
-│  enable <KEY>       │
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│  jira-db sync       │  データ同期
-└─────────────────────┘
+
+**例:**
+```bash
+# "bug"を含むイシューを検索
+jira-db search bug
+
+# 特定プロジェクトのオープンなイシューを検索
+jira-db search "" --project PROJ --status "Open"
+
+# 担当者で絞り込み
+jira-db search "performance" --assignee "john"
 ```
+
+## セマンティック検索
+
+自然言語によるセマンティック検索を使用する場合は、埋め込みを生成します。
+
+### プロバイダー一覧
+
+| プロバイダー | 環境変数 | デフォルトモデル | 特徴 |
+|-------------|----------|-----------------|------|
+| `openai` | `OPENAI_API_KEY` | text-embedding-3-small | バランス良好 |
+| `ollama` | 不要 | nomic-embed-text | 無料、ローカル実行 |
+| `cohere` | `COHERE_API_KEY` | embed-multilingual-v3.0 | 多言語に強い |
+
+### 使用例
+
+```bash
+# Ollama（無料、ローカル）を使用
+ollama pull nomic-embed-text
+jira-db embeddings --provider ollama
+
+# OpenAIを使用
+export OPENAI_API_KEY="sk-..."
+jira-db embeddings --project PROJ
+
+# Cohereを使用（日本語に強い）
+export COHERE_API_KEY="..."
+jira-db embeddings --provider cohere
+```
+
+詳細は [docs/EMBEDDINGS.md](./docs/EMBEDDINGS.md) を参照してください。
 
 ## データベーススキーマ
 
-### projectsテーブル
-JIRAプロジェクトのメタデータを保存。
+### 主要テーブル
 
-| カラム | 型 | 説明 |
-|--------|-----|------|
-| id | VARCHAR | プロジェクトID（主キー） |
-| key | VARCHAR | プロジェクトキー（例: PROJ） |
-| name | VARCHAR | プロジェクト名 |
-| description | TEXT | プロジェクトの説明 |
-| raw_data | JSON | 完全なAPIレスポンス |
-| created_at | TIMESTAMP | レコード作成日時 |
-| updated_at | TIMESTAMP | レコード更新日時 |
+| テーブル | 説明 |
+|---------|------|
+| `projects` | JIRAプロジェクトのメタデータ |
+| `issues` | JIRAイシューデータ（raw_dataに全フィールド含む） |
+| `issue_change_history` | 変更履歴（正規化済み） |
+| `sync_history` | 同期履歴 |
+| `statuses` | ステータス定義 |
+| `priorities` | 優先度定義 |
+| `issue_types` | イシュータイプ定義 |
+| `labels` | ラベル |
+| `components` | コンポーネント定義 |
+| `fix_versions` | バージョン定義 |
+| `issue_embeddings` | セマンティック検索用埋め込み |
 
 ### issuesテーブル
-JIRAイシューデータを保存。
 
 | カラム | 型 | 説明 |
 |--------|-----|------|
@@ -542,229 +346,89 @@ JIRAイシューデータを保存。
 | raw_data | JSON | 完全なAPIレスポンス（全フィールド・変更履歴含む） |
 | synced_at | TIMESTAMP | 同期日時 |
 
-**注意：** raw_dataカラムには、JIRA REST API v3から取得した全フィールド（`*navigable`）と変更履歴（`changelog`）を含む完全なJSONデータが保存されます。
-
-### sync_historyテーブル
-同期履歴を記録。
-
-| カラム | 型 | 説明 |
-|--------|-----|------|
-| id | INTEGER | 履歴ID（主キー） |
-| project_id | VARCHAR | プロジェクトID |
-| sync_type | VARCHAR | 同期タイプ（full/incremental） |
-| started_at | TIMESTAMP | 開始日時 |
-| completed_at | TIMESTAMP | 完了日時 |
-| status | VARCHAR | ステータス（running/completed/failed） |
-| items_synced | INTEGER | 同期したアイテム数 |
-| error_message | TEXT | エラーメッセージ |
-
-### メタデータテーブル
-
-#### statusesテーブル
-プロジェクトのステータス定義を保存。
-
-| カラム | 型 | 説明 |
-|--------|-----|------|
-| project_id | VARCHAR | プロジェクトID（複合主キー） |
-| name | VARCHAR | ステータス名（複合主キー） |
-| description | VARCHAR | 説明 |
-| category | VARCHAR | ステータスカテゴリ |
-| created_at | TIMESTAMP | レコード作成日時 |
-| updated_at | TIMESTAMP | レコード更新日時 |
-
-#### prioritiesテーブル
-プロジェクトの優先度定義を保存。
-
-| カラム | 型 | 説明 |
-|--------|-----|------|
-| project_id | VARCHAR | プロジェクトID（複合主キー） |
-| name | VARCHAR | 優先度名（複合主キー） |
-| description | VARCHAR | 説明 |
-| icon_url | VARCHAR | アイコンURL |
-| created_at | TIMESTAMP | レコード作成日時 |
-| updated_at | TIMESTAMP | レコード更新日時 |
-
-#### issue_typesテーブル
-プロジェクトのイシュータイプ定義を保存。
-
-| カラム | 型 | 説明 |
-|--------|-----|------|
-| project_id | VARCHAR | プロジェクトID（複合主キー） |
-| name | VARCHAR | イシュータイプ名（複合主キー） |
-| description | VARCHAR | 説明 |
-| icon_url | VARCHAR | アイコンURL |
-| subtask | BOOLEAN | サブタスクかどうか |
-| created_at | TIMESTAMP | レコード作成日時 |
-| updated_at | TIMESTAMP | レコード更新日時 |
-
-#### labelsテーブル
-プロジェクトのラベルを保存。
-
-| カラム | 型 | 説明 |
-|--------|-----|------|
-| project_id | VARCHAR | プロジェクトID（複合主キー） |
-| name | VARCHAR | ラベル名（複合主キー） |
-| created_at | TIMESTAMP | レコード作成日時 |
-| updated_at | TIMESTAMP | レコード更新日時 |
-
-#### componentsテーブル
-プロジェクトのコンポーネント定義を保存。
-
-| カラム | 型 | 説明 |
-|--------|-----|------|
-| project_id | VARCHAR | プロジェクトID（複合主キー） |
-| name | VARCHAR | コンポーネント名（複合主キー） |
-| description | VARCHAR | 説明 |
-| lead | VARCHAR | リード担当者 |
-| created_at | TIMESTAMP | レコード作成日時 |
-| updated_at | TIMESTAMP | レコード更新日時 |
-
-#### fix_versionsテーブル
-プロジェクトのバージョン（フィックスバージョン）定義を保存。
-
-| カラム | 型 | 説明 |
-|--------|-----|------|
-| project_id | VARCHAR | プロジェクトID（複合主キー） |
-| name | VARCHAR | バージョン名（複合主キー） |
-| description | VARCHAR | 説明 |
-| released | BOOLEAN | リリース済みかどうか |
-| release_date | TIMESTAMP | リリース日 |
-| created_at | TIMESTAMP | レコード作成日時 |
-| updated_at | TIMESTAMP | レコード更新日時 |
-
-**注意：** メタデータテーブルは同期時にJIRA REST API v3から直接取得されます。issuesテーブルのデータから抽出されるのではなく、プロジェクトに定義されているすべてのメタデータが保存されます。
-
 ## トラブルシューティング
 
 ### ビルドエラー: `ld: library 'duckdb' not found`
 
-DuckDBライブラリのパスが設定されていない可能性があります。
+DuckDBライブラリのパスを設定してください：
 
-**恒久的な解決方法（推奨）:**
 ```bash
-# .zshrcに環境変数を追加
-cat >> ~/.zshrc << 'EOF'
-
-# DuckDB library path for jira-db
-export LIBRARY_PATH="/opt/homebrew/lib:$LIBRARY_PATH"
-export LD_LIBRARY_PATH="/opt/homebrew/lib:$LD_LIBRARY_PATH"
-EOF
-
-# ターミナルを再起動するか、設定を読み込む
+# .zshrcに追加（恒久的）
+echo 'export LIBRARY_PATH="/opt/homebrew/lib:$LIBRARY_PATH"' >> ~/.zshrc
+echo 'export LD_LIBRARY_PATH="/opt/homebrew/lib:$LD_LIBRARY_PATH"' >> ~/.zshrc
 source ~/.zshrc
 
-# ビルド実行
-cargo build --release
-```
-
-**一時的な解決方法（現在のセッションのみ）:**
-```bash
+# または一時的に設定
 export LIBRARY_PATH="/opt/homebrew/lib:$LIBRARY_PATH"
-export LD_LIBRARY_PATH="/opt/homebrew/lib:$LD_LIBRARY_PATH"
 cargo build --release
 ```
-
-**注意**: bashを使用している場合は、`~/.zshrc`の代わりに`~/.bash_profile`を使用してください。
 
 ### `No projects found` エラー
 
-`jira-db sync` を実行する前にプロジェクトを初期化する必要があります。
-
-**解決方法:**
+先にプロジェクトを初期化してください：
 ```bash
 jira-db project init
 ```
 
 ### 認証エラー
 
-APIキーが正しくない、または期限切れの可能性があります。
-
-**解決方法:**
 1. [Atlassian APIトークン管理ページ](https://id.atlassian.com/manage-profile/security/api-tokens)で新しいトークンを作成
 2. `jira-db config set jira.api_key <新しいトークン>` で更新
 
 ### 同期が遅い
 
-大量のイシューがある場合、初回同期には時間がかかります。
-
-**Tips:**
 - 必要なプロジェクトのみ有効化する
 - ログレベルを下げる: `RUST_LOG=warn jira-db sync`
 - 特定のプロジェクトのみ同期: `jira-db sync --project PROJ`
 
-## 環境変数
-
-### ログレベルの設定
-
-```bash
-# デバッグログを表示
-RUST_LOG=debug jira-db sync
-
-# エラーのみ表示
-RUST_LOG=error jira-db sync
-
-# デフォルトはinfo
-RUST_LOG=info jira-db sync
-```
-
 ## 開発
 
-開発者向けの情報は [CLAUDE.md](./CLAUDE.md) を参照してください。
+開発者向けの詳細情報は [CLAUDE.md](./CLAUDE.md) を参照してください。
 
-### テストの実行
+### プロジェクト構成
 
-```bash
-cargo test
+```
+jira-db/
+├── crates/
+│   ├── jira-db-core/     # コアライブラリ（ドメイン、ユースケース）
+│   ├── jira-db-cli/      # CLIバイナリ
+│   ├── jira-db-mcp/      # MCPサーバー
+│   └── jira-db-tauri/    # デスクトップアプリ（Tauri + Angular）
+├── typespec/             # API定義（TypeSpec）
+└── docs/                 # ドキュメント
 ```
 
-### コードフォーマット
+### 開発コマンド
 
 ```bash
-cargo fmt
-```
-
-### リンター
-
-```bash
-cargo clippy
+cargo test          # テスト実行
+cargo clippy        # リンター
+cargo fmt           # フォーマット
+cargo check         # コンパイルチェック
 ```
 
 ## ライセンス
 
 MIT License - 詳細は [LICENSE](./LICENSE) を参照してください。
 
-## 貢献
-
-Issue報告やPull Requestを歓迎します！
-
-## リンク
-
-- [JIRAドキュメント](https://developer.atlassian.com/cloud/jira/platform/rest/v3/)
-- [DuckDB](https://duckdb.org/)
-- [Rust](https://www.rust-lang.org/)
-
 ## 実装済み機能
 
-- ✅ **検索機能**（フルテキスト検索、フィルタ、ページネーション）
-- ✅ **対話的な初期設定**（--interactiveフラグ）
-- ✅ **進捗バー表示**（同期中の視覚的フィードバック）
-- ✅ **エラーハンドリング**（自動リトライ、タイムアウト処理）
-- ✅ **メタデータ管理**（ステータス、優先度、イシュータイプ、ラベル、コンポーネント、バージョンの同期・表示）
-- ✅ **完全なイシューデータ取得**（全フィールド、変更履歴を含む完全なJSON保存）
-- ✅ **MCPサーバー**（stdioおよびHTTPトランスポート、8種類のツール）
-- ✅ **セマンティック検索**（OpenAI/Ollama/Cohere埋め込み + DuckDB VSS拡張）
-- ✅ **HTMLレポート**（静的/インタラクティブダッシュボード）
-- ✅ **複数の埋め込みプロバイダー**（OpenAI、Ollama、Cohere対応）
+- ✅ CLI（検索、同期、メタデータ、レポート）
+- ✅ MCPサーバー（stdio/HTTP、8種類のツール）
+- ✅ セマンティック検索（OpenAI/Ollama/Cohere）
+- ✅ デスクトップアプリ（Tauri + Angular）
+- ✅ HTMLレポート（静的/インタラクティブ）
 
 ## 今後の実装予定
 
 - [ ] 増分同期（最終同期日時以降の変更のみ取得）
 - [ ] エクスポート機能（CSV、Excel）
-- [ ] 統計・分析機能
 - [ ] Webhookによるリアルタイム同期
 - [ ] 複数JIRA環境のサポート
-- [ ] ユニットテスト・統合テスト
 
-## サポート
+## リンク
 
-問題が発生した場合は、[GitHubのIssue](https://github.com/ysksm/jira-db/issues)で報告してください。
+- [JIRAドキュメント](https://developer.atlassian.com/cloud/jira/platform/rest/v3/)
+- [DuckDB](https://duckdb.org/)
+- [Tauri](https://tauri.app/)
+- [Angular](https://angular.dev/)
