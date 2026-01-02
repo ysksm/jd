@@ -31,11 +31,6 @@ pub async fn sql_execute(
         .execute(&request.query, request.limit.map(|l| l as usize))
         .map_err(|e| e.to_string())?;
 
-    println!("[SQL DEBUG] Query: {}", request.query);
-    println!("[SQL DEBUG] Columns: {:?}", result.columns);
-    println!("[SQL DEBUG] Row count from core: {}", result.row_count);
-    println!("[SQL DEBUG] First row: {:?}", result.rows.first());
-
     let execution_time_ms = start.elapsed().as_secs_f64() * 1000.0;
 
     // Convert rows to named objects
