@@ -42,6 +42,15 @@
             "command": "bash /home/user/jira-db/.claude/hooks/update-schema-skill.sh"
           }
         ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash /home/user/jira-db/.claude/hooks/check-documentation.sh"
+          }
+        ]
       }
     ]
   }
