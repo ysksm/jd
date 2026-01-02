@@ -6,7 +6,22 @@ mod commands;
 mod generated;
 mod state;
 
+use std::path::PathBuf;
 use state::AppState;
+use tauri::Manager;
+
+/// Get the settings file path in the app data directory
+fn get_settings_path(app: &tauri::App) -> PathBuf {
+    let app_data_dir = app
+        .path()
+        .app_data_dir()
+        .expect("Failed to get app data directory");
+
+    // Ensure the directory exists
+    std::fs::create_dir_all(&app_data_dir).ok();
+
+    app_data_dir.join("settings.json")
+}
 
 /// Run the Tauri application
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -15,6 +30,30 @@ pub fn run() {
 
     tauri::Builder::default()
         .manage(AppState::default())
+        .setup(|app| {
+            let settings_path = get_settings_path(app);
+            let state = app.state::<AppState>();
+
+            tracing::info!("Settings path: {:?}", settings_path);
+
+            // Try to load existing settings
+            if settings_path.exists() {
+                match state.initialize(settings_path.clone()) {
+                    Ok(()) => {
+                        tracing::info!("Loaded existing settings from {:?}", settings_path);
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed to load settings: {}. Will need to reinitialize.", e);
+                    }
+                }
+            } else {
+                tracing::info!("No settings file found at {:?}. Waiting for initialization.", settings_path);
+                // Store the path for later use when initializing
+                *state.settings_path.lock().unwrap() = Some(settings_path);
+            }
+
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             // Config
             commands::config::config_get,

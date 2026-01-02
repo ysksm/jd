@@ -65,12 +65,23 @@ pub async fn config_initialize(
     state: State<'_, AppState>,
     request: ConfigInitRequest,
 ) -> Result<ConfigInitResponse, String> {
-    let settings_path = PathBuf::from("./settings.json");
+    // Use the settings path set during app setup (in app data directory)
+    let settings_path = state
+        .get_settings_path()
+        .ok_or("Settings path not configured. App may not be properly initialized.")?;
 
-    let database_path = request
-        .database_path
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("./data/jira.duckdb"));
+    // Use app data directory for database as well
+    let database_path = request.database_path.map(PathBuf::from).unwrap_or_else(|| {
+        settings_path
+            .parent()
+            .map(|p| p.join("data").join("jira.duckdb"))
+            .unwrap_or_else(|| PathBuf::from("./data/jira.duckdb"))
+    });
+
+    // Ensure the database directory exists
+    if let Some(parent) = database_path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| format!("Failed to create database directory: {}", e))?;
+    }
 
     let settings = jira_db_core::Settings {
         jira: jira_db_core::JiraConfig {
