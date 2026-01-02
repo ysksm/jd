@@ -4,8 +4,8 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "build:emitters": "pnpm --filter @jira-db/emitter-common run build && pnpm --filter @jira-db/emit-rust run build && pnpm --filter @jira-db/emit-tauri run build && pnpm --filter @jira-db/emit-angular run build",
-    "build": "pnpm run build:emitters && tsp compile .",
+    "build:emitters": "npm run build --prefix emitters/common && npm run build --prefix emitters/emit-rust && npm run build --prefix emitters/emit-tauri && npm run build --prefix emitters/emit-angular",
+    "build": "npm run build:emitters && tsp compile .",
     "watch": "tsp compile . --watch",
     "format": "tsp format **/*.tsp"
   },
