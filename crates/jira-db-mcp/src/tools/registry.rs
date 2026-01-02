@@ -9,8 +9,8 @@ use duckdb::Connection;
 use serde_json::Value;
 use std::sync::Mutex;
 
-use crate::protocol::{CallToolResult, Tool, ToolInputSchema};
 use super::implementations::*;
+use crate::protocol::{CallToolResult, Tool, ToolInputSchema};
 
 /// Trait for tool implementations
 #[async_trait]
@@ -90,15 +90,13 @@ pub fn build_tool_definition<T: schemars::JsonSchema>(name: &str, description: &
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::params::SearchIssuesParams;
+    use super::*;
 
     #[test]
     fn test_build_tool_definition() {
-        let tool = build_tool_definition::<SearchIssuesParams>(
-            "search_issues",
-            "Search for JIRA issues",
-        );
+        let tool =
+            build_tool_definition::<SearchIssuesParams>("search_issues", "Search for JIRA issues");
 
         assert_eq!(tool.name, "search_issues");
         assert_eq!(tool.description, Some("Search for JIRA issues".to_string()));

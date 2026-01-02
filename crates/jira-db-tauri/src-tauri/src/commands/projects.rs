@@ -47,9 +47,7 @@ pub async fn projects_initialize(
         username: settings.jira.username.clone(),
         api_key: settings.jira.api_key.clone(),
     };
-    let jira_client = Arc::new(
-        JiraApiClient::new(&jira_config).map_err(|e| e.to_string())?,
-    );
+    let jira_client = Arc::new(JiraApiClient::new(&jira_config).map_err(|e| e.to_string())?);
 
     // Create project repository
     let project_repo = Arc::new(DuckDbProjectRepository::new(db));
@@ -91,7 +89,10 @@ pub async fn projects_initialize(
         })
         .collect();
 
-    Ok(ProjectInitResponse { projects, new_count })
+    Ok(ProjectInitResponse {
+        projects,
+        new_count,
+    })
 }
 
 /// Enable project sync

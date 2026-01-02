@@ -5,7 +5,7 @@
 
 use std::sync::Arc;
 
-use actix_web::{web, App, HttpServer};
+use actix_web::{App, HttpServer, web};
 use anyhow::Result;
 use duckdb::Connection;
 use std::sync::Mutex;
@@ -16,7 +16,7 @@ use crate::config::McpConfig;
 use crate::handlers::RequestHandler;
 use crate::protocol::ProtocolError;
 use crate::tools::ToolRegistry;
-use crate::transport::http::{configure_routes, HttpState};
+use crate::transport::http::{HttpState, configure_routes};
 use crate::transport::{StdioTransport, Transport};
 
 /// MCP Server for JIRA Database
@@ -97,8 +97,7 @@ impl McpServer {
                 }
                 Err(ProtocolError::JsonParse(e)) => {
                     tracing::warn!("Failed to parse request: {}", e);
-                    let error_response =
-                        ProtocolError::JsonParse(e).to_error_response(None);
+                    let error_response = ProtocolError::JsonParse(e).to_error_response(None);
                     if let Ok(value) = serde_json::to_value(&error_response) {
                         if let Err(send_err) = transport.send_response(value).await {
                             tracing::error!("Failed to send error response: {}", send_err);

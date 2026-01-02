@@ -93,7 +93,10 @@ where
     }
 
     /// Generate embeddings for all issues in a project
-    pub async fn execute(&self, project_key: Option<&str>) -> DomainResult<EmbeddingGenerationResult> {
+    pub async fn execute(
+        &self,
+        project_key: Option<&str>,
+    ) -> DomainResult<EmbeddingGenerationResult> {
         let total_start = Instant::now();
         let mut timing = EmbeddingTiming::default();
 

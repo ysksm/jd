@@ -2,6 +2,7 @@ mod create_test_ticket;
 mod execute_sql;
 mod generate_embeddings;
 mod generate_report;
+mod generate_snapshots;
 mod get_change_history;
 mod get_project_metadata;
 mod search_issues;
@@ -15,6 +16,7 @@ pub use generate_embeddings::{
     GenerateEmbeddingsUseCase,
 };
 pub use generate_report::{GenerateReportUseCase, ReportData};
+pub use generate_snapshots::{GenerateSnapshotsUseCase, SnapshotGenerationResult};
 pub use get_change_history::GetChangeHistoryUseCase;
 pub use get_project_metadata::GetProjectMetadataUseCase;
 pub use search_issues::SearchIssuesUseCase;

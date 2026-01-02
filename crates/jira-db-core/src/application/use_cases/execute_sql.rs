@@ -13,9 +13,15 @@ fn is_whole_word(text: &str, keyword: &str) -> bool {
     let mut start = 0;
     while let Some(pos) = text[start..].find(keyword) {
         let abs_pos = start + pos;
-        let before_ok = abs_pos == 0 || !text.chars().nth(abs_pos - 1).unwrap_or(' ').is_alphanumeric();
+        let before_ok = abs_pos == 0
+            || !text
+                .chars()
+                .nth(abs_pos - 1)
+                .unwrap_or(' ')
+                .is_alphanumeric();
         let after_pos = abs_pos + keyword.len();
-        let after_ok = after_pos >= text.len() || !text.chars().nth(after_pos).unwrap_or(' ').is_alphanumeric();
+        let after_ok = after_pos >= text.len()
+            || !text.chars().nth(after_pos).unwrap_or(' ').is_alphanumeric();
 
         if before_ok && after_ok {
             return true;
@@ -144,9 +150,10 @@ impl ExecuteSqlUseCase {
                             }
                             duckdb::types::ValueRef::Date32(days) => {
                                 // Days since Unix epoch
-                                let date = chrono::NaiveDate::from_num_days_from_ce_opt(days + 719163)
-                                    .map(|d| d.to_string())
-                                    .unwrap_or_else(|| format!("date:{}", days));
+                                let date =
+                                    chrono::NaiveDate::from_num_days_from_ce_opt(days + 719163)
+                                        .map(|d| d.to_string())
+                                        .unwrap_or_else(|| format!("date:{}", days));
                                 serde_json::Value::String(date)
                             }
                             duckdb::types::ValueRef::Time64(unit, val) => {
@@ -299,7 +306,10 @@ mod tests {
 
         // Query that returns no rows
         let result = use_case
-            .execute("SELECT id, name, value FROM test_table WHERE id = 999", None)
+            .execute(
+                "SELECT id, name, value FROM test_table WHERE id = 999",
+                None,
+            )
             .expect("Query should succeed");
 
         // Should still have column names even with 0 rows
@@ -317,7 +327,10 @@ mod tests {
 
         // Should NOT match substrings within words
         assert!(!is_whole_word("SELECT updated_at FROM", "UPDATE"));
-        assert!(!is_whole_word("SELECT created_at, deleted_flag FROM", "DELETE"));
+        assert!(!is_whole_word(
+            "SELECT created_at, deleted_flag FROM",
+            "DELETE"
+        ));
         assert!(!is_whole_word("SELECT execution_time FROM", "EXEC"));
     }
 
@@ -328,6 +341,9 @@ mod tests {
 
         // Should allow columns like updated_at, created_at
         let result = use_case.execute("SELECT name AS updated_at FROM test_table", None);
-        assert!(result.is_ok(), "Query with 'updated_at' column should be allowed");
+        assert!(
+            result.is_ok(),
+            "Query with 'updated_at' column should be allowed"
+        );
     }
 }

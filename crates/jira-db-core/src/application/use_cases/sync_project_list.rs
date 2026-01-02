@@ -1,9 +1,9 @@
-use std::sync::Arc;
-use log::info;
 use crate::application::services::JiraService;
 use crate::domain::entities::Project;
 use crate::domain::error::DomainResult;
 use crate::domain::repositories::ProjectRepository;
+use log::info;
+use std::sync::Arc;
 
 pub struct SyncProjectListUseCase<P, J>
 where

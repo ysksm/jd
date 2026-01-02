@@ -1,7 +1,7 @@
-use std::sync::Arc;
 use crate::domain::entities::ChangeHistoryItem;
 use crate::domain::error::DomainResult;
 use crate::domain::repositories::ChangeHistoryRepository;
+use std::sync::Arc;
 
 pub struct GetChangeHistoryUseCase<C>
 where

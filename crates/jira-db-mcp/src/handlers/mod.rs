@@ -12,8 +12,8 @@ pub use tools::*;
 use serde_json::Value;
 
 use crate::protocol::{
-    methods, CallToolParams, InitializeParams, JsonRpcRequest, JsonRpcResponse,
-    ProtocolError, ProtocolResult, RequestId,
+    CallToolParams, InitializeParams, JsonRpcRequest, JsonRpcResponse, ProtocolError,
+    ProtocolResult, RequestId, methods,
 };
 use crate::tools::ToolRegistry;
 
@@ -42,19 +42,26 @@ impl RequestHandler {
 
         // Handle notifications (no response)
         if request.is_notification() {
-            self.handle_notification(&request.method, request.params).await?;
+            self.handle_notification(&request.method, request.params)
+                .await?;
             return Ok(None);
         }
 
         let id = request.id.unwrap();
-        let result = self.handle_request(&request.method, request.params, &id).await?;
+        let result = self
+            .handle_request(&request.method, request.params, &id)
+            .await?;
 
         let response = JsonRpcResponse::success(result, id);
         Ok(Some(serde_json::to_value(response)?))
     }
 
     /// Handle a notification (no response expected)
-    async fn handle_notification(&mut self, method: &str, _params: Option<Value>) -> ProtocolResult<()> {
+    async fn handle_notification(
+        &mut self,
+        method: &str,
+        _params: Option<Value>,
+    ) -> ProtocolResult<()> {
         match method {
             methods::INITIALIZED => {
                 tracing::info!("Client sent initialized notification");
@@ -85,7 +92,9 @@ impl RequestHandler {
                     .map(|p| serde_json::from_value(p))
                     .transpose()
                     .map_err(|e| ProtocolError::InvalidParams(e.to_string()))?
-                    .ok_or_else(|| ProtocolError::InvalidParams("Missing initialize params".to_string()))?;
+                    .ok_or_else(|| {
+                        ProtocolError::InvalidParams("Missing initialize params".to_string())
+                    })?;
 
                 let result = handle_initialize(params)?;
                 Ok(serde_json::to_value(result)?)
@@ -103,7 +112,9 @@ impl RequestHandler {
                     .map(|p| serde_json::from_value(p))
                     .transpose()
                     .map_err(|e| ProtocolError::InvalidParams(e.to_string()))?
-                    .ok_or_else(|| ProtocolError::InvalidParams("Missing tool call params".to_string()))?;
+                    .ok_or_else(|| {
+                        ProtocolError::InvalidParams("Missing tool call params".to_string())
+                    })?;
 
                 let result = handle_tool_call(&self.tool_registry, params).await?;
                 Ok(serde_json::to_value(result)?)

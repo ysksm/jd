@@ -6,12 +6,12 @@ mod commands;
 mod generated;
 mod state;
 
-use std::path::PathBuf;
 use state::AppState;
+use std::path::PathBuf;
 use tauri::Manager;
 
-/// Settings file path (same as CLI: ./settings.json in current directory)
-const SETTINGS_FILE: &str = "./settings.json";
+/// Settings file path (in data directory to avoid triggering file watcher during dev)
+const SETTINGS_FILE: &str = "./data/settings.json";
 
 /// Run the Tauri application
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -33,11 +33,17 @@ pub fn run() {
                         tracing::info!("Loaded existing settings from {:?}", settings_path);
                     }
                     Err(e) => {
-                        tracing::warn!("Failed to load settings: {}. Will need to reinitialize.", e);
+                        tracing::warn!(
+                            "Failed to load settings: {}. Will need to reinitialize.",
+                            e
+                        );
                     }
                 }
             } else {
-                tracing::info!("No settings file found at {:?}. Waiting for initialization.", settings_path);
+                tracing::info!(
+                    "No settings file found at {:?}. Waiting for initialization.",
+                    settings_path
+                );
                 // Store the path for later use when initializing
                 *state.settings_path.lock().unwrap() = Some(settings_path);
             }

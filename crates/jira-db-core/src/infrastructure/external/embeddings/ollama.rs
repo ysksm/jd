@@ -8,8 +8,8 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
-use crate::domain::error::{DomainError, DomainResult};
 use super::EmbeddingProvider;
+use crate::domain::error::{DomainError, DomainResult};
 
 /// Ollama embedding model configurations
 pub mod models {
@@ -98,7 +98,9 @@ impl OllamaEmbeddingClient {
         let client = Client::builder()
             .timeout(config.timeout)
             .build()
-            .map_err(|e| DomainError::ExternalService(format!("Failed to create HTTP client: {}", e)))?;
+            .map_err(|e| {
+                DomainError::ExternalService(format!("Failed to create HTTP client: {}", e))
+            })?;
 
         Ok(Self { client, config })
     }
@@ -155,10 +157,9 @@ impl EmbeddingProvider for OllamaEmbeddingClient {
             )));
         }
 
-        let response: OllamaEmbeddingResponse = response
-            .json()
-            .await
-            .map_err(|e| DomainError::ExternalService(format!("Failed to parse embedding response: {}", e)))?;
+        let response: OllamaEmbeddingResponse = response.json().await.map_err(|e| {
+            DomainError::ExternalService(format!("Failed to parse embedding response: {}", e))
+        })?;
 
         Ok(response.embedding)
     }

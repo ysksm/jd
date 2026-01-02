@@ -1,9 +1,9 @@
-use chrono::{DateTime, Utc};
-use duckdb::Connection;
-use std::sync::{Arc, Mutex};
 use crate::domain::entities::ChangeHistoryItem;
 use crate::domain::error::{DomainError, DomainResult};
 use crate::domain::repositories::ChangeHistoryRepository;
+use chrono::{DateTime, Utc};
+use duckdb::Connection;
+use std::sync::{Arc, Mutex};
 
 pub struct DuckDbChangeHistoryRepository {
     conn: Arc<Mutex<Connection>>,
@@ -47,7 +47,10 @@ impl ChangeHistoryRepository for DuckDbChangeHistoryRepository {
                     &item.changed_at.to_rfc3339(),
                     &now,
                 ],
-            ).map_err(|e| DomainError::Repository(format!("Failed to insert change history: {}", e)))?;
+            )
+            .map_err(|e| {
+                DomainError::Repository(format!("Failed to insert change history: {}", e))
+            })?;
         }
 
         Ok(())
@@ -58,7 +61,8 @@ impl ChangeHistoryRepository for DuckDbChangeHistoryRepository {
         conn.execute(
             "DELETE FROM issue_change_history WHERE issue_id = ?",
             duckdb::params![issue_id],
-        ).map_err(|e| DomainError::Repository(format!("Failed to delete change history: {}", e)))?;
+        )
+        .map_err(|e| DomainError::Repository(format!("Failed to delete change history: {}", e)))?;
         Ok(())
     }
 
@@ -206,7 +210,9 @@ impl ChangeHistoryRepository for DuckDbChangeHistoryRepository {
                 duckdb::params![issue_key],
                 |row| row.get(0),
             )
-            .map_err(|e| DomainError::Repository(format!("Failed to count change history: {}", e)))?;
+            .map_err(|e| {
+                DomainError::Repository(format!("Failed to count change history: {}", e))
+            })?;
 
         Ok(count as usize)
     }

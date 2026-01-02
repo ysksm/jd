@@ -25,6 +25,10 @@ pub trait MetadataRepository: Send + Sync {
     fn find_components_by_project(&self, project_id: &str) -> DomainResult<Vec<Component>>;
 
     // FixVersion operations
-    fn upsert_fix_versions(&self, project_id: &str, fix_versions: &[FixVersion]) -> DomainResult<()>;
+    fn upsert_fix_versions(
+        &self,
+        project_id: &str,
+        fix_versions: &[FixVersion],
+    ) -> DomainResult<()>;
     fn find_fix_versions_by_project(&self, project_id: &str) -> DomainResult<Vec<FixVersion>>;
 }

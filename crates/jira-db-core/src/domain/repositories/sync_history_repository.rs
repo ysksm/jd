@@ -1,5 +1,5 @@
-use chrono::{DateTime, Utc};
 use crate::domain::error::DomainResult;
+use chrono::{DateTime, Utc};
 
 /// Repository trait for SyncHistory entity
 /// Infrastructure layer will implement this trait
@@ -26,5 +26,8 @@ pub trait SyncHistoryRepository: Send + Sync {
         completed_at: DateTime<Utc>,
     ) -> DomainResult<()>;
 
-    fn find_latest_by_project(&self, project_id: &str) -> DomainResult<Option<(DateTime<Utc>, String)>>;
+    fn find_latest_by_project(
+        &self,
+        project_id: &str,
+    ) -> DomainResult<Option<(DateTime<Utc>, String)>>;
 }

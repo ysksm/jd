@@ -140,25 +140,20 @@ fn load_saved_queries() -> Vec<SavedQuery> {
 fn save_queries_to_file(queries: &[SavedQuery]) -> Result<(), String> {
     let json = serde_json::to_string_pretty(queries)
         .map_err(|e| format!("Failed to serialize queries: {}", e))?;
-    fs::write(SAVED_QUERIES_FILE, json)
-        .map_err(|e| format!("Failed to save queries: {}", e))?;
+    fs::write(SAVED_QUERIES_FILE, json).map_err(|e| format!("Failed to save queries: {}", e))?;
     Ok(())
 }
 
 /// List saved queries
 #[tauri::command]
-pub async fn sql_query_list(
-    _request: SqlQueryListRequest,
-) -> Result<SqlQueryListResponse, String> {
+pub async fn sql_query_list(_request: SqlQueryListRequest) -> Result<SqlQueryListResponse, String> {
     let queries = load_saved_queries();
     Ok(SqlQueryListResponse { queries })
 }
 
 /// Save a query
 #[tauri::command]
-pub async fn sql_query_save(
-    request: SqlQuerySaveRequest,
-) -> Result<SqlQuerySaveResponse, String> {
+pub async fn sql_query_save(request: SqlQuerySaveRequest) -> Result<SqlQuerySaveResponse, String> {
     let mut queries = load_saved_queries();
     let now = Utc::now();
 

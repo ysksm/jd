@@ -156,6 +156,32 @@ pub enum Commands {
         #[arg(long)]
         endpoint: Option<String>,
     },
+
+    /// Manage issue snapshots (historical versions)
+    Snapshots {
+        #[command(subcommand)]
+        action: SnapshotsAction,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum SnapshotsAction {
+    /// Generate snapshots for a project
+    Generate {
+        /// Project key
+        #[arg(short, long)]
+        project: String,
+    },
+
+    /// Show snapshots for an issue
+    Show {
+        /// Issue key (e.g., PROJ-123)
+        issue_key: String,
+
+        /// Show specific version
+        #[arg(short, long)]
+        version: Option<i32>,
+    },
 }
 
 #[derive(Subcommand)]

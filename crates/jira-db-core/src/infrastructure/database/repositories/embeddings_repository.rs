@@ -60,17 +60,13 @@ impl EmbeddingsRepository {
         conn.execute("INSTALL vss", []).map_err(|e| {
             DomainError::Repository(format!("Failed to install VSS extension: {}", e))
         })?;
-        conn.execute("LOAD vss", []).map_err(|e| {
-            DomainError::Repository(format!("Failed to load VSS extension: {}", e))
-        })?;
+        conn.execute("LOAD vss", [])
+            .map_err(|e| DomainError::Repository(format!("Failed to load VSS extension: {}", e)))?;
 
         // Enable experimental persistence for HNSW index
         conn.execute("SET hnsw_enable_experimental_persistence = true", [])
             .map_err(|e| {
-                DomainError::Repository(format!(
-                    "Failed to enable HNSW persistence: {}",
-                    e
-                ))
+                DomainError::Repository(format!("Failed to enable HNSW persistence: {}", e))
             })?;
 
         // Create embeddings table with ARRAY type for vectors
@@ -101,9 +97,7 @@ impl EmbeddingsRepository {
             "#,
             [],
         )
-        .map_err(|e| {
-            DomainError::Repository(format!("Failed to create HNSW index: {}", e))
-        })?;
+        .map_err(|e| DomainError::Repository(format!("Failed to create HNSW index: {}", e)))?;
 
         log::info!("Initialized embeddings schema with VSS extension");
         Ok(())
@@ -143,9 +137,7 @@ impl EmbeddingsRepository {
             "#,
             duckdb::params![issue_id, issue_key, embedding_str, embedded_text],
         )
-        .map_err(|e| {
-            DomainError::Repository(format!("Failed to upsert embedding: {}", e))
-        })?;
+        .map_err(|e| DomainError::Repository(format!("Failed to upsert embedding: {}", e)))?;
 
         Ok(())
     }
@@ -255,9 +247,7 @@ impl EmbeddingsRepository {
             .query_row("SELECT COUNT(*) FROM issue_embeddings", [], |row| {
                 row.get(0)
             })
-            .map_err(|e| {
-                DomainError::Repository(format!("Failed to count embeddings: {}", e))
-            })?;
+            .map_err(|e| DomainError::Repository(format!("Failed to count embeddings: {}", e)))?;
 
         Ok(count as usize)
     }
@@ -291,9 +281,7 @@ impl EmbeddingsRepository {
             "DELETE FROM issue_embeddings WHERE issue_id = ?",
             [issue_id],
         )
-        .map_err(|e| {
-            DomainError::Repository(format!("Failed to delete embedding: {}", e))
-        })?;
+        .map_err(|e| DomainError::Repository(format!("Failed to delete embedding: {}", e)))?;
 
         Ok(())
     }

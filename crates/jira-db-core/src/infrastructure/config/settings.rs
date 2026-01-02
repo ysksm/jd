@@ -1,8 +1,8 @@
+use crate::domain::error::{DomainError, DomainResult};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
-use crate::domain::error::{DomainError, DomainResult};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settings {
@@ -96,8 +96,9 @@ impl Settings {
 
     pub fn save<P: AsRef<Path>>(&self, path: P) -> DomainResult<()> {
         if let Some(parent) = path.as_ref().parent() {
-            fs::create_dir_all(parent)
-                .map_err(|e| DomainError::Repository(format!("Failed to create directory: {}", e)))?;
+            fs::create_dir_all(parent).map_err(|e| {
+                DomainError::Repository(format!("Failed to create directory: {}", e))
+            })?;
         }
 
         let content = serde_json::to_string_pretty(self)
@@ -112,8 +113,9 @@ impl Settings {
                 .map_err(|e| DomainError::Repository(format!("Failed to get metadata: {}", e)))?
                 .permissions();
             perms.set_mode(0o600);
-            fs::set_permissions(&path, perms)
-                .map_err(|e| DomainError::Repository(format!("Failed to set permissions: {}", e)))?;
+            fs::set_permissions(&path, perms).map_err(|e| {
+                DomainError::Repository(format!("Failed to set permissions: {}", e))
+            })?;
         }
 
         Ok(())
@@ -138,7 +140,7 @@ impl Settings {
     }
 
     pub fn default_path() -> DomainResult<PathBuf> {
-        Ok(PathBuf::from("./settings.json"))
+        Ok(PathBuf::from("./data/settings.json"))
     }
 
     pub fn exists<P: AsRef<Path>>(path: P) -> bool {

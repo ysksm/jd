@@ -6,7 +6,7 @@
 
 use std::sync::Arc;
 
-use actix_web::{web, HttpResponse, Responder};
+use actix_web::{HttpResponse, Responder, web};
 
 use crate::handlers::RequestHandler;
 use crate::protocol::{JsonRpcRequest, ProtocolError};
@@ -27,10 +27,7 @@ impl HttpState {
 }
 
 /// Handle raw JSON-RPC requests
-pub async fn handle_mcp_raw(
-    state: web::Data<Arc<HttpState>>,
-    body: web::Bytes,
-) -> impl Responder {
+pub async fn handle_mcp_raw(state: web::Data<Arc<HttpState>>, body: web::Bytes) -> impl Responder {
     // Parse the request
     let request: JsonRpcRequest = match serde_json::from_slice(&body) {
         Ok(req) => req,
@@ -82,7 +79,7 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::scope("/mcp")
             .route("", web::post().to(handle_mcp_raw))
-            .route("/", web::post().to(handle_mcp_raw))
+            .route("/", web::post().to(handle_mcp_raw)),
     )
     .route("/health", web::get().to(health_check))
     .route("/info", web::get().to(server_info));

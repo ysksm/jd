@@ -13,7 +13,7 @@ mod transport;
 use anyhow::{Context, Result};
 use clap::Parser;
 use std::path::PathBuf;
-use tracing_subscriber::{fmt, prelude::*, EnvFilter};
+use tracing_subscriber::{EnvFilter, fmt, prelude::*};
 
 use config::McpConfig;
 use server::McpServer;

@@ -119,14 +119,32 @@ where
         let mut issue_data_list = Vec::new();
 
         for issue in issues {
-            let status = issue.status.clone().unwrap_or_else(|| "Unknown".to_string());
-            let priority = issue.priority.clone().unwrap_or_else(|| "Unknown".to_string());
-            let assignee = issue.assignee.clone().unwrap_or_else(|| "Unassigned".to_string());
-            let issue_type = issue.issue_type.clone().unwrap_or_else(|| "Unknown".to_string());
-            let sprint = issue.sprint.clone().unwrap_or_else(|| "No Sprint".to_string());
+            let status = issue
+                .status
+                .clone()
+                .unwrap_or_else(|| "Unknown".to_string());
+            let priority = issue
+                .priority
+                .clone()
+                .unwrap_or_else(|| "Unknown".to_string());
+            let assignee = issue
+                .assignee
+                .clone()
+                .unwrap_or_else(|| "Unassigned".to_string());
+            let issue_type = issue
+                .issue_type
+                .clone()
+                .unwrap_or_else(|| "Unknown".to_string());
+            let sprint = issue
+                .sprint
+                .clone()
+                .unwrap_or_else(|| "No Sprint".to_string());
             let components = issue.components.clone().unwrap_or_default();
             let labels = issue.labels.clone().unwrap_or_default();
-            let reporter = issue.reporter.clone().unwrap_or_else(|| "Unknown".to_string());
+            let reporter = issue
+                .reporter
+                .clone()
+                .unwrap_or_else(|| "Unknown".to_string());
 
             *status_counts.entry(status.clone()).or_insert(0) += 1;
             *priority_counts.entry(priority.clone()).or_insert(0) += 1;
@@ -149,7 +167,9 @@ where
                     from_string: h.from_string.unwrap_or_else(|| "-".to_string()),
                     to_string: h.to_string.unwrap_or_else(|| "-".to_string()),
                     changed_at: h.changed_at,
-                    author: h.author_display_name.unwrap_or_else(|| "Unknown".to_string()),
+                    author: h
+                        .author_display_name
+                        .unwrap_or_else(|| "Unknown".to_string()),
                 })
                 .collect();
 
@@ -206,7 +226,8 @@ where
                     if to_status.contains("done")
                         || to_status.contains("closed")
                         || to_status.contains("resolved")
-                        || to_status.contains("complete") {
+                        || to_status.contains("complete")
+                    {
                         let date = change.changed_at.date_naive();
                         *resolved_by_date.entry(date).or_insert(0) += 1;
                         break; // Only count first resolution
@@ -252,7 +273,8 @@ where
         // Reduce data points if too many (keep weekly for long periods)
         if timeline.len() > 90 {
             let step = timeline.len() / 60;
-            timeline = timeline.into_iter()
+            timeline = timeline
+                .into_iter()
                 .enumerate()
                 .filter(|(i, _)| i % step == 0 || *i == 0)
                 .map(|(_, point)| point)

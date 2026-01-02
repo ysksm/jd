@@ -11,8 +11,8 @@ pub use cohere::{CohereConfig, CohereEmbeddingClient};
 pub use ollama::{OllamaConfig, OllamaEmbeddingClient};
 pub use openai::{EmbeddingConfig, EmbeddingResult, OpenAIEmbeddingClient};
 
-use async_trait::async_trait;
 use crate::domain::error::{DomainError, DomainResult};
+use async_trait::async_trait;
 
 /// Trait for embedding providers
 #[async_trait]
@@ -154,7 +154,9 @@ pub fn create_provider(config: ProviderConfig) -> DomainResult<Box<dyn Embedding
     match config.provider {
         EmbeddingProviderType::OpenAI => {
             // Check if using a local/custom endpoint
-            let is_local = config.endpoint.as_ref()
+            let is_local = config
+                .endpoint
+                .as_ref()
                 .map(|e| e.contains("localhost") || e.contains("127.0.0.1"))
                 .unwrap_or(false);
 
@@ -242,8 +244,7 @@ mod tests {
 
     #[test]
     fn test_provider_config() {
-        let config = ProviderConfig::openai("test-key")
-            .with_model("text-embedding-3-large");
+        let config = ProviderConfig::openai("test-key").with_model("text-embedding-3-large");
 
         assert_eq!(config.provider, EmbeddingProviderType::OpenAI);
         assert_eq!(config.api_key, Some("test-key".to_string()));

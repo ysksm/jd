@@ -1,35 +1,40 @@
-use std::sync::Arc;
-use chrono::Utc;
-use log::{info, warn};
 use crate::application::dto::SyncResult;
 use crate::application::services::JiraService;
+use crate::application::use_cases::GenerateSnapshotsUseCase;
 use crate::domain::entities::ChangeHistoryItem;
 use crate::domain::error::DomainResult;
 use crate::domain::repositories::{
-    ChangeHistoryRepository, IssueRepository, MetadataRepository, SyncHistoryRepository,
+    ChangeHistoryRepository, IssueRepository, IssueSnapshotRepository, MetadataRepository,
+    SyncHistoryRepository,
 };
+use chrono::Utc;
+use log::{info, warn};
+use std::sync::Arc;
 
-pub struct SyncProjectUseCase<I, C, M, S, J>
+pub struct SyncProjectUseCase<I, C, M, S, N, J>
 where
     I: IssueRepository,
     C: ChangeHistoryRepository,
     M: MetadataRepository,
     S: SyncHistoryRepository,
+    N: IssueSnapshotRepository,
     J: JiraService,
 {
     issue_repository: Arc<I>,
     change_history_repository: Arc<C>,
     metadata_repository: Arc<M>,
     sync_history_repository: Arc<S>,
+    snapshot_repository: Arc<N>,
     jira_service: Arc<J>,
 }
 
-impl<I, C, M, S, J> SyncProjectUseCase<I, C, M, S, J>
+impl<I, C, M, S, N, J> SyncProjectUseCase<I, C, M, S, N, J>
 where
     I: IssueRepository,
     C: ChangeHistoryRepository,
     M: MetadataRepository,
     S: SyncHistoryRepository,
+    N: IssueSnapshotRepository,
     J: JiraService,
 {
     pub fn new(
@@ -37,6 +42,7 @@ where
         change_history_repository: Arc<C>,
         metadata_repository: Arc<M>,
         sync_history_repository: Arc<S>,
+        snapshot_repository: Arc<N>,
         jira_service: Arc<J>,
     ) -> Self {
         Self {
@@ -44,6 +50,7 @@ where
             change_history_repository,
             metadata_repository,
             sync_history_repository,
+            snapshot_repository,
             jira_service,
         }
     }
@@ -59,8 +66,11 @@ where
         match self.sync_internal(project_key, project_id).await {
             Ok((issues_count, history_count)) => {
                 let completed_at = Utc::now();
-                self.sync_history_repository
-                    .update_completed(history_id, issues_count, completed_at)?;
+                self.sync_history_repository.update_completed(
+                    history_id,
+                    issues_count,
+                    completed_at,
+                )?;
 
                 info!(
                     "Successfully synced {} issues for project {}",
@@ -74,8 +84,11 @@ where
             }
             Err(e) => {
                 let completed_at = Utc::now();
-                self.sync_history_repository
-                    .update_failed(history_id, &e.to_string(), completed_at)?;
+                self.sync_history_repository.update_failed(
+                    history_id,
+                    &e.to_string(),
+                    completed_at,
+                )?;
                 Ok(SyncResult::failure(project_key.to_string(), e.to_string()))
             }
         }
@@ -117,7 +130,8 @@ where
                         issue.key,
                         history_items.len()
                     );
-                    self.change_history_repository.batch_insert(&history_items)?;
+                    self.change_history_repository
+                        .batch_insert(&history_items)?;
                     total_history_items += history_items.len();
                 }
             } else {
@@ -131,6 +145,25 @@ where
 
         // Fetch and save metadata
         self.sync_metadata(project_key, project_id).await?;
+
+        // Generate issue snapshots
+        info!("Generating issue snapshots...");
+        let snapshot_use_case = GenerateSnapshotsUseCase::new(
+            Arc::clone(&self.issue_repository),
+            Arc::clone(&self.change_history_repository),
+            Arc::clone(&self.snapshot_repository),
+        );
+        match snapshot_use_case.execute(project_key, project_id) {
+            Ok(result) => {
+                info!(
+                    "Generated {} snapshots for {} issues",
+                    result.snapshots_generated, result.issues_processed
+                );
+            }
+            Err(e) => {
+                warn!("Failed to generate snapshots: {}", e);
+            }
+        }
 
         Ok((count, total_history_items))
     }
@@ -163,7 +196,11 @@ where
         }
 
         // Fetch issue types
-        match self.jira_service.fetch_project_issue_types(project_id).await {
+        match self
+            .jira_service
+            .fetch_project_issue_types(project_id)
+            .await
+        {
             Ok(issue_types) => {
                 if !issue_types.is_empty() {
                     self.metadata_repository
@@ -187,7 +224,11 @@ where
         }
 
         // Fetch components
-        match self.jira_service.fetch_project_components(project_key).await {
+        match self
+            .jira_service
+            .fetch_project_components(project_key)
+            .await
+        {
             Ok(components) => {
                 if !components.is_empty() {
                     self.metadata_repository

@@ -4,7 +4,8 @@ pub fn generate_static_report(data: &ReportData) -> String {
     let mut html = String::new();
 
     // HTML header
-    html.push_str(&format!(r#"<!DOCTYPE html>
+    html.push_str(&format!(
+        r#"<!DOCTYPE html>
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
@@ -30,7 +31,8 @@ pub fn generate_static_report(data: &ReportData) -> String {
 
     // Project sections
     for project in &data.projects {
-        html.push_str(&format!(r#"
+        html.push_str(&format!(
+            r#"
         <section class="project-section">
             <h2 class="project-title">{} ({})</h2>
             <p class="issue-count">{} issues</p>
@@ -39,7 +41,11 @@ pub fn generate_static_report(data: &ReportData) -> String {
                 <div class="chart-box">
                     <h3>Status Distribution</h3>
                     <div class="bar-chart">
-"#, project.name, project.key, project.issues.len()));
+"#,
+            project.name,
+            project.key,
+            project.issues.len()
+        ));
 
         // Status distribution
         let total = project.issues.len() as f64;
@@ -49,23 +55,28 @@ pub fn generate_static_report(data: &ReportData) -> String {
         for (status, count) in sorted_statuses {
             let percentage = (*count as f64 / total * 100.0).round();
             let color = get_status_color(status);
-            html.push_str(&format!(r#"                        <div class="bar-item">
+            html.push_str(&format!(
+                r#"                        <div class="bar-item">
                             <span class="bar-label">{}</span>
                             <div class="bar-container">
                                 <div class="bar" style="width: {}%; background-color: {};"></div>
                             </div>
                             <span class="bar-value">{} ({}%)</span>
                         </div>
-"#, status, percentage, color, count, percentage as i32));
+"#,
+                status, percentage, color, count, percentage as i32
+            ));
         }
 
-        html.push_str(r#"                    </div>
+        html.push_str(
+            r#"                    </div>
                 </div>
 
                 <div class="chart-box">
                     <h3>Priority Distribution</h3>
                     <div class="bar-chart">
-"#);
+"#,
+        );
 
         // Priority distribution
         let mut sorted_priorities: Vec<_> = project.priority_counts.iter().collect();
@@ -74,23 +85,28 @@ pub fn generate_static_report(data: &ReportData) -> String {
         for (priority, count) in sorted_priorities {
             let percentage = (*count as f64 / total * 100.0).round();
             let color = get_priority_color(priority);
-            html.push_str(&format!(r#"                        <div class="bar-item">
+            html.push_str(&format!(
+                r#"                        <div class="bar-item">
                             <span class="bar-label">{}</span>
                             <div class="bar-container">
                                 <div class="bar" style="width: {}%; background-color: {};"></div>
                             </div>
                             <span class="bar-value">{} ({}%)</span>
                         </div>
-"#, priority, percentage, color, count, percentage as i32));
+"#,
+                priority, percentage, color, count, percentage as i32
+            ));
         }
 
-        html.push_str(r#"                    </div>
+        html.push_str(
+            r#"                    </div>
                 </div>
 
                 <div class="chart-box">
                     <h3>Assignee Distribution</h3>
                     <div class="bar-chart">
-"#);
+"#,
+        );
 
         // Assignee distribution
         let mut sorted_assignees: Vec<_> = project.assignee_counts.iter().collect();
@@ -108,13 +124,15 @@ pub fn generate_static_report(data: &ReportData) -> String {
 "#, assignee, percentage, count, percentage as i32));
         }
 
-        html.push_str(r#"                    </div>
+        html.push_str(
+            r#"                    </div>
                 </div>
 
                 <div class="chart-box">
                     <h3>Issue Type Distribution</h3>
                     <div class="bar-chart">
-"#);
+"#,
+        );
 
         // Issue type distribution
         let mut sorted_types: Vec<_> = project.issue_type_counts.iter().collect();
@@ -123,17 +141,21 @@ pub fn generate_static_report(data: &ReportData) -> String {
         for (issue_type, count) in sorted_types {
             let percentage = (*count as f64 / total * 100.0).round();
             let color = get_issue_type_color(issue_type);
-            html.push_str(&format!(r#"                        <div class="bar-item">
+            html.push_str(&format!(
+                r#"                        <div class="bar-item">
                             <span class="bar-label">{}</span>
                             <div class="bar-container">
                                 <div class="bar" style="width: {}%; background-color: {};"></div>
                             </div>
                             <span class="bar-value">{} ({}%)</span>
                         </div>
-"#, issue_type, percentage, color, count, percentage as i32));
+"#,
+                issue_type, percentage, color, count, percentage as i32
+            ));
         }
 
-        html.push_str(r#"                    </div>
+        html.push_str(
+            r#"                    </div>
                 </div>
             </div>
 
@@ -151,17 +173,20 @@ pub fn generate_static_report(data: &ReportData) -> String {
                     </tr>
                 </thead>
                 <tbody>
-"#);
+"#,
+        );
 
         // Issue list
         for issue in &project.issues {
-            let created = issue.created_date
+            let created = issue
+                .created_date
                 .map(|d| d.format("%Y-%m-%d").to_string())
                 .unwrap_or_else(|| "-".to_string());
             let status_class = get_status_class(&issue.status);
             let priority_class = get_priority_class(&issue.priority);
 
-            html.push_str(&format!(r#"                    <tr>
+            html.push_str(&format!(
+                r#"                    <tr>
                         <td class="issue-key">{}</td>
                         <td class="issue-summary">{}</td>
                         <td><span class="status-badge {}">{}</span></td>
@@ -183,21 +208,25 @@ pub fn generate_static_report(data: &ReportData) -> String {
             ));
         }
 
-        html.push_str(r#"                </tbody>
+        html.push_str(
+            r#"                </tbody>
             </table>
         </section>
-"#);
+"#,
+        );
     }
 
     // Footer
-    html.push_str(r#"
+    html.push_str(
+        r#"
         <footer class="footer">
             <p>Generated by jira-db</p>
         </footer>
     </div>
 </body>
 </html>
-"#);
+"#,
+    );
 
     html
 }
@@ -443,7 +472,13 @@ fn get_static_css() -> &'static str {
 
 fn get_status_color(status: &str) -> &'static str {
     match status.to_lowercase().as_str() {
-        s if s.contains("done") || s.contains("complete") || s.contains("closed") || s.contains("resolved") => "#36B37E",
+        s if s.contains("done")
+            || s.contains("complete")
+            || s.contains("closed")
+            || s.contains("resolved") =>
+        {
+            "#36B37E"
+        }
         s if s.contains("progress") || s.contains("active") => "#0052CC",
         s if s.contains("review") || s.contains("testing") => "#6554C0",
         s if s.contains("blocked") || s.contains("impediment") => "#FF5630",
@@ -475,7 +510,13 @@ fn get_issue_type_color(issue_type: &str) -> &'static str {
 
 fn get_status_class(status: &str) -> &'static str {
     match status.to_lowercase().as_str() {
-        s if s.contains("done") || s.contains("complete") || s.contains("closed") || s.contains("resolved") => "status-done",
+        s if s.contains("done")
+            || s.contains("complete")
+            || s.contains("closed")
+            || s.contains("resolved") =>
+        {
+            "status-done"
+        }
         s if s.contains("progress") || s.contains("active") => "status-inprogress",
         s if s.contains("review") || s.contains("testing") => "status-review",
         _ => "status-todo",
@@ -484,7 +525,9 @@ fn get_status_class(status: &str) -> &'static str {
 
 fn get_priority_class(priority: &str) -> &'static str {
     match priority.to_lowercase().as_str() {
-        s if s.contains("highest") || s.contains("blocker") || s.contains("critical") => "priority-highest",
+        s if s.contains("highest") || s.contains("blocker") || s.contains("critical") => {
+            "priority-highest"
+        }
         s if s.contains("high") || s.contains("major") => "priority-high",
         s if s.contains("medium") || s.contains("normal") => "priority-medium",
         s if s.contains("low") || s.contains("minor") => "priority-low",
