@@ -33,6 +33,16 @@ import {
   ReportGenerateResponse,
   SemanticSearchRequest,
   SemanticSearchResponse,
+  SqlExecuteRequest,
+  SqlExecuteResponse,
+  SqlGetSchemaRequest,
+  SqlGetSchemaResponse,
+  SqlQueryDeleteRequest,
+  SqlQueryDeleteResponse,
+  SqlQueryListRequest,
+  SqlQueryListResponse,
+  SqlQuerySaveRequest,
+  SqlQuerySaveResponse,
   SyncExecuteRequest,
   SyncExecuteResponse,
   SyncStatusRequest,
@@ -147,6 +157,35 @@ export class TauriApiService {
   /** Generate HTML report */
   reportsGenerate(request: ReportGenerateRequest): Observable<ReportGenerateResponse> {
     return from(invoke<ReportGenerateResponse>('reports_generate', { request }));
+  }
+
+  // ----------------------------------------
+  // SQL
+  // ----------------------------------------
+
+  /** Execute SQL query (read-only) */
+  sqlExecute(request: SqlExecuteRequest): Observable<SqlExecuteResponse> {
+    return from(invoke<SqlExecuteResponse>('sql_execute', { request }));
+  }
+
+  /** Get database schema */
+  sqlGetSchema(request: SqlGetSchemaRequest): Observable<SqlGetSchemaResponse> {
+    return from(invoke<SqlGetSchemaResponse>('sql_get_schema', { request }));
+  }
+
+  /** List saved queries */
+  sqlQueryList(request: SqlQueryListRequest): Observable<SqlQueryListResponse> {
+    return from(invoke<SqlQueryListResponse>('sql_query_list', { request }));
+  }
+
+  /** Save a query */
+  sqlQuerySave(request: SqlQuerySaveRequest): Observable<SqlQuerySaveResponse> {
+    return from(invoke<SqlQuerySaveResponse>('sql_query_save', { request }));
+  }
+
+  /** Delete a saved query */
+  sqlQueryDelete(request: SqlQueryDeleteRequest): Observable<SqlQueryDeleteResponse> {
+    return from(invoke<SqlQueryDeleteResponse>('sql_query_delete', { request }));
   }
 
 }

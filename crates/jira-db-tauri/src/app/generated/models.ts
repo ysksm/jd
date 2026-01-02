@@ -305,3 +305,72 @@ export interface ReportGenerateResponse {
   result: ReportResult;
 }
 
+// ============================================================
+// SQL Query Types
+// ============================================================
+
+export interface SavedQuery {
+  id: string;
+  name: string;
+  query: string;
+  description?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SqlColumn {
+  name: string;
+  dataType: string;
+  isNullable: boolean;
+}
+
+export interface SqlTable {
+  name: string;
+  columns?: SqlColumn[];
+}
+
+export interface SqlExecuteRequest {
+  query: string;
+  limit?: number;
+}
+
+export interface SqlExecuteResponse {
+  columns: string[];
+  rows: Record<string, unknown>[];
+  rowCount: number;
+  executionTimeMs: number;
+}
+
+export interface SqlGetSchemaRequest {
+  table?: string;
+}
+
+export interface SqlGetSchemaResponse {
+  tables: SqlTable[];
+}
+
+export interface SqlQueryListRequest {}
+
+export interface SqlQueryListResponse {
+  queries: SavedQuery[];
+}
+
+export interface SqlQuerySaveRequest {
+  id?: string;
+  name: string;
+  query: string;
+  description?: string;
+}
+
+export interface SqlQuerySaveResponse {
+  query: SavedQuery;
+}
+
+export interface SqlQueryDeleteRequest {
+  id: string;
+}
+
+export interface SqlQueryDeleteResponse {
+  success: boolean;
+}
+

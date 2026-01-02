@@ -1,0 +1,262 @@
+<div class="query-page">
+  <div class="query-header">
+    <h2>SQL Query</h2>
+    <div class="header-actions">
+      <button class="btn btn-secondary" (click)="newQuery()">New Query</button>
+      <button class="btn btn-secondary" (click)="openSaveModal()">
+        {{ editingQueryId() ? 'Update' : 'Save' }}
+      </button>
+      <button class="btn btn-secondary" (click)="toggleSchemaPanel()">
+        {{ showSchemaPanel() ? 'Hide Schema' : 'Show Schema' }}
+      </button>
+    </div>
+  </div>
+
+  @if (error()) {
+    <div class="alert alert-error">{{ error() }}</div>
+  }
+
+  @if (successMessage()) {
+    <div class="alert alert-success">{{ successMessage() }}</div>
+  }
+
+  <div class="query-container" [class.with-schema]="showSchemaPanel()">
+    <!-- Schema Panel (Left) -->
+    @if (showSchemaPanel()) {
+      <div class="schema-panel">
+        <div class="panel-section">
+          <h3>Saved Queries</h3>
+          @if (savedQueries().length === 0) {
+            <p class="empty-text">No saved queries</p>
+          } @else {
+            <ul class="saved-list">
+              @for (query of savedQueries(); track query.id) {
+                <li
+                  class="saved-item"
+                  [class.active]="editingQueryId() === query.id"
+                  (click)="loadQuery(query)"
+                >
+                  <span class="query-name">{{ query.name }}</span>
+                  <button class="delete-btn" (click)="deleteQuery(query, $event)" title="Delete">
+                    &times;
+                  </button>
+                </li>
+              }
+            </ul>
+          }
+        </div>
+
+        <div class="panel-section">
+          <h3>Tables</h3>
+          @if (schemaLoading()) {
+            <p class="loading-text">Loading...</p>
+          } @else if (tables().length === 0) {
+            <p class="empty-text">No tables found</p>
+          } @else {
+            <ul class="table-list">
+              @for (table of tables(); track table.name) {
+                <li
+                  class="table-item"
+                  [class.active]="selectedTable()?.name === table.name"
+                >
+                  <span class="table-name" (click)="loadTableColumns(table)">
+                    {{ table.name }}
+                  </span>
+                  <button
+                    class="insert-btn"
+                    (click)="insertTableName(table.name)"
+                    title="Insert table name"
+                  >
+                    +
+                  </button>
+                </li>
+              }
+            </ul>
+          }
+        </div>
+
+        @if (selectedTable()) {
+          <div class="panel-section">
+            <h3>Columns: {{ selectedTable()!.name }}</h3>
+            <ul class="column-list">
+              @for (column of tableColumns(); track column.name) {
+                <li class="column-item">
+                  <span class="column-info">
+                    <span class="column-name" (click)="insertColumnName(column.name)">
+                      {{ column.name }}
+                    </span>
+                    <span class="column-type">{{ column.dataType }}</span>
+                  </span>
+                </li>
+              }
+            </ul>
+          </div>
+        }
+      </div>
+    }
+
+    <!-- Main Query Area -->
+    <div class="query-main">
+      <!-- Query Editor -->
+      <div class="query-editor">
+        <div class="editor-header">
+          <span class="editor-title">
+            @if (editingQueryId()) {
+              Editing: {{ queryName() }}
+            } @else {
+              New Query
+            }
+          </span>
+          <span class="editor-hint">Ctrl+Enter to execute</span>
+        </div>
+        <textarea
+          class="sql-input"
+          [ngModel]="queryText()"
+          (ngModelChange)="queryText.set($event)"
+          (keydown)="onKeypress($event)"
+          placeholder="Enter your SQL query here..."
+          rows="6"
+        ></textarea>
+        <div class="editor-actions">
+          <button
+            class="btn btn-primary"
+            (click)="executeQuery()"
+            [disabled]="loading() || !queryText().trim()"
+          >
+            {{ loading() ? 'Executing...' : 'Execute' }}
+          </button>
+          <button class="btn btn-secondary" (click)="clearResults()">Clear Results</button>
+        </div>
+      </div>
+
+      <!-- Results Area -->
+      <div class="results-area">
+        <div class="results-tabs">
+          <button
+            class="tab-btn"
+            [class.active]="activeTab() === 'results'"
+            (click)="activeTab.set('results')"
+          >
+            Results
+            @if (hasResults()) {
+              <span class="badge">{{ rowCount() }}</span>
+            }
+          </button>
+          <button
+            class="tab-btn"
+            [class.active]="activeTab() === 'schema'"
+            (click)="activeTab.set('schema')"
+          >
+            Schema
+          </button>
+        </div>
+
+        @if (activeTab() === 'results') {
+          @if (loading()) {
+            <div class="loading">Executing query...</div>
+          } @else if (!hasResults()) {
+            <div class="empty-results">
+              <p>No results yet. Execute a query to see results.</p>
+            </div>
+          } @else {
+            <div class="results-info">
+              <span>{{ rowCount() }} rows returned in {{ executionTimeMs().toFixed(2) }}ms</span>
+            </div>
+            <div class="results-table-container">
+              <table class="results-table">
+                <thead>
+                  <tr>
+                    @for (col of columns(); track col) {
+                      <th>{{ col }}</th>
+                    }
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (row of rows(); track $index) {
+                    <tr>
+                      @for (col of columns(); track col) {
+                        <td [title]="formatValue(row[col])">{{ formatValue(row[col]) }}</td>
+                      }
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+        }
+
+        @if (activeTab() === 'schema') {
+          <div class="schema-view">
+            @if (selectedTable() && tableColumns().length > 0) {
+              <h4>{{ selectedTable()!.name }}</h4>
+              <table class="schema-table">
+                <thead>
+                  <tr>
+                    <th>Column</th>
+                    <th>Type</th>
+                    <th>Nullable</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (col of tableColumns(); track col.name) {
+                    <tr>
+                      <td>{{ col.name }}</td>
+                      <td>{{ col.dataType }}</td>
+                      <td>{{ col.isNullable ? 'Yes' : 'No' }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            } @else {
+              <p class="empty-text">Select a table from the schema panel to view its structure.</p>
+            }
+          </div>
+        }
+      </div>
+    </div>
+  </div>
+
+  <!-- Save Query Modal -->
+  @if (showSaveModal()) {
+    <div class="modal-overlay" (click)="closeSaveModal()">
+      <div class="modal-content" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <h3>{{ editingQueryId() ? 'Update Query' : 'Save Query' }}</h3>
+          <button class="close-btn" (click)="closeSaveModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="queryName">Name *</label>
+            <input
+              id="queryName"
+              type="text"
+              [ngModel]="queryName()"
+              (ngModelChange)="queryName.set($event)"
+              placeholder="Enter query name"
+            />
+          </div>
+          <div class="form-group">
+            <label for="queryDescription">Description</label>
+            <textarea
+              id="queryDescription"
+              [ngModel]="queryDescription()"
+              (ngModelChange)="queryDescription.set($event)"
+              placeholder="Optional description"
+              rows="3"
+            ></textarea>
+          </div>
+          <div class="form-group">
+            <label>Query Preview</label>
+            <pre class="query-preview">{{ queryText() }}</pre>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" (click)="closeSaveModal()">Cancel</button>
+          <button class="btn btn-primary" (click)="saveQuery()">
+            {{ editingQueryId() ? 'Update' : 'Save' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+</div>

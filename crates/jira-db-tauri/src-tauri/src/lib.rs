@@ -68,6 +68,12 @@ pub fn run() {
             commands::embeddings::embeddings_search,
             // Reports
             commands::reports::reports_generate,
+            // SQL
+            commands::sql::sql_execute,
+            commands::sql::sql_get_schema,
+            commands::sql::sql_query_list,
+            commands::sql::sql_query_save,
+            commands::sql::sql_query_delete,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
