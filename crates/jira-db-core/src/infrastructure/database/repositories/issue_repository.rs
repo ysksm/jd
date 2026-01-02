@@ -1,9 +1,9 @@
-use chrono::{DateTime, Utc};
-use duckdb::Connection;
-use std::sync::{Arc, Mutex};
 use crate::domain::entities::Issue;
 use crate::domain::error::{DomainError, DomainResult};
 use crate::domain::repositories::{IssueRepository, SearchParams};
+use chrono::{DateTime, Utc};
+use duckdb::Connection;
+use std::sync::{Arc, Mutex};
 
 pub struct DuckDbIssueRepository {
     conn: Arc<Mutex<Connection>>,
@@ -97,7 +97,8 @@ impl IssueRepository for DuckDbIssueRepository {
                     &now,
                     &now,
                 ],
-            ).map_err(|e| DomainError::Repository(format!("Failed to insert issue: {}", e)))?;
+            )
+            .map_err(|e| DomainError::Repository(format!("Failed to insert issue: {}", e)))?;
         }
 
         Ok(())
@@ -147,12 +148,16 @@ impl IssueRepository for DuckDbIssueRepository {
                     fix_versions,
                     sprint: row.get(14)?,
                     parent_key: row.get(15)?,
-                    created_date: row
-                        .get::<_, Option<String>>(16)?
-                        .and_then(|s| DateTime::parse_from_rfc3339(&s).ok().map(|dt| dt.with_timezone(&Utc))),
-                    updated_date: row
-                        .get::<_, Option<String>>(17)?
-                        .and_then(|s| DateTime::parse_from_rfc3339(&s).ok().map(|dt| dt.with_timezone(&Utc))),
+                    created_date: row.get::<_, Option<String>>(16)?.and_then(|s| {
+                        DateTime::parse_from_rfc3339(&s)
+                            .ok()
+                            .map(|dt| dt.with_timezone(&Utc))
+                    }),
+                    updated_date: row.get::<_, Option<String>>(17)?.and_then(|s| {
+                        DateTime::parse_from_rfc3339(&s)
+                            .ok()
+                            .map(|dt| dt.with_timezone(&Utc))
+                    }),
                     raw_json: None,
                 })
             })
@@ -269,12 +274,16 @@ impl IssueRepository for DuckDbIssueRepository {
                     fix_versions,
                     sprint: row.get(14)?,
                     parent_key: row.get(15)?,
-                    created_date: row
-                        .get::<_, Option<String>>(16)?
-                        .and_then(|s| DateTime::parse_from_rfc3339(&s).ok().map(|dt| dt.with_timezone(&Utc))),
-                    updated_date: row
-                        .get::<_, Option<String>>(17)?
-                        .and_then(|s| DateTime::parse_from_rfc3339(&s).ok().map(|dt| dt.with_timezone(&Utc))),
+                    created_date: row.get::<_, Option<String>>(16)?.and_then(|s| {
+                        DateTime::parse_from_rfc3339(&s)
+                            .ok()
+                            .map(|dt| dt.with_timezone(&Utc))
+                    }),
+                    updated_date: row.get::<_, Option<String>>(17)?.and_then(|s| {
+                        DateTime::parse_from_rfc3339(&s)
+                            .ok()
+                            .map(|dt| dt.with_timezone(&Utc))
+                    }),
                     raw_json: None,
                 })
             })

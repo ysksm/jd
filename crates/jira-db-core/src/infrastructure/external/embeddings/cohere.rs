@@ -8,8 +8,8 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
-use crate::domain::error::{DomainError, DomainResult};
 use super::EmbeddingProvider;
+use crate::domain::error::{DomainError, DomainResult};
 
 /// Cohere embedding model configurations
 #[allow(dead_code)]
@@ -158,7 +158,9 @@ impl CohereEmbeddingClient {
         let client = Client::builder()
             .timeout(config.timeout)
             .build()
-            .map_err(|e| DomainError::ExternalService(format!("Failed to create HTTP client: {}", e)))?;
+            .map_err(|e| {
+                DomainError::ExternalService(format!("Failed to create HTTP client: {}", e))
+            })?;
 
         Ok(Self { client, config })
     }
@@ -190,7 +192,9 @@ impl CohereEmbeddingClient {
             .json(&request)
             .send()
             .await
-            .map_err(|e| DomainError::ExternalService(format!("Failed to send embedding request: {}", e)))?;
+            .map_err(|e| {
+                DomainError::ExternalService(format!("Failed to send embedding request: {}", e))
+            })?;
 
         if !response.status().is_success() {
             let status = response.status();
@@ -204,10 +208,9 @@ impl CohereEmbeddingClient {
             )));
         }
 
-        let response: CohereEmbeddingResponse = response
-            .json()
-            .await
-            .map_err(|e| DomainError::ExternalService(format!("Failed to parse embedding response: {}", e)))?;
+        let response: CohereEmbeddingResponse = response.json().await.map_err(|e| {
+            DomainError::ExternalService(format!("Failed to parse embedding response: {}", e))
+        })?;
 
         Ok(response.embeddings)
     }

@@ -42,7 +42,11 @@ impl AppState {
     }
 
     /// Create new settings file and initialize
-    pub fn create_settings(&self, settings_path: PathBuf, settings: Settings) -> anyhow::Result<()> {
+    pub fn create_settings(
+        &self,
+        settings_path: PathBuf,
+        settings: Settings,
+    ) -> anyhow::Result<()> {
         // Save settings
         settings.save(&settings_path)?;
 

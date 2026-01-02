@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use base64::{engine::general_purpose, Engine as _};
+use base64::{Engine as _, engine::general_purpose};
 use log::warn;
 use std::time::Duration;
 use tokio::time::{sleep, timeout};
@@ -157,13 +157,9 @@ impl JiraService for JiraApiClient {
     async fn fetch_projects(&self) -> DomainResult<Vec<Project>> {
         let client = &self.client;
 
-        let projects = retry_with_backoff(
-            || async { jira_api::get_projects(client).await },
-            3,
-            30,
-        )
-        .await
-        .map_err(|e| DomainError::ExternalService(e.to_string()))?;
+        let projects = retry_with_backoff(|| async { jira_api::get_projects(client).await }, 3, 30)
+            .await
+            .map_err(|e| DomainError::ExternalService(e.to_string()))?;
 
         Ok(projects
             .into_iter()
@@ -223,10 +219,7 @@ impl JiraService for JiraApiClient {
                     {
                         let fields = &issue_json["fields"];
 
-                        let project_id = fields["project"]["id"]
-                            .as_str()
-                            .unwrap_or("")
-                            .to_string();
+                        let project_id = fields["project"]["id"].as_str().unwrap_or("").to_string();
 
                         let summary = fields["summary"].as_str().unwrap_or("").to_string();
 
@@ -236,11 +229,13 @@ impl JiraService for JiraApiClient {
 
                         let priority = fields["priority"]["name"].as_str().map(|s| s.to_string());
 
-                        let assignee =
-                            fields["assignee"]["displayName"].as_str().map(|s| s.to_string());
+                        let assignee = fields["assignee"]["displayName"]
+                            .as_str()
+                            .map(|s| s.to_string());
 
-                        let reporter =
-                            fields["reporter"]["displayName"].as_str().map(|s| s.to_string());
+                        let reporter = fields["reporter"]["displayName"]
+                            .as_str()
+                            .map(|s| s.to_string());
 
                         let issue_type =
                             fields["issuetype"]["name"].as_str().map(|s| s.to_string());
@@ -248,23 +243,32 @@ impl JiraService for JiraApiClient {
                         let resolution =
                             fields["resolution"]["name"].as_str().map(|s| s.to_string());
 
-                        let labels = fields["labels"].as_array().map(|arr| {
-                            arr.iter()
-                                .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                                .collect::<Vec<String>>()
-                        }).filter(|v| !v.is_empty());
+                        let labels = fields["labels"]
+                            .as_array()
+                            .map(|arr| {
+                                arr.iter()
+                                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                                    .collect::<Vec<String>>()
+                            })
+                            .filter(|v| !v.is_empty());
 
-                        let components = fields["components"].as_array().map(|arr| {
-                            arr.iter()
-                                .filter_map(|v| v["name"].as_str().map(|s| s.to_string()))
-                                .collect::<Vec<String>>()
-                        }).filter(|v| !v.is_empty());
+                        let components = fields["components"]
+                            .as_array()
+                            .map(|arr| {
+                                arr.iter()
+                                    .filter_map(|v| v["name"].as_str().map(|s| s.to_string()))
+                                    .collect::<Vec<String>>()
+                            })
+                            .filter(|v| !v.is_empty());
 
-                        let fix_versions = fields["fixVersions"].as_array().map(|arr| {
-                            arr.iter()
-                                .filter_map(|v| v["name"].as_str().map(|s| s.to_string()))
-                                .collect::<Vec<String>>()
-                        }).filter(|v| !v.is_empty());
+                        let fix_versions = fields["fixVersions"]
+                            .as_array()
+                            .map(|arr| {
+                                arr.iter()
+                                    .filter_map(|v| v["name"].as_str().map(|s| s.to_string()))
+                                    .collect::<Vec<String>>()
+                            })
+                            .filter(|v| !v.is_empty());
 
                         // Extract sprint - JIRA stores sprints in customfield_10020 or similar
                         // Sprint can be an array of sprint objects with "name" field
@@ -323,13 +327,9 @@ impl JiraService for JiraApiClient {
     async fn test_connection(&self) -> DomainResult<()> {
         let client = &self.client;
 
-        retry_with_backoff(
-            || async { jira_api::get_projects(client).await },
-            2,
-            15,
-        )
-        .await
-        .map_err(|e| DomainError::ExternalService(format!("Connection test failed: {}", e)))?;
+        retry_with_backoff(|| async { jira_api::get_projects(client).await }, 2, 15)
+            .await
+            .map_err(|e| DomainError::ExternalService(format!("Connection test failed: {}", e)))?;
 
         Ok(())
     }
@@ -487,17 +487,16 @@ impl JiraService for JiraApiClient {
             .header("Accept", "application/json")
             .send()
             .await
-            .map_err(|e| {
-                DomainError::ExternalService(format!("Failed to fetch labels: {}", e))
-            })?;
+            .map_err(|e| DomainError::ExternalService(format!("Failed to fetch labels: {}", e)))?;
 
         if !response.status().is_success() {
             return Ok(Vec::new());
         }
 
-        let json: serde_json::Value = response.json().await.map_err(|e| {
-            DomainError::ExternalService(format!("Failed to parse labels: {}", e))
-        })?;
+        let json: serde_json::Value = response
+            .json()
+            .await
+            .map_err(|e| DomainError::ExternalService(format!("Failed to parse labels: {}", e)))?;
 
         let mut label_set = std::collections::HashSet::new();
         if let Some(issues) = json["issues"].as_array() {
@@ -661,9 +660,7 @@ impl JiraService for JiraApiClient {
             .json(&body)
             .send()
             .await
-            .map_err(|e| {
-                DomainError::ExternalService(format!("Failed to create issue: {}", e))
-            })?;
+            .map_err(|e| DomainError::ExternalService(format!("Failed to create issue: {}", e)))?;
 
         if !response.status().is_success() {
             let status = response.status();

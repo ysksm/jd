@@ -1,9 +1,9 @@
-use async_trait::async_trait;
 use crate::application::dto::CreatedIssueDto;
 use crate::domain::entities::{
     Component, FixVersion, Issue, IssueType, Label, Priority, Project, Status,
 };
 use crate::domain::error::DomainResult;
+use async_trait::async_trait;
 
 /// Service trait for JIRA API operations
 /// Infrastructure layer will implement this trait (DIP)

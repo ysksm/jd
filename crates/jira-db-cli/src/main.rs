@@ -111,7 +111,13 @@ async fn run() -> DomainResult<()> {
             count,
         } => {
             handler
-                .handle_test_ticket(&project, &summary, description.as_deref(), &issue_type, count)
+                .handle_test_ticket(
+                    &project,
+                    &summary,
+                    description.as_deref(),
+                    &issue_type,
+                    count,
+                )
                 .await?;
         }
         Commands::Config { action } => match action {
@@ -268,7 +274,7 @@ async fn handle_embeddings_command(
     };
     use jira_db_core::infrastructure::database::EmbeddingsRepository;
     use jira_db_core::infrastructure::external::embeddings::{
-        create_provider, EmbeddingProviderType, ProviderConfig,
+        EmbeddingProviderType, ProviderConfig, create_provider,
     };
 
     // Determine provider type (CLI > settings > default)
@@ -279,13 +285,14 @@ async fn handle_embeddings_command(
     let provider_type: EmbeddingProviderType = provider_str.parse()?;
 
     // Get model (CLI > settings > provider default)
-    let model = cli_model.or_else(|| {
-        settings.embeddings.as_ref().map(|e| e.model.clone())
-    });
+    let model = cli_model.or_else(|| settings.embeddings.as_ref().map(|e| e.model.clone()));
 
     // Get endpoint (CLI > settings)
     let endpoint = cli_endpoint.or_else(|| {
-        settings.embeddings.as_ref().and_then(|e| e.endpoint.clone())
+        settings
+            .embeddings
+            .as_ref()
+            .and_then(|e| e.endpoint.clone())
     });
 
     // Get API key from settings or environment
@@ -347,9 +354,18 @@ async fn handle_embeddings_command(
     println!("  Errors:              {}", result.errors);
     println!("  Total time:          {:.2}s", result.duration_secs);
     println!("\nTiming breakdown:");
-    println!("  Fetch issues:        {:.2}s", result.timing.fetch_issues_secs);
-    println!("  Embedding API:       {:.2}s", result.timing.embedding_api_secs);
-    println!("  Store embeddings:    {:.2}s", result.timing.store_embeddings_secs);
+    println!(
+        "  Fetch issues:        {:.2}s",
+        result.timing.fetch_issues_secs
+    );
+    println!(
+        "  Embedding API:       {:.2}s",
+        result.timing.embedding_api_secs
+    );
+    println!(
+        "  Store embeddings:    {:.2}s",
+        result.timing.store_embeddings_secs
+    );
 
     Ok(())
 }

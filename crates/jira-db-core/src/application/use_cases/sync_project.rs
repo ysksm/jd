@@ -1,6 +1,3 @@
-use std::sync::Arc;
-use chrono::Utc;
-use log::{info, warn};
 use crate::application::dto::SyncResult;
 use crate::application::services::JiraService;
 use crate::application::use_cases::GenerateSnapshotsUseCase;
@@ -10,6 +7,9 @@ use crate::domain::repositories::{
     ChangeHistoryRepository, IssueRepository, IssueSnapshotRepository, MetadataRepository,
     SyncHistoryRepository,
 };
+use chrono::Utc;
+use log::{info, warn};
+use std::sync::Arc;
 
 pub struct SyncProjectUseCase<I, C, M, S, N, J>
 where
@@ -66,8 +66,11 @@ where
         match self.sync_internal(project_key, project_id).await {
             Ok((issues_count, history_count)) => {
                 let completed_at = Utc::now();
-                self.sync_history_repository
-                    .update_completed(history_id, issues_count, completed_at)?;
+                self.sync_history_repository.update_completed(
+                    history_id,
+                    issues_count,
+                    completed_at,
+                )?;
 
                 info!(
                     "Successfully synced {} issues for project {}",
@@ -81,8 +84,11 @@ where
             }
             Err(e) => {
                 let completed_at = Utc::now();
-                self.sync_history_repository
-                    .update_failed(history_id, &e.to_string(), completed_at)?;
+                self.sync_history_repository.update_failed(
+                    history_id,
+                    &e.to_string(),
+                    completed_at,
+                )?;
                 Ok(SyncResult::failure(project_key.to_string(), e.to_string()))
             }
         }
@@ -124,7 +130,8 @@ where
                         issue.key,
                         history_items.len()
                     );
-                    self.change_history_repository.batch_insert(&history_items)?;
+                    self.change_history_repository
+                        .batch_insert(&history_items)?;
                     total_history_items += history_items.len();
                 }
             } else {
@@ -189,7 +196,11 @@ where
         }
 
         // Fetch issue types
-        match self.jira_service.fetch_project_issue_types(project_id).await {
+        match self
+            .jira_service
+            .fetch_project_issue_types(project_id)
+            .await
+        {
             Ok(issue_types) => {
                 if !issue_types.is_empty() {
                     self.metadata_repository
@@ -213,7 +224,11 @@ where
         }
 
         // Fetch components
-        match self.jira_service.fetch_project_components(project_key).await {
+        match self
+            .jira_service
+            .fetch_project_components(project_key)
+            .await
+        {
             Ok(components) => {
                 if !components.is_empty() {
                     self.metadata_repository

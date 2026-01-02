@@ -1,8 +1,8 @@
+use super::schema::Schema;
+use crate::domain::error::{DomainError, DomainResult};
 use duckdb::Connection;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
-use crate::domain::error::{DomainError, DomainResult};
-use super::schema::Schema;
 
 /// Type alias for the database connection handle
 pub type DbConnection = Arc<Mutex<Connection>>;
@@ -16,8 +16,9 @@ impl Database {
     pub fn new<P: AsRef<Path>>(path: P) -> DomainResult<Self> {
         // Create parent directory if it doesn't exist
         if let Some(parent) = path.as_ref().parent() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| DomainError::Repository(format!("Failed to create database directory: {}", e)))?;
+            std::fs::create_dir_all(parent).map_err(|e| {
+                DomainError::Repository(format!("Failed to create database directory: {}", e))
+            })?;
         }
 
         let conn = Connection::open(path)

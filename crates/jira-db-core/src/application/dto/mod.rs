@@ -1,5 +1,5 @@
-mod sync_result;
 mod created_issue;
+mod sync_result;
 
-pub use sync_result::SyncResult;
 pub use created_issue::CreatedIssueDto;
+pub use sync_result::SyncResult;

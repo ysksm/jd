@@ -1,6 +1,8 @@
 //! Tool-related handlers
 
-use crate::protocol::{CallToolParams, CallToolResult, ListToolsResult, ProtocolError, ProtocolResult};
+use crate::protocol::{
+    CallToolParams, CallToolResult, ListToolsResult, ProtocolError, ProtocolResult,
+};
 use crate::tools::ToolRegistry;
 
 /// Handle tools/list request

@@ -15,11 +15,10 @@ pub mod report;
 pub use application::dto::{CreatedIssueDto, SyncResult};
 pub use application::services::JiraService;
 pub use application::use_cases::{
-    CreateTestTicketUseCase, EmbeddingGenerationConfig, EmbeddingGenerationResult,
-    EmbeddingTiming, ExecuteSqlUseCase, GenerateEmbeddingsUseCase, GenerateReportUseCase,
-    GenerateSnapshotsUseCase, GetChangeHistoryUseCase, GetProjectMetadataUseCase, ReportData,
-    SearchIssuesUseCase, SnapshotGenerationResult, SqlResult, SyncProjectListUseCase,
-    SyncProjectUseCase,
+    CreateTestTicketUseCase, EmbeddingGenerationConfig, EmbeddingGenerationResult, EmbeddingTiming,
+    ExecuteSqlUseCase, GenerateEmbeddingsUseCase, GenerateReportUseCase, GenerateSnapshotsUseCase,
+    GetChangeHistoryUseCase, GetProjectMetadataUseCase, ReportData, SearchIssuesUseCase,
+    SnapshotGenerationResult, SqlResult, SyncProjectListUseCase, SyncProjectUseCase,
 };
 
 pub use domain::entities::{
@@ -32,16 +31,18 @@ pub use domain::repositories::{
     ProjectRepository, SearchParams, SyncHistoryRepository,
 };
 
-pub use infrastructure::config::{DatabaseConfig, EmbeddingsConfig, JiraConfig, ProjectConfig, Settings};
+pub use infrastructure::config::{
+    DatabaseConfig, EmbeddingsConfig, JiraConfig, ProjectConfig, Settings,
+};
 pub use infrastructure::database::{
     Database, DbConnection, DuckDbChangeHistoryRepository, DuckDbIssueRepository,
     DuckDbIssueSnapshotRepository, DuckDbMetadataRepository, DuckDbProjectRepository,
     DuckDbSyncHistoryRepository, EmbeddingsRepository, SemanticSearchResult,
 };
 pub use infrastructure::external::embeddings::{
-    create_provider, CohereConfig, CohereEmbeddingClient, EmbeddingConfig, EmbeddingProvider,
-    EmbeddingProviderType, EmbeddingResult, OllamaConfig, OllamaEmbeddingClient,
-    OpenAIEmbeddingClient, ProviderConfig,
+    CohereConfig, CohereEmbeddingClient, EmbeddingConfig, EmbeddingProvider, EmbeddingProviderType,
+    EmbeddingResult, OllamaConfig, OllamaEmbeddingClient, OpenAIEmbeddingClient, ProviderConfig,
+    create_provider,
 };
 pub use infrastructure::external::jira::JiraApiClient;
 

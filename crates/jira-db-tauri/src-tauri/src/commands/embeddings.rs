@@ -4,9 +4,8 @@ use std::sync::Arc;
 use tauri::State;
 
 use jira_db_core::{
-    create_provider, DuckDbIssueRepository, EmbeddingGenerationConfig, EmbeddingProviderType,
-    EmbeddingsRepository, GenerateEmbeddingsUseCase, ProviderConfig, SearchIssuesUseCase,
-    SearchParams,
+    DuckDbIssueRepository, EmbeddingGenerationConfig, EmbeddingProviderType, EmbeddingsRepository,
+    GenerateEmbeddingsUseCase, ProviderConfig, SearchIssuesUseCase, SearchParams, create_provider,
 };
 
 use crate::generated::*;
@@ -50,8 +49,7 @@ pub async fn embeddings_generate(
     };
 
     // Create embedding provider (not async)
-    let embedding_provider =
-        Arc::new(create_provider(provider_config).map_err(|e| e.to_string())?);
+    let embedding_provider = Arc::new(create_provider(provider_config).map_err(|e| e.to_string())?);
 
     // Create repositories
     let issue_repo = Arc::new(DuckDbIssueRepository::new(db.clone()));
@@ -64,12 +62,8 @@ pub async fn embeddings_generate(
     };
 
     // Create use case
-    let use_case = GenerateEmbeddingsUseCase::new(
-        issue_repo,
-        embeddings_repo,
-        embedding_provider,
-        config,
-    );
+    let use_case =
+        GenerateEmbeddingsUseCase::new(issue_repo, embeddings_repo, embedding_provider, config);
 
     // Execute with optional project key filter
     let result = use_case

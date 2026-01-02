@@ -58,7 +58,11 @@ where
     }
 
     /// Generate snapshots for all issues in a project
-    pub fn execute(&self, project_key: &str, project_id: &str) -> DomainResult<SnapshotGenerationResult> {
+    pub fn execute(
+        &self,
+        project_key: &str,
+        project_id: &str,
+    ) -> DomainResult<SnapshotGenerationResult> {
         info!("Generating snapshots for project: {}", project_key);
 
         let issues = self.issue_repository.find_by_project(project_id)?;
@@ -90,7 +94,9 @@ where
 
     /// Generate snapshots for a single issue
     fn generate_snapshots_for_issue(&self, issue: &Issue) -> DomainResult<Vec<IssueSnapshot>> {
-        let history = self.change_history_repository.find_by_issue_key(&issue.key)?;
+        let history = self
+            .change_history_repository
+            .find_by_issue_key(&issue.key)?;
 
         // Group changes by timestamp (same history entry may have multiple field changes)
         let grouped_changes = self.group_changes_by_timestamp(&history);
@@ -122,25 +128,58 @@ where
             1,
             issue_created,
             Some(first_change_time),
-            current_state.get("summary").cloned().unwrap_or_else(|| issue.summary.clone()),
-            current_state.get("description").cloned().or_else(|| issue.description.clone()),
-            current_state.get("status").cloned().or_else(|| issue.status.clone()),
-            current_state.get("priority").cloned().or_else(|| issue.priority.clone()),
-            current_state.get("assignee").cloned().or_else(|| issue.assignee.clone()),
-            current_state.get("reporter").cloned().or_else(|| issue.reporter.clone()),
-            current_state.get("issuetype").cloned().or_else(|| issue.issue_type.clone()),
-            current_state.get("resolution").cloned().or_else(|| issue.resolution.clone()),
+            current_state
+                .get("summary")
+                .cloned()
+                .unwrap_or_else(|| issue.summary.clone()),
+            current_state
+                .get("description")
+                .cloned()
+                .or_else(|| issue.description.clone()),
+            current_state
+                .get("status")
+                .cloned()
+                .or_else(|| issue.status.clone()),
+            current_state
+                .get("priority")
+                .cloned()
+                .or_else(|| issue.priority.clone()),
+            current_state
+                .get("assignee")
+                .cloned()
+                .or_else(|| issue.assignee.clone()),
+            current_state
+                .get("reporter")
+                .cloned()
+                .or_else(|| issue.reporter.clone()),
+            current_state
+                .get("issuetype")
+                .cloned()
+                .or_else(|| issue.issue_type.clone()),
+            current_state
+                .get("resolution")
+                .cloned()
+                .or_else(|| issue.resolution.clone()),
             issue.labels.clone(),
             issue.components.clone(),
             issue.fix_versions.clone(),
-            current_state.get("sprint").cloned().or_else(|| issue.sprint.clone()),
-            current_state.get("parent").cloned().or_else(|| issue.parent_key.clone()),
+            current_state
+                .get("sprint")
+                .cloned()
+                .or_else(|| issue.sprint.clone()),
+            current_state
+                .get("parent")
+                .cloned()
+                .or_else(|| issue.parent_key.clone()),
         );
         snapshots.push(snapshot);
 
         // Apply each change to create subsequent snapshots
         for (i, &change_time) in timestamps.iter().enumerate() {
-            let changes = grouped_changes.get(&change_time).unwrap();
+            let Some(changes) = grouped_changes.get(&change_time) else {
+                // This should never happen, but skip gracefully if it does
+                continue;
+            };
 
             // Apply changes to current state
             for change in changes {
@@ -169,19 +208,49 @@ where
                 version,
                 change_time,
                 valid_to,
-                current_state.get("summary").cloned().unwrap_or_else(|| issue.summary.clone()),
-                current_state.get("description").cloned().or_else(|| issue.description.clone()),
-                current_state.get("status").cloned().or_else(|| issue.status.clone()),
-                current_state.get("priority").cloned().or_else(|| issue.priority.clone()),
-                current_state.get("assignee").cloned().or_else(|| issue.assignee.clone()),
-                current_state.get("reporter").cloned().or_else(|| issue.reporter.clone()),
-                current_state.get("issuetype").cloned().or_else(|| issue.issue_type.clone()),
-                current_state.get("resolution").cloned().or_else(|| issue.resolution.clone()),
+                current_state
+                    .get("summary")
+                    .cloned()
+                    .unwrap_or_else(|| issue.summary.clone()),
+                current_state
+                    .get("description")
+                    .cloned()
+                    .or_else(|| issue.description.clone()),
+                current_state
+                    .get("status")
+                    .cloned()
+                    .or_else(|| issue.status.clone()),
+                current_state
+                    .get("priority")
+                    .cloned()
+                    .or_else(|| issue.priority.clone()),
+                current_state
+                    .get("assignee")
+                    .cloned()
+                    .or_else(|| issue.assignee.clone()),
+                current_state
+                    .get("reporter")
+                    .cloned()
+                    .or_else(|| issue.reporter.clone()),
+                current_state
+                    .get("issuetype")
+                    .cloned()
+                    .or_else(|| issue.issue_type.clone()),
+                current_state
+                    .get("resolution")
+                    .cloned()
+                    .or_else(|| issue.resolution.clone()),
                 issue.labels.clone(),
                 issue.components.clone(),
                 issue.fix_versions.clone(),
-                current_state.get("sprint").cloned().or_else(|| issue.sprint.clone()),
-                current_state.get("parent").cloned().or_else(|| issue.parent_key.clone()),
+                current_state
+                    .get("sprint")
+                    .cloned()
+                    .or_else(|| issue.sprint.clone()),
+                current_state
+                    .get("parent")
+                    .cloned()
+                    .or_else(|| issue.parent_key.clone()),
             );
             snapshots.push(snapshot);
         }

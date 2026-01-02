@@ -1,7 +1,7 @@
-use std::sync::Arc;
 use crate::domain::entities::Issue;
 use crate::domain::error::DomainResult;
 use crate::domain::repositories::{IssueRepository, SearchParams};
+use std::sync::Arc;
 
 pub struct SearchIssuesUseCase<I>
 where

@@ -5,8 +5,8 @@ use std::sync::Arc;
 use tauri::State;
 
 use jira_db_core::{
-    generate_interactive_report, generate_static_report, DuckDbChangeHistoryRepository,
-    DuckDbIssueRepository, GenerateReportUseCase,
+    DuckDbChangeHistoryRepository, DuckDbIssueRepository, GenerateReportUseCase,
+    generate_interactive_report, generate_static_report,
 };
 
 use crate::generated::*;
@@ -57,18 +57,15 @@ pub async fn reports_generate(
     let report_data = use_case.execute(&project_keys).map_err(|e| e.to_string())?;
 
     // Determine output path
-    let output_path = request
-        .output_path
-        .map(PathBuf::from)
-        .unwrap_or_else(|| {
-            let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
-            let suffix = if request.interactive.unwrap_or(false) {
-                "interactive"
-            } else {
-                "static"
-            };
-            PathBuf::from(format!("jira_report_{}_{}.html", suffix, timestamp))
-        });
+    let output_path = request.output_path.map(PathBuf::from).unwrap_or_else(|| {
+        let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
+        let suffix = if request.interactive.unwrap_or(false) {
+            "interactive"
+        } else {
+            "static"
+        };
+        PathBuf::from(format!("jira_report_{}_{}.html", suffix, timestamp))
+    });
 
     // Generate HTML - these functions return String directly, not Result
     let html_content = if request.interactive.unwrap_or(false) {

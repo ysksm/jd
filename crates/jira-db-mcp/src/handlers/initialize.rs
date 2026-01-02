@@ -1,8 +1,8 @@
 //! Initialize handler
 
 use crate::protocol::{
-    InitializeParams, InitializeResult, ProtocolResult, ServerCapabilities,
-    ServerInfo, ToolsCapability, MCP_PROTOCOL_VERSION,
+    InitializeParams, InitializeResult, MCP_PROTOCOL_VERSION, ProtocolResult, ServerCapabilities,
+    ServerInfo, ToolsCapability,
 };
 
 /// Package version from Cargo.toml

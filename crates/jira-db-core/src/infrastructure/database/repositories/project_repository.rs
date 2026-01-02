@@ -1,9 +1,9 @@
-use chrono::Utc;
-use duckdb::Connection;
-use std::sync::{Arc, Mutex};
 use crate::domain::entities::Project;
 use crate::domain::error::{DomainError, DomainResult};
 use crate::domain::repositories::ProjectRepository;
+use chrono::Utc;
+use duckdb::Connection;
+use std::sync::{Arc, Mutex};
 
 pub struct DuckDbProjectRepository {
     conn: Arc<Mutex<Connection>>,
@@ -35,12 +35,14 @@ impl ProjectRepository for DuckDbProjectRepository {
                 &project.key,
                 &project.name,
                 &project.description,
-                &serde_json::to_string(&project).map_err(|e| DomainError::Repository(e.to_string()))?,
+                &serde_json::to_string(&project)
+                    .map_err(|e| DomainError::Repository(e.to_string()))?,
                 &now,
                 &now,
                 &now,
             ],
-        ).map_err(|e| DomainError::Repository(format!("Failed to insert project: {}", e)))?;
+        )
+        .map_err(|e| DomainError::Repository(format!("Failed to insert project: {}", e)))?;
         Ok(())
     }
 
@@ -54,12 +56,23 @@ impl ProjectRepository for DuckDbProjectRepository {
             .query(duckdb::params![key])
             .map_err(|e| DomainError::Repository(format!("Failed to execute query: {}", e)))?;
 
-        if let Some(row) = rows.next().map_err(|e| DomainError::Repository(e.to_string()))? {
+        if let Some(row) = rows
+            .next()
+            .map_err(|e| DomainError::Repository(e.to_string()))?
+        {
             Ok(Some(Project {
-                id: row.get(0).map_err(|e| DomainError::Repository(e.to_string()))?,
-                key: row.get(1).map_err(|e| DomainError::Repository(e.to_string()))?,
-                name: row.get(2).map_err(|e| DomainError::Repository(e.to_string()))?,
-                description: row.get(3).map_err(|e| DomainError::Repository(e.to_string()))?,
+                id: row
+                    .get(0)
+                    .map_err(|e| DomainError::Repository(e.to_string()))?,
+                key: row
+                    .get(1)
+                    .map_err(|e| DomainError::Repository(e.to_string()))?,
+                name: row
+                    .get(2)
+                    .map_err(|e| DomainError::Repository(e.to_string()))?,
+                description: row
+                    .get(3)
+                    .map_err(|e| DomainError::Repository(e.to_string()))?,
             }))
         } else {
             Ok(None)

@@ -1,7 +1,7 @@
-use std::sync::Arc;
 use crate::application::dto::CreatedIssueDto;
 use crate::application::services::JiraService;
 use crate::domain::error::DomainResult;
+use std::sync::Arc;
 
 pub struct CreateTestTicketUseCase<J>
 where

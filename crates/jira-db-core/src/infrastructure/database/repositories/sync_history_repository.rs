@@ -1,8 +1,8 @@
+use crate::domain::error::{DomainError, DomainResult};
+use crate::domain::repositories::SyncHistoryRepository;
 use chrono::{DateTime, Utc};
 use duckdb::Connection;
 use std::sync::{Arc, Mutex};
-use crate::domain::error::{DomainError, DomainResult};
-use crate::domain::repositories::SyncHistoryRepository;
 
 pub struct DuckDbSyncHistoryRepository {
     conn: Arc<Mutex<Connection>>,
@@ -33,7 +33,9 @@ impl SyncHistoryRepository for DuckDbSyncHistoryRepository {
                 duckdb::params![project_id, sync_type, started_at.to_rfc3339()],
                 |row| row.get(0),
             )
-            .map_err(|e| DomainError::Repository(format!("Failed to insert sync history: {}", e)))?;
+            .map_err(|e| {
+                DomainError::Repository(format!("Failed to insert sync history: {}", e))
+            })?;
 
         Ok(id)
     }
@@ -52,7 +54,8 @@ impl SyncHistoryRepository for DuckDbSyncHistoryRepository {
             WHERE id = ?
             "#,
             duckdb::params![completed_at.to_rfc3339(), items_synced as i64, id],
-        ).map_err(|e| DomainError::Repository(format!("Failed to update sync history: {}", e)))?;
+        )
+        .map_err(|e| DomainError::Repository(format!("Failed to update sync history: {}", e)))?;
         Ok(())
     }
 
@@ -70,11 +73,15 @@ impl SyncHistoryRepository for DuckDbSyncHistoryRepository {
             WHERE id = ?
             "#,
             duckdb::params![completed_at.to_rfc3339(), error_message, id],
-        ).map_err(|e| DomainError::Repository(format!("Failed to update sync history: {}", e)))?;
+        )
+        .map_err(|e| DomainError::Repository(format!("Failed to update sync history: {}", e)))?;
         Ok(())
     }
 
-    fn find_latest_by_project(&self, project_id: &str) -> DomainResult<Option<(DateTime<Utc>, String)>> {
+    fn find_latest_by_project(
+        &self,
+        project_id: &str,
+    ) -> DomainResult<Option<(DateTime<Utc>, String)>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn
             .prepare(
@@ -92,11 +99,16 @@ impl SyncHistoryRepository for DuckDbSyncHistoryRepository {
             .query(duckdb::params![project_id])
             .map_err(|e| DomainError::Repository(format!("Failed to execute query: {}", e)))?;
 
-        if let Some(row) = rows.next().map_err(|e| DomainError::Repository(e.to_string()))? {
-            let completed_at_str: String =
-                row.get(0).map_err(|e| DomainError::Repository(e.to_string()))?;
-            let status: String =
-                row.get(1).map_err(|e| DomainError::Repository(e.to_string()))?;
+        if let Some(row) = rows
+            .next()
+            .map_err(|e| DomainError::Repository(e.to_string()))?
+        {
+            let completed_at_str: String = row
+                .get(0)
+                .map_err(|e| DomainError::Repository(e.to_string()))?;
+            let status: String = row
+                .get(1)
+                .map_err(|e| DomainError::Repository(e.to_string()))?;
 
             if let Ok(dt) = DateTime::parse_from_rfc3339(&completed_at_str) {
                 Ok(Some((dt.with_timezone(&Utc), status)))

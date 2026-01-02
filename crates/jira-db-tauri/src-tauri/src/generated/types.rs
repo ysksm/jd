@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 /// JiraDb API Definition
-/// 
+///
 /// Design principles:
 /// - All operations use POST method (RPC-style)
 /// - Parameters are passed in request body
@@ -251,8 +251,7 @@ pub struct ProjectConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ConfigGetRequest {
-}
+pub struct ConfigGetRequest {}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -299,8 +298,7 @@ pub struct ConfigInitResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ProjectListRequest {
-}
+pub struct ProjectListRequest {}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -310,8 +308,7 @@ pub struct ProjectListResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ProjectInitRequest {
-}
+pub struct ProjectInitRequest {}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -361,8 +358,7 @@ pub struct SyncExecuteResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SyncStatusRequest {
-}
+pub struct SyncStatusRequest {}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -609,4 +605,3 @@ pub struct SqlQueryDeleteRequest {
 pub struct SqlQueryDeleteResponse {
     pub success: bool,
 }
-

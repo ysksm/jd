@@ -75,7 +75,9 @@ pub struct GetProjectMetadataParams {
     pub project_key: String,
 
     /// Metadata type to filter
-    #[schemars(description = "Type of metadata: 'status', 'priority', 'issue-type', 'label', 'component', 'version', or 'all'")]
+    #[schemars(
+        description = "Type of metadata: 'status', 'priority', 'issue-type', 'label', 'component', 'version', or 'all'"
+    )]
     pub metadata_type: Option<String>,
 }
 
@@ -83,7 +85,9 @@ pub struct GetProjectMetadataParams {
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct GetSchemaParams {
     /// Table name to get schema for
-    #[schemars(description = "Table name to get schema for (optional, returns all tables if not specified)")]
+    #[schemars(
+        description = "Table name to get schema for (optional, returns all tables if not specified)"
+    )]
     pub table: Option<String>,
 }
 

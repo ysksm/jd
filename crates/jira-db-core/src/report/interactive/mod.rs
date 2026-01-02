@@ -12,7 +12,13 @@ pub fn generate_interactive_report(data: &ReportData) -> String {
 
     template
         .replace("{date}", &data.generated_at.format("%Y-%m-%d").to_string())
-        .replace("{generated_at}", &data.generated_at.format("%Y-%m-%d %H:%M:%S UTC").to_string())
+        .replace(
+            "{generated_at}",
+            &data
+                .generated_at
+                .format("%Y-%m-%d %H:%M:%S UTC")
+                .to_string(),
+        )
         .replace("{total_issues}", &data.total_issues.to_string())
         .replace("{css}", css::get_css())
         .replace("{json_data}", &json_data)

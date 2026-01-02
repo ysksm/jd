@@ -9,8 +9,8 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
-use crate::domain::error::{DomainError, DomainResult};
 use super::EmbeddingProvider;
+use crate::domain::error::{DomainError, DomainResult};
 
 /// OpenAI embedding model configurations
 #[allow(dead_code)]
@@ -162,7 +162,9 @@ impl OpenAIEmbeddingClient {
         let client = Client::builder()
             .timeout(config.timeout)
             .build()
-            .map_err(|e| DomainError::ExternalService(format!("Failed to create HTTP client: {}", e)))?;
+            .map_err(|e| {
+                DomainError::ExternalService(format!("Failed to create HTTP client: {}", e))
+            })?;
 
         Ok(Self {
             client,
@@ -196,11 +198,9 @@ impl OpenAIEmbeddingClient {
             req = req.header("Authorization", format!("Bearer {}", api_key));
         }
 
-        let response = req
-            .json(&request)
-            .send()
-            .await
-            .map_err(|e| DomainError::ExternalService(format!("Failed to send embedding request: {}", e)))?;
+        let response = req.json(&request).send().await.map_err(|e| {
+            DomainError::ExternalService(format!("Failed to send embedding request: {}", e))
+        })?;
 
         if !response.status().is_success() {
             let status = response.status();
@@ -214,10 +214,9 @@ impl OpenAIEmbeddingClient {
             )));
         }
 
-        let response: EmbeddingResponse = response
-            .json()
-            .await
-            .map_err(|e| DomainError::ExternalService(format!("Failed to parse embedding response: {}", e)))?;
+        let response: EmbeddingResponse = response.json().await.map_err(|e| {
+            DomainError::ExternalService(format!("Failed to parse embedding response: {}", e))
+        })?;
 
         // Auto-detect dimension from first response
         if let Some(first) = response.data.first() {
@@ -229,7 +228,9 @@ impl OpenAIEmbeddingClient {
             }
         }
 
-        let token_count = response.usage.as_ref()
+        let token_count = response
+            .usage
+            .as_ref()
             .map(|u| u.prompt_tokens / texts.len())
             .unwrap_or(0);
 
@@ -276,7 +277,8 @@ impl EmbeddingProvider for OpenAIEmbeddingClient {
 
     fn dimension(&self) -> usize {
         // Return configured dimension, detected dimension, or default
-        self.config.dimension
+        self.config
+            .dimension
             .or_else(|| self.detected_dimension.read().ok().and_then(|d| *d))
             .unwrap_or(models::TEXT_EMBEDDING_3_SMALL_DIM)
     }

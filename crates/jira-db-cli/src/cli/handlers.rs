@@ -4,7 +4,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use comfy_table::{presets::UTF8_FULL, Cell, Color, Table};
+use comfy_table::{Cell, Color, Table, presets::UTF8_FULL};
 use dialoguer::{Confirm, Input};
 use log::{info, warn};
 
@@ -14,17 +14,15 @@ use jira_db_core::application::use_cases::{
     GetChangeHistoryUseCase, GetProjectMetadataUseCase, SearchIssuesUseCase,
     SyncProjectListUseCase, SyncProjectUseCase,
 };
+use jira_db_core::chrono::Utc;
 use jira_db_core::domain::error::{DomainError, DomainResult};
 use jira_db_core::domain::repositories::{
     ChangeHistoryRepository, IssueRepository, IssueSnapshotRepository, MetadataRepository,
     ProjectRepository, SearchParams, SyncHistoryRepository,
 };
-use jira_db_core::infrastructure::config::{
-    DatabaseConfig, JiraConfig, ProjectConfig, Settings,
-};
-use jira_db_core::report::{generate_interactive_report, generate_static_report};
 use jira_db_core::indicatif::{ProgressBar, ProgressStyle};
-use jira_db_core::chrono::Utc;
+use jira_db_core::infrastructure::config::{DatabaseConfig, JiraConfig, ProjectConfig, Settings};
+use jira_db_core::report::{generate_interactive_report, generate_static_report};
 
 pub struct CliHandler<P, I, M, C, S, N, J>
 where
@@ -165,14 +163,12 @@ where
                 .map_err(|e| DomainError::Repository(format!("Failed to get metadata: {}", e)))?
                 .permissions();
             perms.set_mode(0o600);
-            fs::set_permissions(&self.settings_path, perms)
-                .map_err(|e| DomainError::Repository(format!("Failed to set permissions: {}", e)))?;
+            fs::set_permissions(&self.settings_path, perms).map_err(|e| {
+                DomainError::Repository(format!("Failed to set permissions: {}", e))
+            })?;
         }
 
-        println!(
-            "\nConfiguration saved to {}",
-            self.settings_path.display()
-        );
+        println!("\nConfiguration saved to {}", self.settings_path.display());
 
         Ok(())
     }
@@ -181,10 +177,8 @@ where
         let mut settings = Settings::load(&self.settings_path)?;
         settings.validate()?;
 
-        let use_case = SyncProjectListUseCase::new(
-            self.project_repository.clone(),
-            self.jira_service.clone(),
-        );
+        let use_case =
+            SyncProjectListUseCase::new(self.project_repository.clone(), self.jira_service.clone());
 
         let projects = use_case.execute().await?;
 
@@ -202,9 +196,7 @@ where
         settings.save(&self.settings_path)?;
 
         println!("Fetched {} projects from JIRA", projects.len());
-        println!(
-            "Use 'jira-db project enable <PROJECT_KEY>' to enable sync for a project"
-        );
+        println!("Use 'jira-db project enable <PROJECT_KEY>' to enable sync for a project");
 
         Ok(())
     }
@@ -315,9 +307,9 @@ where
         );
 
         if let Some(key) = project_key {
-            let project = settings.find_project(&key).ok_or_else(|| {
-                DomainError::NotFound(format!("Project not found: {}", key))
-            })?;
+            let project = settings
+                .find_project(&key)
+                .ok_or_else(|| DomainError::NotFound(format!("Project not found: {}", key)))?;
 
             let pb = ProgressBar::new_spinner();
             pb.set_style(
@@ -365,10 +357,7 @@ where
                 match use_case.execute(&key, &id).await {
                     Ok(result) => {
                         if result.success {
-                            println!(
-                                "Synced {} issues for project {}",
-                                result.issues_synced, key
-                            );
+                            println!("Synced {} issues for project {}", result.issues_synced, key);
                             if let Some(p) = settings.find_project_mut(&key) {
                                 p.last_synced = Some(Utc::now());
                             }
@@ -445,9 +434,9 @@ where
     ) -> DomainResult<()> {
         let settings = Settings::load(&self.settings_path)?;
 
-        let project = settings.find_project(project_key).ok_or_else(|| {
-            DomainError::NotFound(format!("Project not found: {}", project_key))
-        })?;
+        let project = settings
+            .find_project(project_key)
+            .ok_or_else(|| DomainError::NotFound(format!("Project not found: {}", project_key)))?;
 
         let use_case = GetProjectMetadataUseCase::new(self.metadata_repository.clone());
 
@@ -462,11 +451,7 @@ where
         if !metadata.statuses.is_empty() {
             println!("Statuses ({}):", metadata.statuses.len());
             for s in &metadata.statuses {
-                println!(
-                    "  - {} ({})",
-                    s.name,
-                    s.category.as_deref().unwrap_or("-")
-                );
+                println!("  - {} ({})", s.name, s.category.as_deref().unwrap_or("-"));
             }
             println!();
         }
@@ -548,16 +533,9 @@ where
             table.add_row(vec![
                 Cell::new(item.changed_at.format("%Y-%m-%d %H:%M").to_string()),
                 Cell::new(&item.field),
-                Cell::new(truncate(
-                    item.from_string.as_deref().unwrap_or("-"),
-                    30,
-                )),
+                Cell::new(truncate(item.from_string.as_deref().unwrap_or("-"), 30)),
                 Cell::new(truncate(item.to_string.as_deref().unwrap_or("-"), 30)),
-                Cell::new(
-                    item.author_display_name
-                        .as_deref()
-                        .unwrap_or("-"),
-                ),
+                Cell::new(item.author_display_name.as_deref().unwrap_or("-")),
             ]);
         }
 
@@ -566,7 +544,11 @@ where
 
         let total = use_case.count(issue_key)?;
         if total > limit {
-            println!("\nShowing {} of {} changes", limit.min(history.len()), total);
+            println!(
+                "\nShowing {} of {} changes",
+                limit.min(history.len()),
+                total
+            );
         }
 
         Ok(())
@@ -657,16 +639,17 @@ where
 
         // Determine which projects to include
         let projects_to_report: Vec<(&str, &str, &str)> = if let Some(ref key) = project_key {
-            let project = settings.find_project(key).ok_or_else(|| {
-                DomainError::NotFound(format!("Project not found: {}", key))
-            })?;
+            let project = settings
+                .find_project(key)
+                .ok_or_else(|| DomainError::NotFound(format!("Project not found: {}", key)))?;
             vec![(&project.id, &project.key, &project.name)]
         } else {
             // All enabled projects
             let enabled = settings.sync_enabled_projects();
             if enabled.is_empty() {
                 return Err(DomainError::Validation(
-                    "No projects enabled for sync. Use 'jira-db project enable <KEY>' first.".into(),
+                    "No projects enabled for sync. Use 'jira-db project enable <KEY>' first."
+                        .into(),
                 ));
             }
             enabled
@@ -681,7 +664,10 @@ where
             self.change_history_repository.clone(),
         );
 
-        println!("Generating report for {} project(s)...", projects_to_report.len());
+        println!(
+            "Generating report for {} project(s)...",
+            projects_to_report.len()
+        );
         let report_data = use_case.execute(&projects_to_report)?;
 
         if report_data.total_issues == 0 {
@@ -702,8 +688,9 @@ where
         } else {
             let reports_dir = PathBuf::from("reports");
             if !reports_dir.exists() {
-                fs::create_dir_all(&reports_dir)
-                    .map_err(|e| DomainError::Repository(format!("Failed to create reports directory: {}", e)))?;
+                fs::create_dir_all(&reports_dir).map_err(|e| {
+                    DomainError::Repository(format!("Failed to create reports directory: {}", e))
+                })?;
             }
 
             let timestamp = Utc::now().format("%Y%m%d_%H%M%S");
@@ -714,8 +701,9 @@ where
         // Ensure parent directory exists
         if let Some(parent) = output_file.parent() {
             if !parent.exists() {
-                fs::create_dir_all(parent)
-                    .map_err(|e| DomainError::Repository(format!("Failed to create directory: {}", e)))?;
+                fs::create_dir_all(parent).map_err(|e| {
+                    DomainError::Repository(format!("Failed to create directory: {}", e))
+                })?;
             }
         }
 
@@ -726,7 +714,15 @@ where
         println!("Report generated successfully!");
         println!("Output: {}", output_file.display());
         println!("Total issues: {}", report_data.total_issues);
-        println!("Projects: {}", report_data.projects.iter().map(|p| p.key.as_str()).collect::<Vec<_>>().join(", "));
+        println!(
+            "Projects: {}",
+            report_data
+                .projects
+                .iter()
+                .map(|p| p.key.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
 
         if interactive {
             println!("\nOpen the file in a web browser to view the interactive report.");
@@ -738,9 +734,9 @@ where
     pub fn handle_snapshots_generate(&self, project_key: &str) -> DomainResult<()> {
         let settings = Settings::load(&self.settings_path)?;
 
-        let project = settings.find_project(project_key).ok_or_else(|| {
-            DomainError::NotFound(format!("Project not found: {}", project_key))
-        })?;
+        let project = settings
+            .find_project(project_key)
+            .ok_or_else(|| DomainError::NotFound(format!("Project not found: {}", project_key)))?;
 
         let use_case = GenerateSnapshotsUseCase::new(
             self.issue_repository.clone(),
@@ -773,7 +769,10 @@ where
                 })?;
 
             println!("Issue: {} (Version {})", issue_key, snapshot.version);
-            println!("Valid from: {}", snapshot.valid_from.format("%Y-%m-%d %H:%M:%S"));
+            println!(
+                "Valid from: {}",
+                snapshot.valid_from.format("%Y-%m-%d %H:%M:%S")
+            );
             if let Some(valid_to) = snapshot.valid_to {
                 println!("Valid to:   {}", valid_to.format("%Y-%m-%d %H:%M:%S"));
             } else {
@@ -782,11 +781,26 @@ where
             println!();
             println!("Summary:    {}", snapshot.summary);
             println!("Status:     {}", snapshot.status.as_deref().unwrap_or("-"));
-            println!("Priority:   {}", snapshot.priority.as_deref().unwrap_or("-"));
-            println!("Assignee:   {}", snapshot.assignee.as_deref().unwrap_or("-"));
-            println!("Reporter:   {}", snapshot.reporter.as_deref().unwrap_or("-"));
-            println!("Type:       {}", snapshot.issue_type.as_deref().unwrap_or("-"));
-            println!("Resolution: {}", snapshot.resolution.as_deref().unwrap_or("-"));
+            println!(
+                "Priority:   {}",
+                snapshot.priority.as_deref().unwrap_or("-")
+            );
+            println!(
+                "Assignee:   {}",
+                snapshot.assignee.as_deref().unwrap_or("-")
+            );
+            println!(
+                "Reporter:   {}",
+                snapshot.reporter.as_deref().unwrap_or("-")
+            );
+            println!(
+                "Type:       {}",
+                snapshot.issue_type.as_deref().unwrap_or("-")
+            );
+            println!(
+                "Resolution: {}",
+                snapshot.resolution.as_deref().unwrap_or("-")
+            );
             if let Some(labels) = &snapshot.labels {
                 println!("Labels:     {}", labels.join(", "));
             }

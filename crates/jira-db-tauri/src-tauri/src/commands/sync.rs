@@ -27,9 +27,7 @@ pub async fn sync_execute(
         username: settings.jira.username.clone(),
         api_key: settings.jira.api_key.clone(),
     };
-    let jira_client = Arc::new(
-        JiraApiClient::new(&jira_config).map_err(|e| e.to_string())?,
-    );
+    let jira_client = Arc::new(JiraApiClient::new(&jira_config).map_err(|e| e.to_string())?);
 
     // Create repositories
     let issue_repo = Arc::new(DuckDbIssueRepository::new(db.clone()));

@@ -1,9 +1,9 @@
-use chrono::{DateTime, Utc};
-use duckdb::Connection;
-use std::sync::{Arc, Mutex};
 use crate::domain::entities::{Component, FixVersion, IssueType, Label, Priority, Status};
 use crate::domain::error::{DomainError, DomainResult};
 use crate::domain::repositories::MetadataRepository;
+use chrono::{DateTime, Utc};
+use duckdb::Connection;
+use std::sync::{Arc, Mutex};
 
 pub struct DuckDbMetadataRepository {
     conn: Arc<Mutex<Connection>>,
@@ -182,7 +182,8 @@ impl MetadataRepository for DuckDbMetadataRepository {
                     updated_at = excluded.updated_at
                 "#,
                 duckdb::params![project_id, &label.name, &now, &now],
-            ).map_err(|e| DomainError::Repository(format!("Failed to upsert label: {}", e)))?;
+            )
+            .map_err(|e| DomainError::Repository(format!("Failed to upsert label: {}", e)))?;
         }
         Ok(())
     }
@@ -228,7 +229,8 @@ impl MetadataRepository for DuckDbMetadataRepository {
                     &now,
                     &now,
                 ],
-            ).map_err(|e| DomainError::Repository(format!("Failed to upsert component: {}", e)))?;
+            )
+            .map_err(|e| DomainError::Repository(format!("Failed to upsert component: {}", e)))?;
         }
         Ok(())
     }
@@ -236,7 +238,9 @@ impl MetadataRepository for DuckDbMetadataRepository {
     fn find_components_by_project(&self, project_id: &str) -> DomainResult<Vec<Component>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn
-            .prepare("SELECT name, description, lead FROM components WHERE project_id = ? ORDER BY name")
+            .prepare(
+                "SELECT name, description, lead FROM components WHERE project_id = ? ORDER BY name",
+            )
             .map_err(|e| DomainError::Repository(format!("Failed to prepare query: {}", e)))?;
 
         let rows = stmt
@@ -256,7 +260,11 @@ impl MetadataRepository for DuckDbMetadataRepository {
         Ok(components)
     }
 
-    fn upsert_fix_versions(&self, project_id: &str, fix_versions: &[FixVersion]) -> DomainResult<()> {
+    fn upsert_fix_versions(
+        &self,
+        project_id: &str,
+        fix_versions: &[FixVersion],
+    ) -> DomainResult<()> {
         let conn = self.conn.lock().unwrap();
         let now = Utc::now().to_rfc3339();
 

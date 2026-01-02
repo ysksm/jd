@@ -1,5 +1,5 @@
-use duckdb::Connection;
 use crate::domain::error::{DomainError, DomainResult};
+use duckdb::Connection;
 
 pub struct Schema;
 
@@ -36,16 +36,22 @@ impl Schema {
             table, column
         );
 
-        let mut stmt = conn.prepare(&check_sql)
+        let mut stmt = conn
+            .prepare(&check_sql)
             .map_err(|e| DomainError::Repository(format!("Failed to prepare statement: {}", e)))?;
 
-        let count: i64 = stmt.query_row([], |row| row.get(0))
-            .map_err(|e| DomainError::Repository(format!("Failed to check column existence: {}", e)))?;
+        let count: i64 = stmt.query_row([], |row| row.get(0)).map_err(|e| {
+            DomainError::Repository(format!("Failed to check column existence: {}", e))
+        })?;
 
         if count == 0 {
-            let alter_sql = format!("ALTER TABLE {} ADD COLUMN {} {}", table, column, column_type);
-            conn.execute(&alter_sql, [])
-                .map_err(|e| DomainError::Repository(format!("Failed to add column {}.{}: {}", table, column, e)))?;
+            let alter_sql = format!(
+                "ALTER TABLE {} ADD COLUMN {} {}",
+                table, column, column_type
+            );
+            conn.execute(&alter_sql, []).map_err(|e| {
+                DomainError::Repository(format!("Failed to add column {}.{}: {}", table, column, e))
+            })?;
             log::info!("Migration: Added column {}.{}", table, column);
         }
 
@@ -66,7 +72,8 @@ impl Schema {
             )
             "#,
             [],
-        ).map_err(|e| DomainError::Repository(format!("Failed to create projects table: {}", e)))?;
+        )
+        .map_err(|e| DomainError::Repository(format!("Failed to create projects table: {}", e)))?;
         Ok(())
     }
 
@@ -97,7 +104,8 @@ impl Schema {
             )
             "#,
             [],
-        ).map_err(|e| DomainError::Repository(format!("Failed to create issues table: {}", e)))?;
+        )
+        .map_err(|e| DomainError::Repository(format!("Failed to create issues table: {}", e)))?;
         Ok(())
     }
 
@@ -105,7 +113,10 @@ impl Schema {
         conn.execute(
             "CREATE SEQUENCE IF NOT EXISTS sync_history_id_seq START 1",
             [],
-        ).map_err(|e| DomainError::Repository(format!("Failed to create sync_history sequence: {}", e)))?;
+        )
+        .map_err(|e| {
+            DomainError::Repository(format!("Failed to create sync_history sequence: {}", e))
+        })?;
 
         conn.execute(
             r#"
@@ -121,7 +132,10 @@ impl Schema {
             )
             "#,
             [],
-        ).map_err(|e| DomainError::Repository(format!("Failed to create sync_history table: {}", e)))?;
+        )
+        .map_err(|e| {
+            DomainError::Repository(format!("Failed to create sync_history table: {}", e))
+        })?;
         Ok(())
     }
 
@@ -139,7 +153,8 @@ impl Schema {
             )
             "#,
             [],
-        ).map_err(|e| DomainError::Repository(format!("Failed to create statuses table: {}", e)))?;
+        )
+        .map_err(|e| DomainError::Repository(format!("Failed to create statuses table: {}", e)))?;
 
         conn.execute(
             r#"
@@ -154,7 +169,10 @@ impl Schema {
             )
             "#,
             [],
-        ).map_err(|e| DomainError::Repository(format!("Failed to create priorities table: {}", e)))?;
+        )
+        .map_err(|e| {
+            DomainError::Repository(format!("Failed to create priorities table: {}", e))
+        })?;
 
         conn.execute(
             r#"
@@ -170,7 +188,10 @@ impl Schema {
             )
             "#,
             [],
-        ).map_err(|e| DomainError::Repository(format!("Failed to create issue_types table: {}", e)))?;
+        )
+        .map_err(|e| {
+            DomainError::Repository(format!("Failed to create issue_types table: {}", e))
+        })?;
 
         conn.execute(
             r#"
@@ -183,7 +204,8 @@ impl Schema {
             )
             "#,
             [],
-        ).map_err(|e| DomainError::Repository(format!("Failed to create labels table: {}", e)))?;
+        )
+        .map_err(|e| DomainError::Repository(format!("Failed to create labels table: {}", e)))?;
 
         conn.execute(
             r#"
@@ -198,7 +220,10 @@ impl Schema {
             )
             "#,
             [],
-        ).map_err(|e| DomainError::Repository(format!("Failed to create components table: {}", e)))?;
+        )
+        .map_err(|e| {
+            DomainError::Repository(format!("Failed to create components table: {}", e))
+        })?;
 
         conn.execute(
             r#"
@@ -214,7 +239,10 @@ impl Schema {
             )
             "#,
             [],
-        ).map_err(|e| DomainError::Repository(format!("Failed to create fix_versions table: {}", e)))?;
+        )
+        .map_err(|e| {
+            DomainError::Repository(format!("Failed to create fix_versions table: {}", e))
+        })?;
 
         Ok(())
     }
@@ -223,7 +251,10 @@ impl Schema {
         conn.execute(
             "CREATE SEQUENCE IF NOT EXISTS change_history_id_seq START 1",
             [],
-        ).map_err(|e| DomainError::Repository(format!("Failed to create change_history sequence: {}", e)))?;
+        )
+        .map_err(|e| {
+            DomainError::Repository(format!("Failed to create change_history sequence: {}", e))
+        })?;
 
         conn.execute(
             r#"
@@ -245,7 +276,13 @@ impl Schema {
             )
             "#,
             [],
-        ).map_err(|e| DomainError::Repository(format!("Failed to create issue_change_history table: {}", e)))?;
+        )
+        .map_err(|e| {
+            DomainError::Repository(format!(
+                "Failed to create issue_change_history table: {}",
+                e
+            ))
+        })?;
 
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_change_history_issue_id ON issue_change_history(issue_id)",
@@ -258,7 +295,8 @@ impl Schema {
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_change_history_field ON issue_change_history(field)",
             [],
-        ).map_err(|e| DomainError::Repository(format!("Failed to create index: {}", e)))?;
+        )
+        .map_err(|e| DomainError::Repository(format!("Failed to create index: {}", e)))?;
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_change_history_changed_at ON issue_change_history(changed_at)",
             [],
@@ -295,24 +333,31 @@ impl Schema {
             )
             "#,
             [],
-        ).map_err(|e| DomainError::Repository(format!("Failed to create issue_snapshots table: {}", e)))?;
+        )
+        .map_err(|e| {
+            DomainError::Repository(format!("Failed to create issue_snapshots table: {}", e))
+        })?;
 
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_snapshots_issue_key ON issue_snapshots(issue_key)",
             [],
-        ).map_err(|e| DomainError::Repository(format!("Failed to create index: {}", e)))?;
+        )
+        .map_err(|e| DomainError::Repository(format!("Failed to create index: {}", e)))?;
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_snapshots_project_id ON issue_snapshots(project_id)",
             [],
-        ).map_err(|e| DomainError::Repository(format!("Failed to create index: {}", e)))?;
+        )
+        .map_err(|e| DomainError::Repository(format!("Failed to create index: {}", e)))?;
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_snapshots_valid_from ON issue_snapshots(valid_from)",
             [],
-        ).map_err(|e| DomainError::Repository(format!("Failed to create index: {}", e)))?;
+        )
+        .map_err(|e| DomainError::Repository(format!("Failed to create index: {}", e)))?;
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_snapshots_valid_to ON issue_snapshots(valid_to)",
             [],
-        ).map_err(|e| DomainError::Repository(format!("Failed to create index: {}", e)))?;
+        )
+        .map_err(|e| DomainError::Repository(format!("Failed to create index: {}", e)))?;
 
         Ok(())
     }
@@ -321,19 +366,23 @@ impl Schema {
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_issues_project ON issues(project_id)",
             [],
-        ).map_err(|e| DomainError::Repository(format!("Failed to create index: {}", e)))?;
+        )
+        .map_err(|e| DomainError::Repository(format!("Failed to create index: {}", e)))?;
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_issues_key ON issues(key)",
             [],
-        ).map_err(|e| DomainError::Repository(format!("Failed to create index: {}", e)))?;
+        )
+        .map_err(|e| DomainError::Repository(format!("Failed to create index: {}", e)))?;
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_issues_status ON issues(status)",
             [],
-        ).map_err(|e| DomainError::Repository(format!("Failed to create index: {}", e)))?;
+        )
+        .map_err(|e| DomainError::Repository(format!("Failed to create index: {}", e)))?;
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_sync_history_project ON sync_history(project_id)",
             [],
-        ).map_err(|e| DomainError::Repository(format!("Failed to create index: {}", e)))?;
+        )
+        .map_err(|e| DomainError::Repository(format!("Failed to create index: {}", e)))?;
         Ok(())
     }
 }

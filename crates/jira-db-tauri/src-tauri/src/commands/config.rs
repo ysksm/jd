@@ -78,7 +78,8 @@ pub async fn config_initialize(
 
     // Ensure the database directory exists
     if let Some(parent) = database_path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| format!("Failed to create database directory: {}", e))?;
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create database directory: {}", e))?;
     }
 
     let settings = jira_db_core::Settings {
@@ -88,7 +89,9 @@ pub async fn config_initialize(
             api_key: request.api_key,
         },
         projects: Vec::new(),
-        database: jira_db_core::DatabaseConfig { path: database_path },
+        database: jira_db_core::DatabaseConfig {
+            path: database_path,
+        },
         embeddings: None,
     };
 

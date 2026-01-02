@@ -14,9 +14,9 @@ use jira_db_core::{
     ProjectRepository, SearchIssuesUseCase, SearchParams,
 };
 
-use crate::protocol::{CallToolResult, Tool};
 use super::params::*;
-use super::registry::{build_tool_definition, ToolHandler};
+use super::registry::{ToolHandler, build_tool_definition};
+use crate::protocol::{CallToolResult, Tool};
 
 //=============================================================================
 // SearchIssuesTool
@@ -439,13 +439,19 @@ impl SemanticSearchTool {
     pub fn new(db_conn: Arc<Mutex<Connection>>) -> Self {
         // Try to get OpenAI API key from environment
         let openai_api_key = std::env::var("OPENAI_API_KEY").ok();
-        Self { db_conn, openai_api_key }
+        Self {
+            db_conn,
+            openai_api_key,
+        }
     }
 
     #[allow(dead_code)]
     pub fn with_api_key(db_conn: Arc<Mutex<Connection>>, api_key: Option<String>) -> Self {
         let openai_api_key = api_key.or_else(|| std::env::var("OPENAI_API_KEY").ok());
-        Self { db_conn, openai_api_key }
+        Self {
+            db_conn,
+            openai_api_key,
+        }
     }
 }
 

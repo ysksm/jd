@@ -20,13 +20,17 @@ impl DuckDbIssueSnapshotRepository {
     }
 
     fn serialize_json_array(arr: &Option<Vec<String>>) -> Option<String> {
-        arr.as_ref().map(|v| serde_json::to_string(v).unwrap_or_default())
+        arr.as_ref()
+            .map(|v| serde_json::to_string(v).unwrap_or_default())
     }
 }
 
 impl IssueSnapshotRepository for DuckDbIssueSnapshotRepository {
     fn batch_insert(&self, snapshots: &[IssueSnapshot]) -> DomainResult<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| DomainError::Repository(format!("Failed to lock connection: {}", e)))?;
 
         for snapshot in snapshots {
             let labels_json = Self::serialize_json_array(&snapshot.labels);
@@ -93,7 +97,10 @@ impl IssueSnapshotRepository for DuckDbIssueSnapshotRepository {
     }
 
     fn delete_by_issue_id(&self, issue_id: &str) -> DomainResult<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| DomainError::Repository(format!("Failed to lock connection: {}", e)))?;
         conn.execute(
             "DELETE FROM issue_snapshots WHERE issue_id = ?",
             duckdb::params![issue_id],
@@ -103,17 +110,25 @@ impl IssueSnapshotRepository for DuckDbIssueSnapshotRepository {
     }
 
     fn delete_by_project_id(&self, project_id: &str) -> DomainResult<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| DomainError::Repository(format!("Failed to lock connection: {}", e)))?;
         conn.execute(
             "DELETE FROM issue_snapshots WHERE project_id = ?",
             duckdb::params![project_id],
         )
-        .map_err(|e| DomainError::Repository(format!("Failed to delete project snapshots: {}", e)))?;
+        .map_err(|e| {
+            DomainError::Repository(format!("Failed to delete project snapshots: {}", e))
+        })?;
         Ok(())
     }
 
     fn find_by_issue_key(&self, issue_key: &str) -> DomainResult<Vec<IssueSnapshot>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| DomainError::Repository(format!("Failed to lock connection: {}", e)))?;
         let mut stmt = conn
             .prepare(
                 r#"
@@ -178,7 +193,10 @@ impl IssueSnapshotRepository for DuckDbIssueSnapshotRepository {
         issue_key: &str,
         version: i32,
     ) -> DomainResult<Option<IssueSnapshot>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| DomainError::Repository(format!("Failed to lock connection: {}", e)))?;
         let mut stmt = conn
             .prepare(
                 r#"
@@ -194,39 +212,38 @@ impl IssueSnapshotRepository for DuckDbIssueSnapshotRepository {
             )
             .map_err(|e| DomainError::Repository(format!("Failed to prepare query: {}", e)))?;
 
-        let result = stmt
-            .query_row(duckdb::params![issue_key, version], |row| {
-                Ok(IssueSnapshot {
-                    issue_id: row.get(0)?,
-                    issue_key: row.get(1)?,
-                    project_id: row.get(2)?,
-                    version: row.get(3)?,
-                    valid_from: row
-                        .get::<_, String>(4)?
-                        .parse::<DateTime<Utc>>()
-                        .unwrap_or_else(|_| Utc::now()),
-                    valid_to: row
-                        .get::<_, Option<String>>(5)?
-                        .and_then(|s| s.parse::<DateTime<Utc>>().ok()),
-                    summary: row.get(6)?,
-                    description: row.get(7)?,
-                    status: row.get(8)?,
-                    priority: row.get(9)?,
-                    assignee: row.get(10)?,
-                    reporter: row.get(11)?,
-                    issue_type: row.get(12)?,
-                    resolution: row.get(13)?,
-                    labels: Self::parse_json_array(row.get(14)?),
-                    components: Self::parse_json_array(row.get(15)?),
-                    fix_versions: Self::parse_json_array(row.get(16)?),
-                    sprint: row.get(17)?,
-                    parent_key: row.get(18)?,
-                    created_at: row
-                        .get::<_, String>(19)?
-                        .parse::<DateTime<Utc>>()
-                        .unwrap_or_else(|_| Utc::now()),
-                })
-            });
+        let result = stmt.query_row(duckdb::params![issue_key, version], |row| {
+            Ok(IssueSnapshot {
+                issue_id: row.get(0)?,
+                issue_key: row.get(1)?,
+                project_id: row.get(2)?,
+                version: row.get(3)?,
+                valid_from: row
+                    .get::<_, String>(4)?
+                    .parse::<DateTime<Utc>>()
+                    .unwrap_or_else(|_| Utc::now()),
+                valid_to: row
+                    .get::<_, Option<String>>(5)?
+                    .and_then(|s| s.parse::<DateTime<Utc>>().ok()),
+                summary: row.get(6)?,
+                description: row.get(7)?,
+                status: row.get(8)?,
+                priority: row.get(9)?,
+                assignee: row.get(10)?,
+                reporter: row.get(11)?,
+                issue_type: row.get(12)?,
+                resolution: row.get(13)?,
+                labels: Self::parse_json_array(row.get(14)?),
+                components: Self::parse_json_array(row.get(15)?),
+                fix_versions: Self::parse_json_array(row.get(16)?),
+                sprint: row.get(17)?,
+                parent_key: row.get(18)?,
+                created_at: row
+                    .get::<_, String>(19)?
+                    .parse::<DateTime<Utc>>()
+                    .unwrap_or_else(|_| Utc::now()),
+            })
+        });
 
         match result {
             Ok(snapshot) => Ok(Some(snapshot)),
@@ -239,7 +256,10 @@ impl IssueSnapshotRepository for DuckDbIssueSnapshotRepository {
     }
 
     fn find_current_by_issue_key(&self, issue_key: &str) -> DomainResult<Option<IssueSnapshot>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| DomainError::Repository(format!("Failed to lock connection: {}", e)))?;
         let mut stmt = conn
             .prepare(
                 r#"
@@ -299,7 +319,10 @@ impl IssueSnapshotRepository for DuckDbIssueSnapshotRepository {
     }
 
     fn find_by_project_id(&self, project_id: &str) -> DomainResult<Vec<IssueSnapshot>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| DomainError::Repository(format!("Failed to lock connection: {}", e)))?;
         let mut stmt = conn
             .prepare(
                 r#"
@@ -360,7 +383,10 @@ impl IssueSnapshotRepository for DuckDbIssueSnapshotRepository {
     }
 
     fn count_by_issue_key(&self, issue_key: &str) -> DomainResult<usize> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| DomainError::Repository(format!("Failed to lock connection: {}", e)))?;
         let count: i64 = conn
             .query_row(
                 "SELECT COUNT(*) FROM issue_snapshots WHERE issue_key = ?",
@@ -375,7 +401,10 @@ impl IssueSnapshotRepository for DuckDbIssueSnapshotRepository {
     }
 
     fn count_by_project_id(&self, project_id: &str) -> DomainResult<usize> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| DomainError::Repository(format!("Failed to lock connection: {}", e)))?;
         let count: i64 = conn
             .query_row(
                 "SELECT COUNT(*) FROM issue_snapshots WHERE project_id = ?",
