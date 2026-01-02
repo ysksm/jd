@@ -98,6 +98,7 @@ impl AppState {
     }
 
     /// Check if initialized
+    #[allow(dead_code)]
     pub fn is_initialized(&self) -> bool {
         self.settings.lock().unwrap().is_some()
     }

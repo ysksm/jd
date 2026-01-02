@@ -12,6 +12,7 @@ use crate::domain::error::{DomainError, DomainResult};
 use super::EmbeddingProvider;
 
 /// Cohere embedding model configurations
+#[allow(dead_code)]
 pub mod models {
     /// embed-multilingual-v3.0 - 1024 dimensions, 100+ languages
     pub const EMBED_MULTILINGUAL_V3: &str = "embed-multilingual-v3.0";
