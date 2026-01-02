@@ -72,18 +72,22 @@ impl ExecuteSqlUseCase {
             .query([])
             .map_err(|e| DomainError::Repository(format!("Query execution error: {}", e)))?;
 
-        // Collect raw row data first while we have mutable borrow
+        // Get column count from the first row if available, otherwise we'll get it from stmt later
         let mut raw_rows: Vec<Vec<serde_json::Value>> = Vec::new();
-        let mut column_count = 0;
+        let mut detected_column_count: Option<usize> = None;
 
         while let Some(row) = rows_iter
             .next()
             .map_err(|e| DomainError::Repository(format!("Row iteration error: {}", e)))?
         {
             // Get column count from first row
-            if column_count == 0 {
-                column_count = row.as_ref().column_count();
-            }
+            let column_count = if let Some(count) = detected_column_count {
+                count
+            } else {
+                let count = row.as_ref().column_count();
+                detected_column_count = Some(count);
+                count
+            };
 
             let mut row_values: Vec<serde_json::Value> = Vec::new();
             for i in 0..column_count {
@@ -109,8 +113,11 @@ impl ExecuteSqlUseCase {
             raw_rows.push(row_values);
         }
 
-        // After dropping rows_iter, get column names from statement
+        // After dropping rows_iter, get column count and names from statement
         drop(rows_iter);
+
+        // Get column count from statement (works after query execution)
+        let column_count = stmt.column_count();
 
         let column_names: Vec<String> = (0..column_count)
             .map(|i| {
@@ -229,5 +236,21 @@ mod tests {
         assert_eq!(result.columns, vec!["name"]);
         assert_eq!(result.row_count, 1);
         assert_eq!(result.rows[0][0], serde_json::json!("Bob"));
+    }
+
+    #[test]
+    fn test_execute_with_zero_rows_returns_columns() {
+        let db = create_test_db();
+        let use_case = ExecuteSqlUseCase::new(db);
+
+        // Query that returns no rows
+        let result = use_case
+            .execute("SELECT id, name, value FROM test_table WHERE id = 999", None)
+            .expect("Query should succeed");
+
+        // Should still have column names even with 0 rows
+        assert_eq!(result.columns, vec!["id", "name", "value"]);
+        assert_eq!(result.row_count, 0);
+        assert!(result.rows.is_empty());
     }
 }
