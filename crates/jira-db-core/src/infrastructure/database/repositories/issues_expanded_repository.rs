@@ -250,7 +250,7 @@ impl DuckDbIssuesExpandedRepository {
             }
         }
 
-        // Build the INSERT query
+        // Build the INSERT query with ON CONFLICT for DuckDB
         let column_list = column_names.join(", ");
         let select_list = select_parts.join(",\n    ");
 
@@ -259,20 +259,37 @@ impl DuckDbIssuesExpandedRepository {
             None => String::new(),
         };
 
+        // Build the UPDATE SET clause for ON CONFLICT
+        let update_set: Vec<String> = column_names
+            .iter()
+            .filter(|&&col| col != "id") // Don't update the primary key
+            .map(|&col| format!("{} = excluded.{}", col, col))
+            .collect();
+        let update_set_clause = update_set.join(", ");
+
         let sql = format!(
             r#"
-            INSERT OR REPLACE INTO issues_expanded ({column_list}, synced_at)
+            INSERT INTO issues_expanded ({column_list}, synced_at)
             SELECT
                 {select_list},
                 '{now}' AS synced_at
             FROM issues i
             {where_clause}
+            ON CONFLICT (id) DO UPDATE SET
+                {update_set_clause},
+                synced_at = excluded.synced_at
             "#
         );
 
-        let affected = conn
-            .execute(&sql, [])
-            .map_err(|e| DomainError::Repository(format!("Failed to expand issues: {}", e)))?;
+        info!(
+            "Executing expand_issues SQL with {} columns",
+            column_names.len()
+        );
+
+        let affected = conn.execute(&sql, []).map_err(|e| {
+            log::error!("Failed to expand issues. SQL: {}", sql);
+            DomainError::Repository(format!("Failed to expand issues: {}", e))
+        })?;
 
         Ok(affected)
     }
