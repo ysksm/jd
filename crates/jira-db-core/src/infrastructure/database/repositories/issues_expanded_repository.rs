@@ -226,14 +226,17 @@ impl DuckDbIssuesExpandedRepository {
                 "resolution",
                 "i.raw_data->'fields'->'resolution'->>'name' AS resolution",
             ),
-            ("labels", "i.raw_data->'fields'->'labels' AS labels"),
+            (
+                "labels",
+                "CASE WHEN i.raw_data->'fields'->'labels' IS NOT NULL THEN CAST(i.raw_data->'fields'->'labels' AS JSON) ELSE NULL END AS labels",
+            ),
             (
                 "components",
-                "i.raw_data->'fields'->'components' AS components",
+                "CASE WHEN i.raw_data->'fields'->'components' IS NOT NULL THEN CAST(i.raw_data->'fields'->'components' AS JSON) ELSE NULL END AS components",
             ),
             (
                 "fix_versions",
-                "i.raw_data->'fields'->'fixVersions' AS fix_versions",
+                "CASE WHEN i.raw_data->'fields'->'fixVersions' IS NOT NULL THEN CAST(i.raw_data->'fields'->'fixVersions' AS JSON) ELSE NULL END AS fix_versions",
             ),
             ("sprint", "i.sprint"),
             (
@@ -242,11 +245,11 @@ impl DuckDbIssuesExpandedRepository {
             ),
             (
                 "created_date",
-                "CAST(i.raw_data->'fields'->>'created' AS TIMESTAMP) AS created_date",
+                "TRY_CAST(i.raw_data->'fields'->>'created' AS TIMESTAMP) AS created_date",
             ),
             (
                 "updated_date",
-                "CAST(i.raw_data->'fields'->>'updated' AS TIMESTAMP) AS updated_date",
+                "TRY_CAST(i.raw_data->'fields'->>'updated' AS TIMESTAMP) AS updated_date",
             ),
         ];
 
@@ -261,15 +264,16 @@ impl DuckDbIssuesExpandedRepository {
                 column_names.push(col.as_str());
                 let expr = format!(
                     "CASE
-                        WHEN json_type(i.raw_data->'fields'->'{col}') = 'OBJECT'
+                        WHEN i.raw_data->'fields'->'{col}' IS NULL THEN NULL
+                        WHEN typeof(i.raw_data->'fields'->'{col}') = 'JSON' AND json_type(i.raw_data->'fields'->'{col}') = 'OBJECT'
                         THEN COALESCE(
                             i.raw_data->'fields'->'{col}'->>'name',
                             i.raw_data->'fields'->'{col}'->>'value',
                             i.raw_data->'fields'->'{col}'->>'displayName',
-                            CAST(i.raw_data->'fields'->'{col}' AS TEXT)
+                            TRY_CAST(i.raw_data->'fields'->'{col}' AS VARCHAR)
                         )
-                        WHEN json_type(i.raw_data->'fields'->'{col}') = 'ARRAY'
-                        THEN CAST(i.raw_data->'fields'->'{col}' AS TEXT)
+                        WHEN typeof(i.raw_data->'fields'->'{col}') = 'JSON' AND json_type(i.raw_data->'fields'->'{col}') = 'ARRAY'
+                        THEN TRY_CAST(i.raw_data->'fields'->'{col}' AS VARCHAR)
                         ELSE i.raw_data->'fields'->>'{col}'
                     END AS \"{col}\""
                 );
