@@ -1,0 +1,37 @@
+<div class="app-container">
+  <nav class="sidebar">
+    <div class="sidebar-header">
+      <h1>{{ title }}</h1>
+    </div>
+    <ul class="nav-menu">
+      <li>
+        <a routerLink="/dashboard" routerLinkActive="active">
+          Dashboard
+        </a>
+      </li>
+      <li>
+        <a routerLink="/projects" routerLinkActive="active">
+          Projects
+        </a>
+      </li>
+      <li>
+        <a routerLink="/issues" routerLinkActive="active">
+          Issues
+        </a>
+      </li>
+      <li>
+        <a routerLink="/sync" routerLinkActive="active">
+          Sync
+        </a>
+      </li>
+      <li>
+        <a routerLink="/settings" routerLinkActive="active">
+          Settings
+        </a>
+      </li>
+    </ul>
+  </nav>
+  <main class="main-content">
+    <router-outlet></router-outlet>
+  </main>
+</div>

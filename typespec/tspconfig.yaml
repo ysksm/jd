@@ -1,0 +1,13 @@
+# TypeSpec configuration for jira-db
+emit:
+  - "@jira-db/emit-rust"
+  - "@jira-db/emit-tauri"
+  - "@jira-db/emit-angular"
+
+options:
+  "@jira-db/emit-rust":
+    emitter-output-dir: "{project-root}/../crates/jira-db-api/src/generated"
+  "@jira-db/emit-tauri":
+    emitter-output-dir: "{project-root}/../crates/jira-db-tauri/src-tauri/src/generated"
+  "@jira-db/emit-angular":
+    emitter-output-dir: "{project-root}/../crates/jira-db-tauri/src/app/generated"

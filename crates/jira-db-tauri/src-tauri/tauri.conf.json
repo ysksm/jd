@@ -1,0 +1,31 @@
+{
+  "$schema": "https://schema.tauri.app/config/2.0.0",
+  "productName": "JiraDb",
+  "version": "0.1.0",
+  "identifier": "com.jiradb.app",
+  "build": {
+    "beforeDevCommand": "npm run start",
+    "devUrl": "http://localhost:4200",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist/jira-db-frontend/browser"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "JiraDb",
+        "width": 1200,
+        "height": 800,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": []
+  }
+}

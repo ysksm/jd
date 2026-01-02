@@ -1,0 +1,40 @@
+[package]
+name = "jira-db-tauri"
+version.workspace = true
+edition.workspace = true
+
+[build-dependencies]
+tauri-build.workspace = true
+
+[dependencies]
+# Internal
+jira-db-core = { path = "../../jira-db-core" }
+
+# Tauri
+tauri.workspace = true
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+
+# Date/Time
+chrono.workspace = true
+
+# Error handling
+anyhow.workspace = true
+thiserror.workspace = true
+
+# Logging
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+# Async
+tokio.workspace = true
+
+[lib]
+name = "jira_db_tauri_lib"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[[bin]]
+name = "jira-db-tauri"
+path = "src/main.rs"
