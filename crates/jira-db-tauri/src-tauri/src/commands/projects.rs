@@ -34,7 +34,7 @@ pub async fn projects_list(
 
 /// Initialize projects from JIRA
 #[tauri::command]
-pub async fn projects_init(
+pub async fn projects_initialize(
     state: State<'_, AppState>,
     _request: ProjectInitRequest,
 ) -> Result<ProjectInitResponse, String> {

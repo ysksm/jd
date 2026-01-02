@@ -19,10 +19,10 @@ pub fn run() {
             // Config
             commands::config::config_get,
             commands::config::config_update,
-            commands::config::config_init,
+            commands::config::config_initialize,
             // Projects
             commands::projects::projects_list,
-            commands::projects::projects_init,
+            commands::projects::projects_initialize,
             commands::projects::projects_enable,
             commands::projects::projects_disable,
             // Sync

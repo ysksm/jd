@@ -61,7 +61,7 @@ pub async fn config_update(
 
 /// Initialize configuration
 #[tauri::command]
-pub async fn config_init(
+pub async fn config_initialize(
     state: State<'_, AppState>,
     request: ConfigInitRequest,
 ) -> Result<ConfigInitResponse, String> {
