@@ -106,6 +106,10 @@ export class QueryComponent implements OnInit {
 
     this.api.sqlExecute({ query: this.queryText(), limit: 100 }).subscribe({
       next: (response) => {
+        console.log('SQL Response:', JSON.stringify(response, null, 2));
+        console.log('Columns:', response.columns);
+        console.log('Rows:', response.rows);
+        console.log('Row count:', response.rowCount);
         this.columns.set(response.columns);
         this.rows.set(response.rows);
         this.rowCount.set(response.rowCount);
