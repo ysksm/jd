@@ -162,6 +162,12 @@ pub enum Commands {
         #[command(subcommand)]
         action: SnapshotsAction,
     },
+
+    /// Manage JIRA fields and expand raw data
+    Fields {
+        #[command(subcommand)]
+        action: FieldsAction,
+    },
 }
 
 #[derive(Subcommand)]
@@ -221,5 +227,36 @@ pub enum ConfigAction {
 
         /// Configuration value
         value: String,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum FieldsAction {
+    /// Sync field definitions from JIRA
+    Sync,
+
+    /// List all stored field definitions
+    List {
+        /// Show only custom fields
+        #[arg(short, long)]
+        custom: bool,
+
+        /// Show only navigable fields
+        #[arg(short, long)]
+        navigable: bool,
+    },
+
+    /// Expand raw_data from issues to issues_expanded table
+    Expand {
+        /// Project key (or all projects if not specified)
+        #[arg(short, long)]
+        project: Option<String>,
+    },
+
+    /// Full sync: fetch fields, add columns, and expand issues
+    Full {
+        /// Project key (or all projects if not specified)
+        #[arg(short, long)]
+        project: Option<String>,
     },
 }

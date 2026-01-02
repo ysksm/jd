@@ -7,7 +7,7 @@ use tokio::time::{sleep, timeout};
 use crate::application::dto::CreatedIssueDto;
 use crate::application::services::JiraService;
 use crate::domain::entities::{
-    Component, FixVersion, Issue, IssueType, Label, Priority, Project, Status,
+    Component, FixVersion, Issue, IssueType, JiraField, Label, Priority, Project, Status,
 };
 use crate::domain::error::{DomainError, DomainResult};
 use crate::infrastructure::config::JiraConfig;
@@ -608,6 +608,79 @@ impl JiraService for JiraApiClient {
         }
 
         Ok(versions)
+    }
+
+    async fn fetch_fields(&self) -> DomainResult<Vec<JiraField>> {
+        let url = format!("{}/rest/api/3/field", self.base_url);
+
+        let response = self
+            .http_client
+            .get(&url)
+            .header("Authorization", &self.auth_header)
+            .header("Accept", "application/json")
+            .send()
+            .await
+            .map_err(|e| DomainError::ExternalService(format!("Failed to fetch fields: {}", e)))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Could not read error response".to_string());
+            return Err(DomainError::ExternalService(format!(
+                "Failed to fetch fields: {} - {}",
+                status, error_text
+            )));
+        }
+
+        let json: serde_json::Value = response.json().await.map_err(|e| {
+            DomainError::ExternalService(format!("Failed to parse fields response: {}", e))
+        })?;
+
+        let mut fields = Vec::new();
+        if let Some(field_array) = json.as_array() {
+            for field_obj in field_array {
+                let id = match field_obj["id"].as_str() {
+                    Some(id) => id.to_string(),
+                    None => continue,
+                };
+
+                let key = field_obj["key"].as_str().unwrap_or(&id).to_string();
+
+                let name = field_obj["name"].as_str().unwrap_or("").to_string();
+
+                let custom = field_obj["custom"].as_bool().unwrap_or(false);
+                let searchable = field_obj["searchable"].as_bool().unwrap_or(false);
+                let navigable = field_obj["navigable"].as_bool().unwrap_or(false);
+                let orderable = field_obj["orderable"].as_bool().unwrap_or(false);
+
+                // Parse schema information
+                let schema = &field_obj["schema"];
+                let schema_type = schema["type"].as_str().map(|s| s.to_string());
+                let schema_items = schema["items"].as_str().map(|s| s.to_string());
+                let schema_system = schema["system"].as_str().map(|s| s.to_string());
+                let schema_custom = schema["custom"].as_str().map(|s| s.to_string());
+                let schema_custom_id = schema["customId"].as_i64();
+
+                fields.push(JiraField {
+                    id,
+                    key,
+                    name,
+                    custom,
+                    searchable,
+                    navigable,
+                    orderable,
+                    schema_type,
+                    schema_items,
+                    schema_system,
+                    schema_custom,
+                    schema_custom_id,
+                });
+            }
+        }
+
+        Ok(fields)
     }
 
     async fn create_issue(
