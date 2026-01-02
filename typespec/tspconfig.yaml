@@ -6,8 +6,8 @@ emit:
 
 options:
   "@jira-db/emit-rust":
-    output-dir: "{project-root}/../crates/jira-db-api/src/generated"
+    emitter-output-dir: "{project-root}/../crates/jira-db-api/src/generated"
   "@jira-db/emit-tauri":
-    output-dir: "{project-root}/../crates/jira-db-tauri/src-tauri/src/generated"
+    emitter-output-dir: "{project-root}/../crates/jira-db-tauri/src-tauri/src/generated"
   "@jira-db/emit-angular":
-    output-dir: "{project-root}/../frontend/src/app/generated"
+    emitter-output-dir: "{project-root}/../crates/jira-db-tauri/src/app/generated"
