@@ -67,12 +67,16 @@ impl ExecuteSqlUseCase {
             .prepare(&final_query)
             .map_err(|e| DomainError::Repository(format!("SQL prepare error: {}", e)))?;
 
+        println!("[CORE DEBUG] Prepared query: {}", final_query);
+
         // Execute query first with query_map, collecting rows with dynamic column detection
         let mut detected_column_count: Option<usize> = None;
         let rows_result = stmt
             .query_map([], |row| {
+                println!("[CORE DEBUG] query_map closure called!");
                 // Detect column count from first row
                 let column_count = row.as_ref().column_count();
+                println!("[CORE DEBUG] Row column_count: {}", column_count);
 
                 let mut row_values: Vec<serde_json::Value> = Vec::new();
                 for i in 0..column_count {
@@ -99,8 +103,13 @@ impl ExecuteSqlUseCase {
             })
             .map_err(|e| DomainError::Repository(format!("Query execution error: {}", e)))?;
 
+        println!("[CORE DEBUG] query_map returned, starting iteration");
+
         let mut raw_rows: Vec<Vec<serde_json::Value>> = Vec::new();
+        let mut iter_count = 0;
         for result in rows_result {
+            iter_count += 1;
+            println!("[CORE DEBUG] Iterator item #{}, is_ok: {}", iter_count, result.is_ok());
             if let Ok((col_count, row_values)) = result {
                 if detected_column_count.is_none() {
                     detected_column_count = Some(col_count);
@@ -108,6 +117,7 @@ impl ExecuteSqlUseCase {
                 raw_rows.push(row_values);
             }
         }
+        println!("[CORE DEBUG] Iteration complete. iter_count: {}, raw_rows.len: {}", iter_count, raw_rows.len());
         let row_count = raw_rows.len();
 
         // Get column names from statement (now query has been executed)
