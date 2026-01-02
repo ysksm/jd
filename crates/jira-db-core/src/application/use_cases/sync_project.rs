@@ -3,33 +3,38 @@ use chrono::Utc;
 use log::{info, warn};
 use crate::application::dto::SyncResult;
 use crate::application::services::JiraService;
+use crate::application::use_cases::GenerateSnapshotsUseCase;
 use crate::domain::entities::ChangeHistoryItem;
 use crate::domain::error::DomainResult;
 use crate::domain::repositories::{
-    ChangeHistoryRepository, IssueRepository, MetadataRepository, SyncHistoryRepository,
+    ChangeHistoryRepository, IssueRepository, IssueSnapshotRepository, MetadataRepository,
+    SyncHistoryRepository,
 };
 
-pub struct SyncProjectUseCase<I, C, M, S, J>
+pub struct SyncProjectUseCase<I, C, M, S, N, J>
 where
     I: IssueRepository,
     C: ChangeHistoryRepository,
     M: MetadataRepository,
     S: SyncHistoryRepository,
+    N: IssueSnapshotRepository,
     J: JiraService,
 {
     issue_repository: Arc<I>,
     change_history_repository: Arc<C>,
     metadata_repository: Arc<M>,
     sync_history_repository: Arc<S>,
+    snapshot_repository: Arc<N>,
     jira_service: Arc<J>,
 }
 
-impl<I, C, M, S, J> SyncProjectUseCase<I, C, M, S, J>
+impl<I, C, M, S, N, J> SyncProjectUseCase<I, C, M, S, N, J>
 where
     I: IssueRepository,
     C: ChangeHistoryRepository,
     M: MetadataRepository,
     S: SyncHistoryRepository,
+    N: IssueSnapshotRepository,
     J: JiraService,
 {
     pub fn new(
@@ -37,6 +42,7 @@ where
         change_history_repository: Arc<C>,
         metadata_repository: Arc<M>,
         sync_history_repository: Arc<S>,
+        snapshot_repository: Arc<N>,
         jira_service: Arc<J>,
     ) -> Self {
         Self {
@@ -44,6 +50,7 @@ where
             change_history_repository,
             metadata_repository,
             sync_history_repository,
+            snapshot_repository,
             jira_service,
         }
     }
@@ -131,6 +138,25 @@ where
 
         // Fetch and save metadata
         self.sync_metadata(project_key, project_id).await?;
+
+        // Generate issue snapshots
+        info!("Generating issue snapshots...");
+        let snapshot_use_case = GenerateSnapshotsUseCase::new(
+            Arc::clone(&self.issue_repository),
+            Arc::clone(&self.change_history_repository),
+            Arc::clone(&self.snapshot_repository),
+        );
+        match snapshot_use_case.execute(project_key, project_id) {
+            Ok(result) => {
+                info!(
+                    "Generated {} snapshots for {} issues",
+                    result.snapshots_generated, result.issues_processed
+                );
+            }
+            Err(e) => {
+                warn!("Failed to generate snapshots: {}", e);
+            }
+        }
 
         Ok((count, total_history_items))
     }

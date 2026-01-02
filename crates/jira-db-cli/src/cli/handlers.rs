@@ -10,13 +10,14 @@ use log::{info, warn};
 
 use jira_db_core::application::services::JiraService;
 use jira_db_core::application::use_cases::{
-    CreateTestTicketUseCase, GenerateReportUseCase, GetChangeHistoryUseCase,
-    GetProjectMetadataUseCase, SearchIssuesUseCase, SyncProjectListUseCase, SyncProjectUseCase,
+    CreateTestTicketUseCase, GenerateReportUseCase, GenerateSnapshotsUseCase,
+    GetChangeHistoryUseCase, GetProjectMetadataUseCase, SearchIssuesUseCase,
+    SyncProjectListUseCase, SyncProjectUseCase,
 };
 use jira_db_core::domain::error::{DomainError, DomainResult};
 use jira_db_core::domain::repositories::{
-    ChangeHistoryRepository, IssueRepository, MetadataRepository, ProjectRepository,
-    SearchParams, SyncHistoryRepository,
+    ChangeHistoryRepository, IssueRepository, IssueSnapshotRepository, MetadataRepository,
+    ProjectRepository, SearchParams, SyncHistoryRepository,
 };
 use jira_db_core::infrastructure::config::{
     DatabaseConfig, JiraConfig, ProjectConfig, Settings,
@@ -25,13 +26,14 @@ use jira_db_core::report::{generate_interactive_report, generate_static_report};
 use jira_db_core::indicatif::{ProgressBar, ProgressStyle};
 use jira_db_core::chrono::Utc;
 
-pub struct CliHandler<P, I, M, C, S, J>
+pub struct CliHandler<P, I, M, C, S, N, J>
 where
     P: ProjectRepository,
     I: IssueRepository,
     M: MetadataRepository,
     C: ChangeHistoryRepository,
     S: SyncHistoryRepository,
+    N: IssueSnapshotRepository,
     J: JiraService,
 {
     project_repository: Arc<P>,
@@ -39,17 +41,19 @@ where
     metadata_repository: Arc<M>,
     change_history_repository: Arc<C>,
     sync_history_repository: Arc<S>,
+    snapshot_repository: Arc<N>,
     jira_service: Arc<J>,
     settings_path: PathBuf,
 }
 
-impl<P, I, M, C, S, J> CliHandler<P, I, M, C, S, J>
+impl<P, I, M, C, S, N, J> CliHandler<P, I, M, C, S, N, J>
 where
     P: ProjectRepository,
     I: IssueRepository,
     M: MetadataRepository,
     C: ChangeHistoryRepository,
     S: SyncHistoryRepository,
+    N: IssueSnapshotRepository,
     J: JiraService,
 {
     pub fn new(
@@ -58,6 +62,7 @@ where
         metadata_repository: Arc<M>,
         change_history_repository: Arc<C>,
         sync_history_repository: Arc<S>,
+        snapshot_repository: Arc<N>,
         jira_service: Arc<J>,
         settings_path: PathBuf,
     ) -> Self {
@@ -67,6 +72,7 @@ where
             metadata_repository,
             change_history_repository,
             sync_history_repository,
+            snapshot_repository,
             jira_service,
             settings_path,
         }
@@ -304,6 +310,7 @@ where
             self.change_history_repository.clone(),
             self.metadata_repository.clone(),
             self.sync_history_repository.clone(),
+            self.snapshot_repository.clone(),
             self.jira_service.clone(),
         );
 
@@ -723,6 +730,106 @@ where
 
         if interactive {
             println!("\nOpen the file in a web browser to view the interactive report.");
+        }
+
+        Ok(())
+    }
+
+    pub fn handle_snapshots_generate(&self, project_key: &str) -> DomainResult<()> {
+        let settings = Settings::load(&self.settings_path)?;
+
+        let project = settings.find_project(project_key).ok_or_else(|| {
+            DomainError::NotFound(format!("Project not found: {}", project_key))
+        })?;
+
+        let use_case = GenerateSnapshotsUseCase::new(
+            self.issue_repository.clone(),
+            self.change_history_repository.clone(),
+            self.snapshot_repository.clone(),
+        );
+
+        println!("Generating snapshots for project {}...", project_key);
+        let result = use_case.execute(project_key, &project.id)?;
+
+        println!(
+            "Generated {} snapshots for {} issues",
+            result.snapshots_generated, result.issues_processed
+        );
+
+        Ok(())
+    }
+
+    pub fn handle_snapshots_show(&self, issue_key: &str, version: Option<i32>) -> DomainResult<()> {
+        if let Some(v) = version {
+            // Show specific version
+            let snapshot = self
+                .snapshot_repository
+                .find_by_issue_key_and_version(issue_key, v)?
+                .ok_or_else(|| {
+                    DomainError::NotFound(format!(
+                        "Snapshot not found for issue {} version {}",
+                        issue_key, v
+                    ))
+                })?;
+
+            println!("Issue: {} (Version {})", issue_key, snapshot.version);
+            println!("Valid from: {}", snapshot.valid_from.format("%Y-%m-%d %H:%M:%S"));
+            if let Some(valid_to) = snapshot.valid_to {
+                println!("Valid to:   {}", valid_to.format("%Y-%m-%d %H:%M:%S"));
+            } else {
+                println!("Valid to:   (current)");
+            }
+            println!();
+            println!("Summary:    {}", snapshot.summary);
+            println!("Status:     {}", snapshot.status.as_deref().unwrap_or("-"));
+            println!("Priority:   {}", snapshot.priority.as_deref().unwrap_or("-"));
+            println!("Assignee:   {}", snapshot.assignee.as_deref().unwrap_or("-"));
+            println!("Reporter:   {}", snapshot.reporter.as_deref().unwrap_or("-"));
+            println!("Type:       {}", snapshot.issue_type.as_deref().unwrap_or("-"));
+            println!("Resolution: {}", snapshot.resolution.as_deref().unwrap_or("-"));
+            if let Some(labels) = &snapshot.labels {
+                println!("Labels:     {}", labels.join(", "));
+            }
+        } else {
+            // Show all versions
+            let snapshots = self.snapshot_repository.find_by_issue_key(issue_key)?;
+
+            if snapshots.is_empty() {
+                println!("No snapshots found for issue: {}", issue_key);
+                println!("Run 'jira-db sync' to generate snapshots.");
+                return Ok(());
+            }
+
+            let mut table = Table::new();
+            table.load_preset(UTF8_FULL);
+            table.set_header(vec![
+                "Version",
+                "Valid From",
+                "Valid To",
+                "Status",
+                "Assignee",
+                "Priority",
+            ]);
+
+            for snapshot in &snapshots {
+                let valid_to = snapshot
+                    .valid_to
+                    .map(|dt| dt.format("%Y-%m-%d %H:%M").to_string())
+                    .unwrap_or_else(|| "(current)".to_string());
+
+                table.add_row(vec![
+                    Cell::new(snapshot.version),
+                    Cell::new(snapshot.valid_from.format("%Y-%m-%d %H:%M").to_string()),
+                    Cell::new(valid_to),
+                    Cell::new(snapshot.status.as_deref().unwrap_or("-")),
+                    Cell::new(snapshot.assignee.as_deref().unwrap_or("-")),
+                    Cell::new(snapshot.priority.as_deref().unwrap_or("-")),
+                ]);
+            }
+
+            println!("Snapshots for issue: {}\n", issue_key);
+            println!("{table}");
+            println!("\nTotal versions: {}", snapshots.len());
         }
 
         Ok(())

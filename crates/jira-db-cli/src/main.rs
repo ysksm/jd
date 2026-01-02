@@ -9,12 +9,12 @@ use jira_db_core::application::services::JiraService;
 use jira_db_core::domain::error::DomainResult;
 use jira_db_core::infrastructure::config::Settings;
 use jira_db_core::infrastructure::database::{
-    Database, DuckDbChangeHistoryRepository, DuckDbIssueRepository, DuckDbMetadataRepository,
-    DuckDbProjectRepository, DuckDbSyncHistoryRepository,
+    Database, DuckDbChangeHistoryRepository, DuckDbIssueRepository, DuckDbIssueSnapshotRepository,
+    DuckDbMetadataRepository, DuckDbProjectRepository, DuckDbSyncHistoryRepository,
 };
 use jira_db_core::infrastructure::external::jira::JiraApiClient;
 
-use cli::{Cli, CliHandler, Commands, ConfigAction, ProjectAction};
+use cli::{Cli, CliHandler, Commands, ConfigAction, ProjectAction, SnapshotsAction};
 
 #[tokio::main]
 async fn main() {
@@ -49,6 +49,7 @@ async fn run() -> DomainResult<()> {
     let metadata_repository = Arc::new(DuckDbMetadataRepository::new(conn.clone()));
     let change_history_repository = Arc::new(DuckDbChangeHistoryRepository::new(conn.clone()));
     let sync_history_repository = Arc::new(DuckDbSyncHistoryRepository::new(conn.clone()));
+    let snapshot_repository = Arc::new(DuckDbIssueSnapshotRepository::new(conn.clone()));
 
     // Create JIRA service (DIP: implements application service trait)
     let jira_service = Arc::new(JiraApiClient::new(&settings.jira)?);
@@ -63,6 +64,7 @@ async fn run() -> DomainResult<()> {
         metadata_repository,
         change_history_repository,
         sync_history_repository,
+        snapshot_repository,
         jira_service,
         settings_path.clone(),
     );
@@ -144,6 +146,14 @@ async fn run() -> DomainResult<()> {
             )
             .await?;
         }
+        Commands::Snapshots { action } => match action {
+            SnapshotsAction::Generate { project } => {
+                handler.handle_snapshots_generate(&project)?;
+            }
+            SnapshotsAction::Show { issue_key, version } => {
+                handler.handle_snapshots_show(&issue_key, version)?;
+            }
+        },
     }
 
     Ok(())

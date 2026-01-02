@@ -10,6 +10,7 @@ impl Schema {
         Self::create_sync_history_table(conn)?;
         Self::create_metadata_tables(conn)?;
         Self::create_change_history_table(conn)?;
+        Self::create_issue_snapshots_table(conn)?;
         Self::create_indexes(conn)?;
         Self::run_migrations(conn)?;
         Ok(())
@@ -260,6 +261,56 @@ impl Schema {
         ).map_err(|e| DomainError::Repository(format!("Failed to create index: {}", e)))?;
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_change_history_changed_at ON issue_change_history(changed_at)",
+            [],
+        ).map_err(|e| DomainError::Repository(format!("Failed to create index: {}", e)))?;
+
+        Ok(())
+    }
+
+    fn create_issue_snapshots_table(conn: &Connection) -> DomainResult<()> {
+        conn.execute(
+            r#"
+            CREATE TABLE IF NOT EXISTS issue_snapshots (
+                issue_id VARCHAR NOT NULL,
+                issue_key VARCHAR NOT NULL,
+                project_id VARCHAR NOT NULL,
+                version INTEGER NOT NULL,
+                valid_from TIMESTAMP NOT NULL,
+                valid_to TIMESTAMP,
+                summary TEXT NOT NULL,
+                description TEXT,
+                status VARCHAR,
+                priority VARCHAR,
+                assignee VARCHAR,
+                reporter VARCHAR,
+                issue_type VARCHAR,
+                resolution VARCHAR,
+                labels VARCHAR,
+                components VARCHAR,
+                fix_versions VARCHAR,
+                sprint VARCHAR,
+                parent_key VARCHAR,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (issue_id, version)
+            )
+            "#,
+            [],
+        ).map_err(|e| DomainError::Repository(format!("Failed to create issue_snapshots table: {}", e)))?;
+
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_snapshots_issue_key ON issue_snapshots(issue_key)",
+            [],
+        ).map_err(|e| DomainError::Repository(format!("Failed to create index: {}", e)))?;
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_snapshots_project_id ON issue_snapshots(project_id)",
+            [],
+        ).map_err(|e| DomainError::Repository(format!("Failed to create index: {}", e)))?;
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_snapshots_valid_from ON issue_snapshots(valid_from)",
+            [],
+        ).map_err(|e| DomainError::Repository(format!("Failed to create index: {}", e)))?;
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_snapshots_valid_to ON issue_snapshots(valid_to)",
             [],
         ).map_err(|e| DomainError::Repository(format!("Failed to create index: {}", e)))?;
 
