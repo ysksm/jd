@@ -10,8 +10,8 @@ use state::AppState;
 use std::path::PathBuf;
 use tauri::Manager;
 
-/// Settings file path (same as CLI: ./settings.json in current directory)
-const SETTINGS_FILE: &str = "./settings.json";
+/// Settings file path (in data directory to avoid triggering file watcher during dev)
+const SETTINGS_FILE: &str = "./data/settings.json";
 
 /// Run the Tauri application
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

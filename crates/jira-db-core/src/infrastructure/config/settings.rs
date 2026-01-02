@@ -140,7 +140,7 @@ impl Settings {
     }
 
     pub fn default_path() -> DomainResult<PathBuf> {
-        Ok(PathBuf::from("./settings.json"))
+        Ok(PathBuf::from("./data/settings.json"))
     }
 
     pub fn exists<P: AsRef<Path>>(path: P) -> bool {

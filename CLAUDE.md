@@ -9,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Key Features
 - Sync JIRA projects and issues to a local DuckDB database
 - Per-project sync configuration
-- Settings managed via `./settings.json` (current directory)
+- Settings managed via `./data/settings.json`
 - Full async implementation using Tokio
 - Metadata management (statuses, priorities, issue types, labels, components, versions)
 - Complete issue data capture (all fields + changelog)
@@ -270,8 +270,8 @@ All metadata tables use composite primary key `(project_id, name)` for uniquenes
 
 ## Usage Workflow
 
-1. **Initialize Config**: `jira-db init` creates `./settings.json` in current directory
-2. **Configure**: Edit settings.json with JIRA credentials
+1. **Initialize Config**: `jira-db init` creates `./data/settings.json`
+2. **Configure**: Edit `./data/settings.json` with JIRA credentials
 3. **Initialize Projects**: `jira-db project init` fetches project list from JIRA
 4. **List Projects**: `jira-db project list` shows available projects
 5. **Enable Sync**: `jira-db project enable <PROJECT_KEY>` enables sync for specific projects
@@ -283,7 +283,7 @@ All metadata tables use composite primary key `(project_id, name)` for uniquenes
 
 ## Configuration
 
-Located at `./settings.json` (current directory):
+Located at `./data/settings.json`:
 
 ```json
 {
