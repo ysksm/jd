@@ -7,6 +7,24 @@ use serde::{Deserialize, Serialize};
 
 use crate::domain::error::{DomainError, DomainResult};
 
+/// Check if a keyword appears as a whole word in the text
+/// Returns true if the keyword is found and not part of a larger word
+fn is_whole_word(text: &str, keyword: &str) -> bool {
+    let mut start = 0;
+    while let Some(pos) = text[start..].find(keyword) {
+        let abs_pos = start + pos;
+        let before_ok = abs_pos == 0 || !text.chars().nth(abs_pos - 1).unwrap_or(' ').is_alphanumeric();
+        let after_pos = abs_pos + keyword.len();
+        let after_ok = after_pos >= text.len() || !text.chars().nth(after_pos).unwrap_or(' ').is_alphanumeric();
+
+        if before_ok && after_ok {
+            return true;
+        }
+        start = abs_pos + 1;
+    }
+    false
+}
+
 /// SQL execution result
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SqlResult {
@@ -35,11 +53,14 @@ impl ExecuteSqlUseCase {
             ));
         }
 
+        // Check for dangerous SQL keywords (as whole words, not substrings)
+        // This allows "updated_at" while blocking "UPDATE"
         let dangerous_keywords = [
             "INSERT", "UPDATE", "DELETE", "DROP", "CREATE", "ALTER", "TRUNCATE", "EXEC", "EXECUTE",
         ];
         for keyword in dangerous_keywords {
-            if query_upper.contains(keyword) {
+            // Check if keyword appears as a whole word (not part of another word)
+            if is_whole_word(&query_upper, keyword) {
                 return Err(DomainError::Validation(format!(
                     "Query contains forbidden keyword: {}",
                     keyword
@@ -285,5 +306,28 @@ mod tests {
         assert_eq!(result.columns, vec!["id", "name", "value"]);
         assert_eq!(result.row_count, 0);
         assert!(result.rows.is_empty());
+    }
+
+    #[test]
+    fn test_is_whole_word() {
+        // Should match whole words
+        assert!(is_whole_word("UPDATE table SET", "UPDATE"));
+        assert!(is_whole_word("SELECT * FROM t; UPDATE", "UPDATE"));
+        assert!(is_whole_word("DELETE FROM", "DELETE"));
+
+        // Should NOT match substrings within words
+        assert!(!is_whole_word("SELECT updated_at FROM", "UPDATE"));
+        assert!(!is_whole_word("SELECT created_at, deleted_flag FROM", "DELETE"));
+        assert!(!is_whole_word("SELECT execution_time FROM", "EXEC"));
+    }
+
+    #[test]
+    fn test_allow_column_names_with_keywords() {
+        let db = create_test_db();
+        let use_case = ExecuteSqlUseCase::new(db);
+
+        // Should allow columns like updated_at, created_at
+        let result = use_case.execute("SELECT name AS updated_at FROM test_table", None);
+        assert!(result.is_ok(), "Query with 'updated_at' column should be allowed");
     }
 }
