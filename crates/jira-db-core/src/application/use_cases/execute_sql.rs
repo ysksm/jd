@@ -84,10 +84,52 @@ impl ExecuteSqlUseCase {
                             duckdb::types::ValueRef::SmallInt(n) => serde_json::json!(n),
                             duckdb::types::ValueRef::Int(n) => serde_json::json!(n),
                             duckdb::types::ValueRef::BigInt(n) => serde_json::json!(n),
+                            duckdb::types::ValueRef::HugeInt(n) => serde_json::json!(n),
+                            duckdb::types::ValueRef::UTinyInt(n) => serde_json::json!(n),
+                            duckdb::types::ValueRef::USmallInt(n) => serde_json::json!(n),
+                            duckdb::types::ValueRef::UInt(n) => serde_json::json!(n),
+                            duckdb::types::ValueRef::UBigInt(n) => serde_json::json!(n),
                             duckdb::types::ValueRef::Float(n) => serde_json::json!(n),
                             duckdb::types::ValueRef::Double(n) => serde_json::json!(n),
                             duckdb::types::ValueRef::Text(s) => {
                                 serde_json::Value::String(String::from_utf8_lossy(s).to_string())
+                            }
+                            duckdb::types::ValueRef::Blob(b) => {
+                                serde_json::Value::String(format!("<blob:{} bytes>", b.len()))
+                            }
+                            duckdb::types::ValueRef::Timestamp(unit, val) => {
+                                // Convert timestamp to string representation
+                                let ts_str = match unit {
+                                    duckdb::types::TimeUnit::Second => {
+                                        chrono::DateTime::from_timestamp(val, 0)
+                                            .map(|dt| dt.to_rfc3339())
+                                            .unwrap_or_else(|| format!("{}s", val))
+                                    }
+                                    duckdb::types::TimeUnit::Millisecond => {
+                                        chrono::DateTime::from_timestamp_millis(val)
+                                            .map(|dt| dt.to_rfc3339())
+                                            .unwrap_or_else(|| format!("{}ms", val))
+                                    }
+                                    duckdb::types::TimeUnit::Microsecond => {
+                                        chrono::DateTime::from_timestamp_micros(val)
+                                            .map(|dt| dt.to_rfc3339())
+                                            .unwrap_or_else(|| format!("{}us", val))
+                                    }
+                                    duckdb::types::TimeUnit::Nanosecond => {
+                                        chrono::DateTime::from_timestamp_nanos(val).to_rfc3339()
+                                    }
+                                };
+                                serde_json::Value::String(ts_str)
+                            }
+                            duckdb::types::ValueRef::Date32(days) => {
+                                // Days since Unix epoch
+                                let date = chrono::NaiveDate::from_num_days_from_ce_opt(days + 719163)
+                                    .map(|d| d.to_string())
+                                    .unwrap_or_else(|| format!("date:{}", days));
+                                serde_json::Value::String(date)
+                            }
+                            duckdb::types::ValueRef::Time64(unit, val) => {
+                                serde_json::Value::String(format!("time:{:?}:{}", unit, val))
                             }
                             _ => serde_json::Value::String(format!("{:?}", val)),
                         },
