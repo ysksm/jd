@@ -1,8 +1,26 @@
 # Embedding プロバイダー技術ドキュメント
 
+## 目次
+
+1. [概要](#概要)
+2. [Embeddingとは](#embeddingとは)
+3. [プロバイダー比較](#プロバイダー比較)
+4. [プロバイダー別設定ガイド](#プロバイダー別設定ガイド)
+   - [OpenAI](#openai-デフォルト)
+   - [Ollama](#ollama-ローカル実行---推奨)
+   - [LM Studio](#lm-studio-ローカル実行)
+   - [Cohere](#cohere)
+5. [ベクトル検索の仕組み](#ベクトル検索の仕組み)
+6. [パフォーマンス最適化](#パフォーマンス最適化)
+7. [トラブルシューティング](#トラブルシューティング)
+8. [カスタムプロバイダーの実装](#カスタムプロバイダーの実装)
+9. [参考リンク](#参考リンク)
+
+---
+
 ## 概要
 
-このドキュメントでは、jira-dbで使用可能なEmbeddingプロバイダーと、代替プロバイダーの設定方法について説明します。
+このドキュメントでは、jira-dbで使用可能なEmbeddingプロバイダーと、各プロバイダーの設定方法について説明します。
 
 ## Embeddingとは
 
@@ -14,25 +32,35 @@ Embeddingは、テキストを高次元のベクトル（数値の配列）に�
 Embedding: [0.023, -0.145, 0.089, ..., 0.034]  (1536次元)
 ```
 
-## 現在サポートされているプロバイダー
+## プロバイダー比較
+
+| プロバイダー | 次元数 | コスト | 日本語 | ローカル | 特徴 | 状態 |
+|------------|--------|--------|--------|----------|------|------|
+| OpenAI | 1536/3072 | $$ | ◎ | × | バランス良好 | ✅ 対応済 |
+| Ollama | 768-1024 | 無料 | ○ | ◎ | プライバシー | ✅ 対応済 |
+| LM Studio | 384-768 | 無料 | ○ | ◎ | GUI管理 | ✅ 対応済 |
+| Cohere | 1024 | $$ | ◎ | × | 多言語 | ✅ 対応済 |
+| Azure OpenAI | 1536/3072 | $$ | ◎ | × | エンタープライズ | 🔜 予定 |
+| Voyage AI | 1536 | $$ | ○ | × | 検索特化 | 🔜 予定 |
+
+---
+
+## プロバイダー別設定ガイド
 
 ### OpenAI (デフォルト)
 
 OpenAIのtext-embedding APIを使用します。
 
-#### モデル
+#### セットアップ
 
-| モデル名 | 次元数 | 特徴 |
-|---------|--------|------|
-| text-embedding-3-small | 1536 | コスト効率が高い（デフォルト） |
-| text-embedding-3-large | 3072 | より高品質 |
-| text-embedding-ada-002 | 1536 | レガシーモデル |
+1. [OpenAI](https://platform.openai.com/)でAPIキーを取得
+2. 環境変数または設定ファイルでAPIキーを設定
 
-#### 設定
+#### 設定ファイル (settings.json)
 
 ```json
 {
-  "embedding": {
+  "embeddings": {
     "provider": "openai",
     "api_key": "sk-...",
     "model": "text-embedding-3-small"
@@ -40,16 +68,16 @@ OpenAIのtext-embedding APIを使用します。
 }
 ```
 
-または環境変数で:
+#### 環境変数での設定
 
 ```bash
 export OPENAI_API_KEY="sk-..."
 ```
 
-#### 使用方法
+#### CLI使用例
 
 ```bash
-# embeddings生成
+# embeddings生成（デフォルトプロバイダー）
 jira-db embeddings --project PROJ
 
 # 強制再生成
@@ -57,7 +85,18 @@ jira-db embeddings --project PROJ --force
 
 # バッチサイズ指定
 jira-db embeddings --project PROJ --batch-size 100
+
+# 高品質モデルを使用
+jira-db embeddings --model text-embedding-3-large
 ```
+
+#### 利用可能なモデル
+
+| モデル名 | 次元数 | 特徴 |
+|---------|--------|------|
+| text-embedding-3-small | 1536 | コスト効率が高い（デフォルト） |
+| text-embedding-3-large | 3072 | より高品質 |
+| text-embedding-ada-002 | 1536 | レガシーモデル |
 
 #### 料金目安（2024年時点）
 
@@ -66,9 +105,7 @@ jira-db embeddings --project PROJ --batch-size 100
 | text-embedding-3-small | $0.02 / 1M tokens |
 | text-embedding-3-large | $0.13 / 1M tokens |
 
-## サポートされているプロバイダー
-
-jira-dbは3つのEmbeddingプロバイダーをサポートしています。
+---
 
 ### Ollama (ローカル実行) - 推奨
 
@@ -81,8 +118,9 @@ jira-dbは3つのEmbeddingプロバイダーをサポートしています。
    ```bash
    ollama pull nomic-embed-text
    ```
+3. Ollamaサーバーが起動していることを確認（デフォルトでhttp://localhost:11434）
 
-#### 設定
+#### 設定ファイル (settings.json)
 
 ```json
 {
@@ -94,7 +132,7 @@ jira-dbは3つのEmbeddingプロバイダーをサポートしています。
 }
 ```
 
-#### CLIでの使用
+#### CLI使用例
 
 ```bash
 # Ollamaを使用してembeddings生成
@@ -102,9 +140,12 @@ jira-db embeddings --provider ollama
 
 # カスタムモデルとエンドポイント
 jira-db embeddings --provider ollama --model mxbai-embed-large --endpoint http://localhost:11434
+
+# プロジェクト指定
+jira-db embeddings --provider ollama --project PROJ
 ```
 
-**利用可能なモデル:**
+#### 利用可能なモデル
 
 | モデル | 次元数 | 特徴 |
 |--------|--------|------|
@@ -112,16 +153,74 @@ jira-db embeddings --provider ollama --model mxbai-embed-large --endpoint http:/
 | mxbai-embed-large | 1024 | 高品質 |
 | snowflake-arctic-embed | 1024 | 高品質 |
 
-**特徴:**
-- 無料（ローカル実行）
-- データがローカルに留まる（プライバシー保護）
-- GPU推奨（CPUでも動作）
+#### 特徴
+
+- ✅ 無料（ローカル実行）
+- ✅ データがローカルに留まる（プライバシー保護）
+- ⚠️ GPU推奨（CPUでも動作）
+
+---
+
+### LM Studio (ローカル実行)
+
+デスクトップアプリでLLMをローカル実行。OpenAI互換APIを提供します。
+
+#### セットアップ
+
+1. LM Studioをインストール: https://lmstudio.ai/
+2. アプリを起動し、Embeddingモデルをダウンロード（例: nomic-embed-text）
+3. 「Local Server」タブでローカルサーバーを起動（デフォルト: http://localhost:1234）
+
+#### 設定ファイル (settings.json)
+
+```json
+{
+  "embeddings": {
+    "provider": "openai",
+    "endpoint": "http://localhost:1234/v1",
+    "model": "text-embedding-nomic-embed-text-v1.5"
+  }
+}
+```
+
+**注意**: LM StudioはOpenAI互換APIを提供するため、`provider`は`"openai"`を指定します。
+
+#### CLI使用例
+
+```bash
+# LM Studioを使用してembeddings生成
+jira-db embeddings --provider openai --endpoint http://localhost:1234/v1 --model nomic-embed-text-v1.5
+
+# プロジェクト指定
+jira-db embeddings --provider openai --endpoint http://localhost:1234/v1 --project PROJ
+```
+
+#### 利用可能なモデル
+
+| モデル | 次元数 | 特徴 |
+|--------|--------|------|
+| nomic-embed-text-v1.5 | 768 | 汎用、高品質 |
+| bge-small-en-v1.5 | 384 | 軽量、英語向け |
+
+#### 特徴
+
+- ✅ 無料（ローカル実行）
+- ✅ OpenAI互換API
+- ✅ GUIでモデル管理が容易
+- ✅ APIキー不要
+
+---
 
 ### Cohere
 
 Cohere社のEmbed API。**多言語サポートが優れている**ため、日本語の課題に最適です。
 
-#### 設定
+#### セットアップ
+
+1. [Cohere](https://cohere.com/)でAPIキーを取得
+2. 環境変数または設定ファイルでAPIキーを設定
+
+#### 設定ファイル (settings.json)
 
 ```json
 {
@@ -133,13 +232,13 @@ Cohere社のEmbed API。**多言語サポートが優れている**ため、日�
 }
 ```
 
-または環境変数で:
+#### 環境変数での設定
 
 ```bash
 export COHERE_API_KEY="your-cohere-key"
 ```
 
-#### CLIでの使用
+#### CLI使用例
 
 ```bash
 # Cohereを使用してembeddings生成
@@ -147,9 +246,12 @@ jira-db embeddings --provider cohere
 
 # 英語最適化モデルを使用
 jira-db embeddings --provider cohere --model embed-english-v3.0
+
+# プロジェクト指定
+jira-db embeddings --provider cohere --project PROJ
 ```
 
-**モデル:**
+#### 利用可能なモデル
 
 | モデル | 次元数 | 特徴 |
 |--------|--------|------|
@@ -158,27 +260,13 @@ jira-db embeddings --provider cohere --model embed-english-v3.0
 | embed-multilingual-light-v3.0 | 384 | 高速 |
 | embed-english-light-v3.0 | 384 | 高速、英語 |
 
-**特徴:**
-- 多言語対応が優秀（特に日本語）
-- 検索用途に最適化されたモデル
-- バッチサイズ: 最大96
+#### 特徴
 
-### 将来のプロバイダー
+- ✅ 多言語対応が優秀（特に日本語）
+- ✅ 検索用途に最適化されたモデル
+- ⚠️ バッチサイズ: 最大96
 
-以下のプロバイダーは将来的なサポートを計画しています:
-
-- **Azure OpenAI**: エンタープライズグレードのセキュリティ
-- **Voyage AI**: 検索タスクに特化
-
-## プロバイダー比較
-
-| プロバイダー | 次元数 | コスト | 日本語 | ローカル | 特徴 | 状態 |
-|------------|--------|--------|--------|----------|------|------|
-| OpenAI | 1536/3072 | $$ | ◎ | × | バランス良好 | ✅ 対応済 |
-| Ollama | 768-1024 | 無料 | ○ | ◎ | プライバシー | ✅ 対応済 |
-| Cohere | 1024 | $$ | ◎ | × | 多言語 | ✅ 対応済 |
-| Azure OpenAI | 1536/3072 | $$ | ◎ | × | エンタープライズ | 🔜 予定 |
-| Voyage AI | 1536 | $$ | ○ | × | 検索特化 | 🔜 予定 |
+---
 
 ## ベクトル検索の仕組み
 
@@ -209,6 +297,8 @@ LIMIT 10;
 | l2 | ユークリッド距離 | 絶対的な距離 |
 | ip | 内積 | 正規化されたベクトル向け |
 
+---
+
 ## パフォーマンス最適化
 
 ### バッチ処理
@@ -227,6 +317,8 @@ jira-db embeddings
 # 強制再生成（モデル変更時など）
 jira-db embeddings --force
 ```
+
+---
 
 ## トラブルシューティング
 
@@ -260,7 +352,29 @@ Error: Embedding dimension mismatch
 **解決方法:**
 - モデルを変更した場合は `--force` で再生成が必要です
 
-## 実装例（カスタムプロバイダー）
+### Ollamaに接続できない
+
+```
+Error: Failed to connect to Ollama
+```
+
+**解決方法:**
+1. Ollamaが起動していることを確認: `ollama serve`
+2. エンドポイントを確認: デフォルトは `http://localhost:11434`
+
+### LM Studioに接続できない
+
+```
+Error: Failed to connect to local server
+```
+
+**解決方法:**
+1. LM Studioの「Local Server」タブでサーバーが起動していることを確認
+2. エンドポイントを確認: デフォルトは `http://localhost:1234/v1`
+
+---
+
+## カスタムプロバイダーの実装
 
 新しいプロバイダーを追加する場合のインターフェース:
 
@@ -278,6 +392,8 @@ pub trait EmbeddingProvider: Send + Sync {
 }
 ```
 
+---
+
 ## 参考リンク
 
 - [OpenAI Embeddings Guide](https://platform.openai.com/docs/guides/embeddings)
@@ -285,3 +401,4 @@ pub trait EmbeddingProvider: Send + Sync {
 - [Cohere Embed API](https://docs.cohere.com/reference/embed)
 - [Voyage AI Documentation](https://docs.voyageai.com/)
 - [Ollama](https://ollama.ai/)
+- [LM Studio](https://lmstudio.ai/)
