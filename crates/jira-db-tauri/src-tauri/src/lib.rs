@@ -10,18 +10,8 @@ use std::path::PathBuf;
 use state::AppState;
 use tauri::Manager;
 
-/// Get the settings file path in the app data directory
-fn get_settings_path(app: &tauri::App) -> PathBuf {
-    let app_data_dir = app
-        .path()
-        .app_data_dir()
-        .expect("Failed to get app data directory");
-
-    // Ensure the directory exists
-    std::fs::create_dir_all(&app_data_dir).ok();
-
-    app_data_dir.join("settings.json")
-}
+/// Settings file path (same as CLI: ./settings.json in current directory)
+const SETTINGS_FILE: &str = "./settings.json";
 
 /// Run the Tauri application
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -31,7 +21,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(AppState::default())
         .setup(|app| {
-            let settings_path = get_settings_path(app);
+            let settings_path = PathBuf::from(SETTINGS_FILE);
             let state = app.state::<AppState>();
 
             tracing::info!("Settings path: {:?}", settings_path);
