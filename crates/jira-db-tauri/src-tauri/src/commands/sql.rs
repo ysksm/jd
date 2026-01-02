@@ -57,13 +57,47 @@ pub async fn sql_execute(
         .prepare(&final_query)
         .map_err(|e| format!("SQL error: {}", e))?;
 
-    // Execute query first, then get column info
-    let mut rows_iter = stmt
-        .query([])
-        .map_err(|e| format!("Query execution error: {}", e))?;
+    // Collect raw row data first (as Vec of Vec)
+    let mut raw_rows: Vec<Vec<serde_json::Value>> = Vec::new();
+    let column_count;
 
-    // Get column names after query execution
-    let column_count = stmt.column_count();
+    {
+        // Execute query in a scope to limit borrow
+        let mut rows_iter = stmt
+            .query([])
+            .map_err(|e| format!("Query execution error: {}", e))?;
+
+        // Determine column count from first row or statement
+        column_count = rows_iter.as_ref().map(|r| r.column_count()).unwrap_or(0);
+
+        // Collect rows as raw values
+        while let Some(row) = rows_iter.next().map_err(|e| format!("Row fetch error: {}", e))? {
+            let mut row_values: Vec<serde_json::Value> = Vec::new();
+            for i in 0..column_count {
+                let value: serde_json::Value = match row.get_ref(i) {
+                    Ok(val) => match val {
+                        duckdb::types::ValueRef::Null => serde_json::Value::Null,
+                        duckdb::types::ValueRef::Boolean(b) => serde_json::Value::Bool(b),
+                        duckdb::types::ValueRef::TinyInt(n) => serde_json::json!(n),
+                        duckdb::types::ValueRef::SmallInt(n) => serde_json::json!(n),
+                        duckdb::types::ValueRef::Int(n) => serde_json::json!(n),
+                        duckdb::types::ValueRef::BigInt(n) => serde_json::json!(n),
+                        duckdb::types::ValueRef::Float(n) => serde_json::json!(n),
+                        duckdb::types::ValueRef::Double(n) => serde_json::json!(n),
+                        duckdb::types::ValueRef::Text(s) => {
+                            serde_json::Value::String(String::from_utf8_lossy(s).to_string())
+                        }
+                        _ => serde_json::Value::String(format!("{:?}", val)),
+                    },
+                    Err(_) => serde_json::Value::Null,
+                };
+                row_values.push(value);
+            }
+            raw_rows.push(row_values);
+        }
+    }
+
+    // Now get column names after rows_iter is dropped
     let column_names: Vec<String> = (0..column_count)
         .map(|i| {
             stmt.column_name(i)
@@ -72,32 +106,18 @@ pub async fn sql_execute(
         })
         .collect();
 
-    // Collect rows
-    let mut rows: Vec<serde_json::Value> = Vec::new();
-    while let Some(row) = rows_iter.next().map_err(|e| format!("Row fetch error: {}", e))? {
-        let mut row_data = serde_json::Map::new();
-        for (i, col_name) in column_names.iter().enumerate() {
-            let value: serde_json::Value = match row.get_ref(i) {
-                Ok(val) => match val {
-                    duckdb::types::ValueRef::Null => serde_json::Value::Null,
-                    duckdb::types::ValueRef::Boolean(b) => serde_json::Value::Bool(b),
-                    duckdb::types::ValueRef::TinyInt(n) => serde_json::json!(n),
-                    duckdb::types::ValueRef::SmallInt(n) => serde_json::json!(n),
-                    duckdb::types::ValueRef::Int(n) => serde_json::json!(n),
-                    duckdb::types::ValueRef::BigInt(n) => serde_json::json!(n),
-                    duckdb::types::ValueRef::Float(n) => serde_json::json!(n),
-                    duckdb::types::ValueRef::Double(n) => serde_json::json!(n),
-                    duckdb::types::ValueRef::Text(s) => {
-                        serde_json::Value::String(String::from_utf8_lossy(s).to_string())
-                    }
-                    _ => serde_json::Value::String(format!("{:?}", val)),
-                },
-                Err(_) => serde_json::Value::Null,
-            };
-            row_data.insert(col_name.clone(), value);
-        }
-        rows.push(serde_json::Value::Object(row_data));
-    }
+    // Convert raw rows to named objects
+    let rows: Vec<serde_json::Value> = raw_rows
+        .into_iter()
+        .map(|row_values| {
+            let mut row_data = serde_json::Map::new();
+            for (i, value) in row_values.into_iter().enumerate() {
+                let col_name = column_names.get(i).cloned().unwrap_or_else(|| format!("col_{}", i));
+                row_data.insert(col_name, value);
+            }
+            serde_json::Value::Object(row_data)
+        })
+        .collect();
     let row_count = rows.len() as i32;
     let execution_time_ms = start.elapsed().as_secs_f64() * 1000.0;
 
