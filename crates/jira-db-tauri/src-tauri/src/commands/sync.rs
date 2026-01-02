@@ -4,8 +4,9 @@ use std::sync::Arc;
 use tauri::State;
 
 use jira_db_core::{
-    DuckDbChangeHistoryRepository, DuckDbIssueRepository, DuckDbMetadataRepository,
-    DuckDbSyncHistoryRepository, JiraApiClient, JiraConfig, SyncProjectUseCase,
+    DuckDbChangeHistoryRepository, DuckDbIssueRepository, DuckDbIssueSnapshotRepository,
+    DuckDbMetadataRepository, DuckDbSyncHistoryRepository, JiraApiClient, JiraConfig,
+    SyncProjectUseCase,
 };
 
 use crate::generated::*;
@@ -34,7 +35,8 @@ pub async fn sync_execute(
     let issue_repo = Arc::new(DuckDbIssueRepository::new(db.clone()));
     let change_history_repo = Arc::new(DuckDbChangeHistoryRepository::new(db.clone()));
     let metadata_repo = Arc::new(DuckDbMetadataRepository::new(db.clone()));
-    let sync_history_repo = Arc::new(DuckDbSyncHistoryRepository::new(db));
+    let sync_history_repo = Arc::new(DuckDbSyncHistoryRepository::new(db.clone()));
+    let snapshot_repo = Arc::new(DuckDbIssueSnapshotRepository::new(db));
 
     // Create use case
     let use_case = SyncProjectUseCase::new(
@@ -42,6 +44,7 @@ pub async fn sync_execute(
         change_history_repo,
         metadata_repo,
         sync_history_repo,
+        snapshot_repo,
         jira_client,
     );
 
