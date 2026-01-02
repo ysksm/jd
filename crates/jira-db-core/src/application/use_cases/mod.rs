@@ -1,4 +1,5 @@
 mod create_test_ticket;
+mod execute_sql;
 mod generate_embeddings;
 mod generate_report;
 mod get_change_history;
@@ -8,6 +9,7 @@ mod sync_project;
 mod sync_project_list;
 
 pub use create_test_ticket::CreateTestTicketUseCase;
+pub use execute_sql::{ExecuteSqlUseCase, SqlResult};
 pub use generate_embeddings::{
     EmbeddingGenerationConfig, EmbeddingGenerationResult, EmbeddingTiming,
     GenerateEmbeddingsUseCase,

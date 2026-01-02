@@ -8,6 +8,8 @@ use chrono::Utc;
 use tauri::State;
 use uuid::Uuid;
 
+use jira_db_core::ExecuteSqlUseCase;
+
 use crate::generated::*;
 use crate::state::AppState;
 
@@ -21,110 +23,38 @@ pub async fn sql_execute(
 ) -> Result<SqlExecuteResponse, String> {
     let db = state.get_db().ok_or("Database not initialized")?;
 
-    // Security checks - only allow SELECT queries
-    let query_upper = request.query.trim().to_uppercase();
-    if !query_upper.starts_with("SELECT") {
-        return Err("Only SELECT queries are allowed for read-only access".to_string());
-    }
-
-    let dangerous_keywords = [
-        "INSERT", "UPDATE", "DELETE", "DROP", "CREATE", "ALTER", "TRUNCATE", "EXEC", "EXECUTE",
-    ];
-    for keyword in dangerous_keywords {
-        if query_upper.contains(keyword) {
-            return Err(format!("Query contains forbidden keyword: {}", keyword));
-        }
-    }
-
     let start = Instant::now();
 
-    let conn = db
-        .lock()
-        .map_err(|e| format!("Failed to lock connection: {}", e))?;
+    // Use core use case for SQL execution
+    let use_case = ExecuteSqlUseCase::new(db);
+    let result = use_case
+        .execute(&request.query, request.limit.map(|l| l as usize))
+        .map_err(|e| e.to_string())?;
 
-    // Add LIMIT if not present
-    let final_query = if !query_upper.contains("LIMIT") {
-        format!(
-            "{} LIMIT {}",
-            request.query.trim().trim_end_matches(';'),
-            request.limit.unwrap_or(100)
-        )
-    } else {
-        request.query.clone()
-    };
+    let execution_time_ms = start.elapsed().as_secs_f64() * 1000.0;
 
-    let mut stmt = conn
-        .prepare(&final_query)
-        .map_err(|e| format!("SQL error: {}", e))?;
-
-    // Collect raw row data first (as Vec of Vec)
-    let mut raw_rows: Vec<Vec<serde_json::Value>> = Vec::new();
-    let column_count;
-
-    {
-        // Execute query in a scope to limit borrow
-        let mut rows_iter = stmt
-            .query([])
-            .map_err(|e| format!("Query execution error: {}", e))?;
-
-        // Determine column count from first row or statement
-        column_count = rows_iter.as_ref().map(|r| r.column_count()).unwrap_or(0);
-
-        // Collect rows as raw values
-        while let Some(row) = rows_iter.next().map_err(|e| format!("Row fetch error: {}", e))? {
-            let mut row_values: Vec<serde_json::Value> = Vec::new();
-            for i in 0..column_count {
-                let value: serde_json::Value = match row.get_ref(i) {
-                    Ok(val) => match val {
-                        duckdb::types::ValueRef::Null => serde_json::Value::Null,
-                        duckdb::types::ValueRef::Boolean(b) => serde_json::Value::Bool(b),
-                        duckdb::types::ValueRef::TinyInt(n) => serde_json::json!(n),
-                        duckdb::types::ValueRef::SmallInt(n) => serde_json::json!(n),
-                        duckdb::types::ValueRef::Int(n) => serde_json::json!(n),
-                        duckdb::types::ValueRef::BigInt(n) => serde_json::json!(n),
-                        duckdb::types::ValueRef::Float(n) => serde_json::json!(n),
-                        duckdb::types::ValueRef::Double(n) => serde_json::json!(n),
-                        duckdb::types::ValueRef::Text(s) => {
-                            serde_json::Value::String(String::from_utf8_lossy(s).to_string())
-                        }
-                        _ => serde_json::Value::String(format!("{:?}", val)),
-                    },
-                    Err(_) => serde_json::Value::Null,
-                };
-                row_values.push(value);
-            }
-            raw_rows.push(row_values);
-        }
-    }
-
-    // Now get column names after rows_iter is dropped
-    let column_names: Vec<String> = (0..column_count)
-        .map(|i| {
-            stmt.column_name(i)
-                .map(|s| s.to_string())
-                .unwrap_or_else(|_| format!("col_{}", i))
-        })
-        .collect();
-
-    // Convert raw rows to named objects
-    let rows: Vec<serde_json::Value> = raw_rows
+    // Convert rows to named objects
+    let rows: Vec<serde_json::Value> = result
+        .rows
         .into_iter()
         .map(|row_values| {
             let mut row_data = serde_json::Map::new();
             for (i, value) in row_values.into_iter().enumerate() {
-                let col_name = column_names.get(i).cloned().unwrap_or_else(|| format!("col_{}", i));
+                let col_name = result
+                    .columns
+                    .get(i)
+                    .cloned()
+                    .unwrap_or_else(|| format!("col_{}", i));
                 row_data.insert(col_name, value);
             }
             serde_json::Value::Object(row_data)
         })
         .collect();
-    let row_count = rows.len() as i32;
-    let execution_time_ms = start.elapsed().as_secs_f64() * 1000.0;
 
     Ok(SqlExecuteResponse {
-        columns: column_names,
+        columns: result.columns,
         rows,
-        row_count,
+        row_count: result.row_count as i32,
         execution_time_ms,
     })
 }

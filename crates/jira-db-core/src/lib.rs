@@ -16,9 +16,9 @@ pub use application::dto::{CreatedIssueDto, SyncResult};
 pub use application::services::JiraService;
 pub use application::use_cases::{
     CreateTestTicketUseCase, EmbeddingGenerationConfig, EmbeddingGenerationResult,
-    EmbeddingTiming, GenerateEmbeddingsUseCase, GenerateReportUseCase, GetChangeHistoryUseCase,
-    GetProjectMetadataUseCase, ReportData, SearchIssuesUseCase, SyncProjectListUseCase,
-    SyncProjectUseCase,
+    EmbeddingTiming, ExecuteSqlUseCase, GenerateEmbeddingsUseCase, GenerateReportUseCase,
+    GetChangeHistoryUseCase, GetProjectMetadataUseCase, ReportData, SearchIssuesUseCase,
+    SqlResult, SyncProjectListUseCase, SyncProjectUseCase,
 };
 
 pub use domain::entities::{
