@@ -22,6 +22,7 @@
           <input
             type="url"
             id="endpoint"
+            name="endpoint"
             [ngModel]="jiraEndpoint()"
             (ngModelChange)="jiraEndpoint.set($event)"
             placeholder="https://your-domain.atlassian.net"
@@ -33,6 +34,7 @@
           <input
             type="email"
             id="username"
+            name="username"
             [ngModel]="jiraUsername()"
             (ngModelChange)="jiraUsername.set($event)"
             placeholder="user@example.com"
@@ -44,6 +46,7 @@
           <input
             type="password"
             id="apiKey"
+            name="apiKey"
             [ngModel]="jiraApiKey()"
             (ngModelChange)="jiraApiKey.set($event)"
             placeholder="Enter your JIRA API key"
@@ -60,6 +63,7 @@
           <input
             type="text"
             id="databasePath"
+            name="databasePath"
             [ngModel]="databasePath()"
             (ngModelChange)="databasePath.set($event)"
             placeholder="./data/jira.duckdb"
@@ -75,6 +79,7 @@
           <label for="provider">Provider</label>
           <select
             id="provider"
+            name="provider"
             [ngModel]="embeddingsProvider()"
             (ngModelChange)="embeddingsProvider.set($event)"
           >
@@ -89,6 +94,7 @@
           <input
             type="text"
             id="model"
+            name="model"
             [ngModel]="embeddingsModel()"
             (ngModelChange)="embeddingsModel.set($event)"
             placeholder="text-embedding-3-small"
@@ -101,6 +107,7 @@
             <input
               type="url"
               id="embeddingsEndpoint"
+              name="embeddingsEndpoint"
               [ngModel]="embeddingsEndpoint()"
               (ngModelChange)="embeddingsEndpoint.set($event)"
               placeholder="http://localhost:11434"
@@ -112,6 +119,7 @@
           <label>
             <input
               type="checkbox"
+              name="autoGenerate"
               [ngModel]="embeddingsAutoGenerate()"
               (ngModelChange)="embeddingsAutoGenerate.set($event)"
             />
