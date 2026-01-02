@@ -503,3 +503,110 @@ pub struct ReportGenerateResponse {
     pub result: ReportResult,
 }
 
+// ============================================================
+// SQL Query Types
+// ============================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SavedQuery {
+    pub id: String,
+    pub name: String,
+    pub query: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(rename = "createdAt")]
+    pub created_at: DateTime<Utc>,
+    #[serde(rename = "updatedAt")]
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SqlColumn {
+    pub name: String,
+    #[serde(rename = "dataType")]
+    pub data_type: String,
+    #[serde(rename = "isNullable")]
+    pub is_nullable: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SqlTable {
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub columns: Option<Vec<SqlColumn>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SqlExecuteRequest {
+    pub query: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub limit: Option<i32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SqlExecuteResponse {
+    pub columns: Vec<String>,
+    pub rows: Vec<serde_json::Value>,
+    #[serde(rename = "rowCount")]
+    pub row_count: i32,
+    #[serde(rename = "executionTimeMs")]
+    pub execution_time_ms: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SqlGetSchemaRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub table: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SqlGetSchemaResponse {
+    pub tables: Vec<SqlTable>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SqlQueryListRequest {}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SqlQueryListResponse {
+    pub queries: Vec<SavedQuery>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SqlQuerySaveRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    pub name: String,
+    pub query: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SqlQuerySaveResponse {
+    pub query: SavedQuery,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SqlQueryDeleteRequest {
+    pub id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SqlQueryDeleteResponse {
+    pub success: bool,
+}
+

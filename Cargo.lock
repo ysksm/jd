@@ -2759,6 +2759,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "chrono",
+ "duckdb",
  "jira-db-core",
  "serde",
  "serde_json",
@@ -2768,6 +2769,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]

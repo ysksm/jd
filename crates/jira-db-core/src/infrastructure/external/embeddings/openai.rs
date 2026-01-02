@@ -320,7 +320,7 @@ mod tests {
     fn test_config_default() {
         let config = EmbeddingConfig::default();
         assert_eq!(config.model, models::TEXT_EMBEDDING_3_SMALL);
-        assert_eq!(config.dimension, models::TEXT_EMBEDDING_3_SMALL_DIM);
+        assert_eq!(config.dimension, Some(models::TEXT_EMBEDDING_3_SMALL_DIM));
     }
 
     #[test]
@@ -329,9 +329,9 @@ mod tests {
             .with_large_model()
             .with_batch_size(50);
 
-        assert_eq!(config.api_key, "test-key");
+        assert_eq!(config.api_key, Some("test-key".to_string()));
         assert_eq!(config.model, models::TEXT_EMBEDDING_3_LARGE);
-        assert_eq!(config.dimension, models::TEXT_EMBEDDING_3_LARGE_DIM);
+        assert_eq!(config.dimension, Some(models::TEXT_EMBEDDING_3_LARGE_DIM));
         assert_eq!(config.batch_size, 50);
     }
 }

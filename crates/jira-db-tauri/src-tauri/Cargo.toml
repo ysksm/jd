@@ -31,6 +31,12 @@ tracing-subscriber.workspace = true
 # Async
 tokio.workspace = true
 
+# Database (for SQL execution)
+duckdb.workspace = true
+
+# UUID for saved queries
+uuid.workspace = true
+
 [lib]
 name = "jira_db_tauri_lib"
 crate-type = ["lib", "cdylib", "staticlib"]

@@ -6,4 +6,5 @@ pub mod issues;
 pub mod metadata;
 pub mod projects;
 pub mod reports;
+pub mod sql;
 pub mod sync;

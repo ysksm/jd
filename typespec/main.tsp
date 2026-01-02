@@ -131,6 +131,30 @@ model ReportResult {
 }
 
 // ============================================================
+// SQL Query Models
+// ============================================================
+
+model SavedQuery {
+  id: string;
+  name: string;
+  query: string;
+  description?: string;
+  createdAt: utcDateTime;
+  updatedAt: utcDateTime;
+}
+
+model SqlColumn {
+  name: string;
+  dataType: string;
+  isNullable: boolean;
+}
+
+model SqlTable {
+  name: string;
+  columns?: SqlColumn[];
+}
+
+// ============================================================
 // Config Models
 // ============================================================
 
@@ -321,6 +345,52 @@ model ReportGenerateResponse {
   result: ReportResult;
 }
 
+// -- SQL Query --
+model SqlExecuteRequest {
+  query: string;
+  limit?: int32;
+}
+
+model SqlExecuteResponse {
+  columns: string[];
+  rows: unknown[];
+  rowCount: int32;
+  executionTimeMs: float64;
+}
+
+model SqlGetSchemaRequest {
+  table?: string;
+}
+
+model SqlGetSchemaResponse {
+  tables: SqlTable[];
+}
+
+model SqlQueryListRequest {}
+
+model SqlQueryListResponse {
+  queries: SavedQuery[];
+}
+
+model SqlQuerySaveRequest {
+  id?: string;
+  name: string;
+  query: string;
+  description?: string;
+}
+
+model SqlQuerySaveResponse {
+  query: SavedQuery;
+}
+
+model SqlQueryDeleteRequest {
+  id: string;
+}
+
+model SqlQueryDeleteResponse {
+  success: boolean;
+}
+
 // ============================================================
 // Operations - RPC Style (POST only, body params)
 // ============================================================
@@ -392,4 +462,22 @@ namespace Embeddings {
 namespace Reports {
   @doc("Generate HTML report")
   op generate(request: ReportGenerateRequest): ReportGenerateResponse;
+}
+
+@doc("SQL query operations")
+namespace Sql {
+  @doc("Execute SQL query (read-only)")
+  op execute(request: SqlExecuteRequest): SqlExecuteResponse;
+
+  @doc("Get database schema")
+  op getSchema(request: SqlGetSchemaRequest): SqlGetSchemaResponse;
+
+  @doc("List saved queries")
+  op listQueries(request: SqlQueryListRequest): SqlQueryListResponse;
+
+  @doc("Save a query")
+  op saveQuery(request: SqlQuerySaveRequest): SqlQuerySaveResponse;
+
+  @doc("Delete a saved query")
+  op deleteQuery(request: SqlQueryDeleteRequest): SqlQueryDeleteResponse;
 }
