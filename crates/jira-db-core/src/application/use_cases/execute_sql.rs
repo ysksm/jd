@@ -67,58 +67,51 @@ impl ExecuteSqlUseCase {
             .prepare(&final_query)
             .map_err(|e| DomainError::Repository(format!("SQL prepare error: {}", e)))?;
 
-        // Execute query first - DuckDB requires this before column_count works
-        let mut rows_iter = stmt
-            .query([])
+        // Execute query first with query_map, collecting rows with dynamic column detection
+        let mut detected_column_count: Option<usize> = None;
+        let rows_result = stmt
+            .query_map([], |row| {
+                // Detect column count from first row
+                let column_count = row.as_ref().column_count();
+
+                let mut row_values: Vec<serde_json::Value> = Vec::new();
+                for i in 0..column_count {
+                    let value: serde_json::Value = match row.get_ref(i) {
+                        Ok(val) => match val {
+                            duckdb::types::ValueRef::Null => serde_json::Value::Null,
+                            duckdb::types::ValueRef::Boolean(b) => serde_json::Value::Bool(b),
+                            duckdb::types::ValueRef::TinyInt(n) => serde_json::json!(n),
+                            duckdb::types::ValueRef::SmallInt(n) => serde_json::json!(n),
+                            duckdb::types::ValueRef::Int(n) => serde_json::json!(n),
+                            duckdb::types::ValueRef::BigInt(n) => serde_json::json!(n),
+                            duckdb::types::ValueRef::Float(n) => serde_json::json!(n),
+                            duckdb::types::ValueRef::Double(n) => serde_json::json!(n),
+                            duckdb::types::ValueRef::Text(s) => {
+                                serde_json::Value::String(String::from_utf8_lossy(s).to_string())
+                            }
+                            _ => serde_json::Value::String(format!("{:?}", val)),
+                        },
+                        Err(_) => serde_json::Value::Null,
+                    };
+                    row_values.push(value);
+                }
+                Ok((column_count, row_values))
+            })
             .map_err(|e| DomainError::Repository(format!("Query execution error: {}", e)))?;
 
-        // Get column count from the first row if available, otherwise we'll get it from stmt later
         let mut raw_rows: Vec<Vec<serde_json::Value>> = Vec::new();
-        let mut detected_column_count: Option<usize> = None;
-
-        while let Some(row) = rows_iter
-            .next()
-            .map_err(|e| DomainError::Repository(format!("Row iteration error: {}", e)))?
-        {
-            // Get column count from first row
-            let column_count = if let Some(count) = detected_column_count {
-                count
-            } else {
-                let count = row.as_ref().column_count();
-                detected_column_count = Some(count);
-                count
-            };
-
-            let mut row_values: Vec<serde_json::Value> = Vec::new();
-            for i in 0..column_count {
-                let value: serde_json::Value = match row.get_ref(i) {
-                    Ok(val) => match val {
-                        duckdb::types::ValueRef::Null => serde_json::Value::Null,
-                        duckdb::types::ValueRef::Boolean(b) => serde_json::Value::Bool(b),
-                        duckdb::types::ValueRef::TinyInt(n) => serde_json::json!(n),
-                        duckdb::types::ValueRef::SmallInt(n) => serde_json::json!(n),
-                        duckdb::types::ValueRef::Int(n) => serde_json::json!(n),
-                        duckdb::types::ValueRef::BigInt(n) => serde_json::json!(n),
-                        duckdb::types::ValueRef::Float(n) => serde_json::json!(n),
-                        duckdb::types::ValueRef::Double(n) => serde_json::json!(n),
-                        duckdb::types::ValueRef::Text(s) => {
-                            serde_json::Value::String(String::from_utf8_lossy(s).to_string())
-                        }
-                        _ => serde_json::Value::String(format!("{:?}", val)),
-                    },
-                    Err(_) => serde_json::Value::Null,
-                };
-                row_values.push(value);
+        for result in rows_result {
+            if let Ok((col_count, row_values)) = result {
+                if detected_column_count.is_none() {
+                    detected_column_count = Some(col_count);
+                }
+                raw_rows.push(row_values);
             }
-            raw_rows.push(row_values);
         }
+        let row_count = raw_rows.len();
 
-        // After dropping rows_iter, get column count and names from statement
-        drop(rows_iter);
-
-        // Get column count from statement (works after query execution)
-        let column_count = stmt.column_count();
-
+        // Get column names from statement (now query has been executed)
+        let column_count = detected_column_count.unwrap_or_else(|| stmt.column_count());
         let column_names: Vec<String> = (0..column_count)
             .map(|i| {
                 stmt.column_name(i)
@@ -126,8 +119,6 @@ impl ExecuteSqlUseCase {
                     .unwrap_or_else(|_| format!("col_{}", i))
             })
             .collect();
-
-        let row_count = raw_rows.len();
 
         Ok(SqlResult {
             columns: column_names,
