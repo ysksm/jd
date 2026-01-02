@@ -152,8 +152,35 @@ impl DuckDbIssuesExpandedRepository {
         let conn = self.conn.lock().unwrap();
         let now = Utc::now().to_rfc3339();
 
-        // First, get the list of columns we need to handle
+        // First, check if issues table has data
+        let issues_count: i64 = {
+            let sql = match project_id {
+                Some(pid) => format!(
+                    "SELECT COUNT(*) FROM issues WHERE project_id = '{}' AND raw_data IS NOT NULL",
+                    pid
+                ),
+                None => "SELECT COUNT(*) FROM issues WHERE raw_data IS NOT NULL".to_string(),
+            };
+            let mut stmt = conn.prepare(&sql).map_err(|e| {
+                DomainError::Repository(format!("Failed to prepare count query: {}", e))
+            })?;
+            stmt.query_row([], |row| row.get(0))
+                .map_err(|e| DomainError::Repository(format!("Failed to count issues: {}", e)))?
+        };
+
+        info!(
+            "Found {} issues with raw_data to expand (project_id: {:?})",
+            issues_count, project_id
+        );
+
+        if issues_count == 0 {
+            info!("No issues with raw_data found to expand");
+            return Ok(0);
+        }
+
+        // Get the list of columns we need to handle
         let columns = self.get_existing_columns_internal(&conn)?;
+        info!("issues_expanded table has {} columns", columns.len());
 
         // Build the SELECT clause for extracting data from raw_data JSON
         let mut select_parts: Vec<String> = Vec::new();
@@ -285,11 +312,31 @@ impl DuckDbIssuesExpandedRepository {
             "Executing expand_issues SQL with {} columns",
             column_names.len()
         );
+        log::debug!("Generated SQL:\n{}", sql);
 
         let affected = conn.execute(&sql, []).map_err(|e| {
             log::error!("Failed to expand issues. SQL: {}", sql);
             DomainError::Repository(format!("Failed to expand issues: {}", e))
         })?;
+
+        info!("expand_issues affected {} rows", affected);
+
+        // Verify data was inserted
+        let final_count: i64 = {
+            let count_sql = match project_id {
+                Some(pid) => format!(
+                    "SELECT COUNT(*) FROM issues_expanded WHERE project_id = '{}'",
+                    pid
+                ),
+                None => "SELECT COUNT(*) FROM issues_expanded".to_string(),
+            };
+            let mut stmt = conn.prepare(&count_sql).map_err(|e| {
+                DomainError::Repository(format!("Failed to prepare count query: {}", e))
+            })?;
+            stmt.query_row([], |row| row.get(0))
+                .map_err(|e| DomainError::Repository(format!("Failed to count: {}", e)))?
+        };
+        info!("issues_expanded now has {} total rows", final_count);
 
         Ok(affected)
     }
