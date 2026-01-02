@@ -69,8 +69,23 @@ export class SettingsComponent implements OnInit {
   }
 
   initializeSettings(): void {
-    if (!this.jiraEndpoint() || !this.jiraUsername() || !this.jiraApiKey()) {
-      this.error.set('Please fill in all JIRA configuration fields');
+    const endpoint = this.jiraEndpoint();
+    const username = this.jiraUsername();
+    const apiKey = this.jiraApiKey();
+
+    console.log('Initialize settings - values:', {
+      endpoint: endpoint || '(empty)',
+      username: username || '(empty)',
+      apiKey: apiKey ? '(set)' : '(empty)'
+    });
+
+    const missingFields: string[] = [];
+    if (!endpoint || endpoint.trim() === '') missingFields.push('Endpoint');
+    if (!username || username.trim() === '') missingFields.push('Username');
+    if (!apiKey || apiKey.trim() === '') missingFields.push('API Key');
+
+    if (missingFields.length > 0) {
+      this.error.set(`Missing required fields: ${missingFields.join(', ')}`);
       return;
     }
 
