@@ -1,0 +1,285 @@
+<div class="visualization-page">
+  <div class="visualization-header">
+    <h2>Data Visualization</h2>
+    <div class="header-actions">
+      <button class="btn btn-secondary" (click)="refreshChart()" [disabled]="loading()">
+        Refresh
+      </button>
+      <button class="btn btn-secondary" (click)="toggleConfigPanel()">
+        {{ showConfigPanel() ? 'Hide Config' : 'Show Config' }}
+      </button>
+      <button class="btn btn-secondary" (click)="toggleSplitView()">
+        {{ splitView() ? 'Chart Only' : 'Split View' }}
+      </button>
+    </div>
+  </div>
+
+  @if (error()) {
+    <div class="alert alert-error">{{ error() }}</div>
+  }
+
+  @if (successMessage()) {
+    <div class="alert alert-success">{{ successMessage() }}</div>
+  }
+
+  <div class="visualization-container" [class.with-config]="showConfigPanel()">
+    <!-- Configuration Panel (Left) -->
+    @if (showConfigPanel()) {
+      <div class="config-panel">
+        <!-- Query Selection -->
+        <div class="panel-section">
+          <h3>Select Query</h3>
+          @if (savedQueries().length === 0) {
+            <p class="empty-text">No saved queries. Create queries in SQL Query page.</p>
+          } @else {
+            <ul class="query-list">
+              @for (query of savedQueries(); track query.id) {
+                <li
+                  class="query-item"
+                  [class.active]="selectedQuery()?.id === query.id"
+                  (click)="selectQuery(query)"
+                >
+                  <span class="query-name">{{ query.name }}</span>
+                  @if (query.description) {
+                    <span class="query-desc">{{ query.description }}</span>
+                  }
+                </li>
+              }
+            </ul>
+          }
+        </div>
+
+        <!-- Custom Query -->
+        <div class="panel-section">
+          <h3>Or Custom Query</h3>
+          <textarea
+            class="custom-query-input"
+            [ngModel]="customQuery()"
+            (ngModelChange)="customQuery.set($event)"
+            placeholder="SELECT status, COUNT(*) as count FROM issues GROUP BY status"
+            rows="3"
+          ></textarea>
+          <button
+            class="btn btn-primary btn-sm"
+            (click)="executeCustomQuery()"
+            [disabled]="loading() || !customQuery().trim()"
+          >
+            Execute
+          </button>
+        </div>
+
+        <!-- Chart Configuration -->
+        @if (hasData()) {
+          <div class="panel-section">
+            <h3>Chart Configuration</h3>
+
+            <div class="config-group">
+              <label>Chart Type</label>
+              <select
+                [ngModel]="chartConfig().chartType"
+                (ngModelChange)="updateChartConfig({ chartType: $event })"
+              >
+                @for (type of chartTypes; track type.value) {
+                  <option [value]="type.value">{{ type.label }}</option>
+                }
+              </select>
+            </div>
+
+            <div class="config-group">
+              <label>X Axis (Category)</label>
+              <select
+                [ngModel]="chartConfig().xColumn"
+                (ngModelChange)="updateChartConfig({ xColumn: $event })"
+              >
+                <option value="">-- Select Column --</option>
+                @for (col of columns(); track col) {
+                  <option [value]="col">{{ col }}</option>
+                }
+              </select>
+            </div>
+
+            <div class="config-group">
+              <label>Y Axis (Value)</label>
+              <select
+                [ngModel]="chartConfig().yColumn"
+                (ngModelChange)="updateChartConfig({ yColumn: $event })"
+              >
+                <option value="">-- Count Rows --</option>
+                @for (col of numericColumns(); track col) {
+                  <option [value]="col">{{ col }}</option>
+                }
+              </select>
+            </div>
+
+            <div class="config-group">
+              <label>Aggregation</label>
+              <select
+                [ngModel]="chartConfig().aggregation"
+                (ngModelChange)="updateChartConfig({ aggregation: $event })"
+              >
+                @for (agg of aggregationTypes; track agg.value) {
+                  <option [value]="agg.value">{{ agg.label }}</option>
+                }
+              </select>
+            </div>
+
+            <div class="config-group">
+              <label>Chart Title</label>
+              <input
+                type="text"
+                [ngModel]="chartConfig().title"
+                (ngModelChange)="updateChartConfig({ title: $event })"
+                placeholder="Optional title"
+              />
+            </div>
+
+            <div class="config-row">
+              <label class="checkbox-label">
+                <input
+                  type="checkbox"
+                  [ngModel]="chartConfig().showLegend"
+                  (ngModelChange)="updateChartConfig({ showLegend: $event })"
+                />
+                Show Legend
+              </label>
+              <label class="checkbox-label">
+                <input
+                  type="checkbox"
+                  [ngModel]="chartConfig().showGrid"
+                  (ngModelChange)="updateChartConfig({ showGrid: $event })"
+                />
+                Show Grid
+              </label>
+            </div>
+          </div>
+
+          <!-- Filters -->
+          <div class="panel-section">
+            <div class="section-header">
+              <h3>Filters</h3>
+              <button class="btn btn-sm btn-secondary" (click)="addFilter()">+ Add</button>
+            </div>
+
+            @if (drillDownStack().length > 0) {
+              <div class="drill-down-info">
+                <span>Drill-down active:</span>
+                @for (drill of drillDownStack(); track $index) {
+                  <span class="drill-badge">{{ drill.column }}: {{ drill.value }}</span>
+                }
+                <button class="btn btn-xs" (click)="drillUp()">Back</button>
+                <button class="btn btn-xs" (click)="clearFilters()">Clear All</button>
+              </div>
+            }
+
+            @for (filter of filters(); track $index; let i = $index) {
+              <div class="filter-row">
+                <select
+                  [ngModel]="filter.column"
+                  (ngModelChange)="updateFilter(i, { column: $event })"
+                >
+                  @for (col of columns(); track col) {
+                    <option [value]="col">{{ col }}</option>
+                  }
+                </select>
+                <select
+                  [ngModel]="filter.operator"
+                  (ngModelChange)="updateFilter(i, { operator: $event })"
+                >
+                  @for (op of filterOperators; track op.value) {
+                    <option [value]="op.value">{{ op.label }}</option>
+                  }
+                </select>
+                <input
+                  type="text"
+                  [ngModel]="filter.value"
+                  (ngModelChange)="updateFilter(i, { value: $event })"
+                  placeholder="Value"
+                />
+                <button class="btn btn-xs btn-danger" (click)="removeFilter(i)">&times;</button>
+              </div>
+            }
+
+            @if (filters().length > 0) {
+              <div class="filter-actions">
+                <button class="btn btn-sm btn-secondary" (click)="clearFilters()">
+                  Clear All
+                </button>
+              </div>
+            }
+          </div>
+        }
+      </div>
+    }
+
+    <!-- Main Content Area -->
+    <div class="main-content" [class.split]="splitView() && hasData()">
+      <!-- Chart Area -->
+      <div class="chart-area" [class.hidden]="!splitView() && activeTab() !== 'chart'">
+        @if (loading()) {
+          <div class="loading">Loading data...</div>
+        } @else if (!hasData()) {
+          <div class="empty-state">
+            <p>Select a saved query or enter a custom query to visualize data.</p>
+            <p class="hint">Tip: Use GROUP BY queries for better visualizations.</p>
+          </div>
+        } @else {
+          <div class="chart-container" #chartContainer (click)="onChartClick($event)"></div>
+        }
+      </div>
+
+      <!-- Data Table Area -->
+      @if (hasData() && (splitView() || activeTab() === 'data')) {
+        <div class="data-area">
+          <div class="data-header">
+            <span class="data-info">
+              {{ filteredRows().length }} of {{ rows().length }} rows
+              @if (executionTimeMs() > 0) {
+                ({{ executionTimeMs().toFixed(2) }}ms)
+              }
+            </span>
+            @if (!splitView()) {
+              <div class="tab-buttons">
+                <button
+                  class="tab-btn"
+                  [class.active]="activeTab() === 'chart'"
+                  (click)="activeTab.set('chart')"
+                >
+                  Chart
+                </button>
+                <button
+                  class="tab-btn"
+                  [class.active]="activeTab() === 'data'"
+                  (click)="activeTab.set('data')"
+                >
+                  Data
+                </button>
+              </div>
+            }
+          </div>
+          <div class="data-table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  @for (col of columns(); track col) {
+                    <th>{{ col }}</th>
+                  }
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of filteredRows(); track $index) {
+                  <tr (click)="onRowClick(row)" class="clickable-row">
+                    @for (col of columns(); track col) {
+                      <td [title]="formatValue(row[col])">
+                        {{ formatValue(row[col]) }}
+                      </td>
+                    }
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </div>
+      }
+    </div>
+  </div>
+</div>
