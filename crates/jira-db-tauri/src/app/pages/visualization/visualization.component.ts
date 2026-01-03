@@ -14,7 +14,7 @@ import { TauriApiService } from '../../generated/tauri-api.service';
 import { SavedQuery } from '../../generated/models';
 import uPlot from 'uplot';
 
-export type ChartType = 'line' | 'bar' | 'area' | 'scatter';
+export type ChartType = 'line' | 'bar' | 'area' | 'scatter' | 'spline' | 'stepped' | 'stepped-area';
 export type AggregationType = 'count' | 'sum' | 'avg' | 'min' | 'max' | 'none';
 
 interface ChartConfig {
@@ -112,7 +112,10 @@ export class VisualizationComponent implements OnInit, OnDestroy, AfterViewInit 
   chartTypes: { value: ChartType; label: string }[] = [
     { value: 'bar', label: 'Bar Chart' },
     { value: 'line', label: 'Line Chart' },
+    { value: 'spline', label: 'Spline (Smooth)' },
+    { value: 'stepped', label: 'Stepped Line' },
     { value: 'area', label: 'Area Chart' },
+    { value: 'stepped-area', label: 'Stepped Area' },
     { value: 'scatter', label: 'Scatter Plot' },
   ];
 
@@ -440,6 +443,22 @@ export class VisualizationComponent implements OnInit, OnDestroy, AfterViewInit 
         return {
           ...baseConfig,
           fill: 'rgba(74, 74, 224, 0.2)',
+        };
+      case 'spline':
+        return {
+          ...baseConfig,
+          paths: uPlot.paths.spline!(),
+        };
+      case 'stepped':
+        return {
+          ...baseConfig,
+          paths: uPlot.paths.stepped!({ align: 1 }), // align: 1 = after, -1 = before, 0 = center
+        };
+      case 'stepped-area':
+        return {
+          ...baseConfig,
+          fill: 'rgba(74, 74, 224, 0.2)',
+          paths: uPlot.paths.stepped!({ align: 1 }),
         };
       case 'line':
       default:
