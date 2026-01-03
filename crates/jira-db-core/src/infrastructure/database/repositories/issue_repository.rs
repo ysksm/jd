@@ -112,7 +112,7 @@ impl IssueRepository for DuckDbIssueRepository {
             SELECT id, project_id, key, summary, description,
                    status, priority, assignee, reporter,
                    issue_type, resolution, labels, components, fix_versions, sprint, parent_key,
-                   created_date, updated_date
+                   created_date, updated_date, raw_data
             FROM issues
             WHERE project_id = ?
             "#,
@@ -158,7 +158,7 @@ impl IssueRepository for DuckDbIssueRepository {
                             .ok()
                             .map(|dt| dt.with_timezone(&Utc))
                     }),
-                    raw_json: None,
+                    raw_json: row.get(18)?,
                 })
             })
             .map_err(|e| DomainError::Repository(format!("Failed to execute query: {}", e)))?;
