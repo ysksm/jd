@@ -111,6 +111,21 @@
               </select>
             </div>
 
+            @if (needsZColumn()) {
+              <div class="config-group">
+                <label>{{ chartConfig().chartType === 'bubble' ? 'Size (Z Axis)' : 'Value (Color)' }}</label>
+                <select
+                  [ngModel]="chartConfig().zColumn"
+                  (ngModelChange)="updateChartConfig({ zColumn: $event })"
+                >
+                  <option value="">-- Default (1) --</option>
+                  @for (col of numericColumns(); track col) {
+                    <option [value]="col">{{ col }}</option>
+                  }
+                </select>
+              </div>
+            }
+
             <div class="config-group">
               <label>Aggregation</label>
               <select

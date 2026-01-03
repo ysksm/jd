@@ -13,14 +13,16 @@ import { FormsModule } from '@angular/forms';
 import { TauriApiService } from '../../generated/tauri-api.service';
 import { SavedQuery } from '../../generated/models';
 import uPlot from 'uplot';
+import * as echarts from 'echarts';
 
-export type ChartType = 'line' | 'bar' | 'area' | 'scatter' | 'spline' | 'stepped' | 'stepped-area';
+export type ChartType = 'line' | 'bar' | 'area' | 'scatter' | 'spline' | 'stepped' | 'stepped-area' | 'bubble' | 'heatmap';
 export type AggregationType = 'count' | 'sum' | 'avg' | 'min' | 'max' | 'none';
 
 interface ChartConfig {
   chartType: ChartType;
   xColumn: string;
   yColumn: string;
+  zColumn: string; // For bubble size or heatmap value
   groupByColumn: string | null;
   aggregation: AggregationType;
   title: string;
@@ -64,6 +66,7 @@ export class VisualizationComponent implements OnInit, OnDestroy, AfterViewInit 
     chartType: 'bar',
     xColumn: '',
     yColumn: '',
+    zColumn: '',
     groupByColumn: null,
     aggregation: 'count',
     title: '',
@@ -97,8 +100,9 @@ export class VisualizationComponent implements OnInit, OnDestroy, AfterViewInit 
   activeTab = signal<'chart' | 'data'>('chart');
   splitView = signal(true);
 
-  // uPlot instance
-  private chart: uPlot | null = null;
+  // Chart instances
+  private uplotChart: uPlot | null = null;
+  private echartsInstance: echarts.ECharts | null = null;
 
   // Computed
   hasData = computed(() => this.columns().length > 0 && this.rows().length > 0);
@@ -108,15 +112,25 @@ export class VisualizationComponent implements OnInit, OnDestroy, AfterViewInit 
   categoricalColumns = computed(() =>
     this.columns().filter((col) => !this.isNumericColumn(col))
   );
+  isEChartsType = computed(() => {
+    const type = this.chartConfig().chartType;
+    return type === 'bubble' || type === 'heatmap';
+  });
+  needsZColumn = computed(() => {
+    const type = this.chartConfig().chartType;
+    return type === 'bubble' || type === 'heatmap';
+  });
 
-  chartTypes: { value: ChartType; label: string }[] = [
-    { value: 'bar', label: 'Bar Chart' },
-    { value: 'line', label: 'Line Chart' },
-    { value: 'spline', label: 'Spline (Smooth)' },
-    { value: 'stepped', label: 'Stepped Line' },
-    { value: 'area', label: 'Area Chart' },
-    { value: 'stepped-area', label: 'Stepped Area' },
-    { value: 'scatter', label: 'Scatter Plot' },
+  chartTypes: { value: ChartType; label: string; library: 'uplot' | 'echarts' }[] = [
+    { value: 'bar', label: 'Bar Chart', library: 'uplot' },
+    { value: 'line', label: 'Line Chart', library: 'uplot' },
+    { value: 'spline', label: 'Spline (Smooth)', library: 'uplot' },
+    { value: 'stepped', label: 'Stepped Line', library: 'uplot' },
+    { value: 'area', label: 'Area Chart', library: 'uplot' },
+    { value: 'stepped-area', label: 'Stepped Area', library: 'uplot' },
+    { value: 'scatter', label: 'Scatter Plot', library: 'uplot' },
+    { value: 'bubble', label: 'Bubble Chart', library: 'echarts' },
+    { value: 'heatmap', label: 'Heatmap', library: 'echarts' },
   ];
 
   aggregationTypes: { value: AggregationType; label: string }[] = [
@@ -219,13 +233,16 @@ export class VisualizationComponent implements OnInit, OnDestroy, AfterViewInit 
 
     // Find first categorical column for X
     const categoricalCol = cols.find((c) => !this.isNumericColumn(c));
-    // Find first numeric column for Y
-    const numericCol = cols.find((c) => this.isNumericColumn(c));
+    // Find numeric columns for Y and Z
+    const numericCols = cols.filter((c) => this.isNumericColumn(c));
+    const numericCol = numericCols[0];
+    const zCol = numericCols[1] || '';
 
     this.chartConfig.set({
       ...config,
       xColumn: categoricalCol || cols[0],
       yColumn: numericCol || '',
+      zColumn: zCol,
       aggregation: numericCol ? 'sum' : 'count',
     });
 
@@ -340,25 +357,36 @@ export class VisualizationComponent implements OnInit, OnDestroy, AfterViewInit 
     this.applyFilters();
   }
 
-  // Chart Rendering
+  // Chart Rendering - Main dispatcher
   renderChart(): void {
     this.destroyChart();
 
     const container = this.chartContainer?.nativeElement;
     if (!container) return;
 
-    const data = this.filteredRows();
     const config = this.chartConfig();
+    const data = this.filteredRows();
 
     if (!config.xColumn || data.length === 0) return;
 
-    // Prepare data based on chart type and aggregation
+    if (this.isEChartsType()) {
+      this.renderEChartsChart(container, data, config);
+    } else {
+      this.renderUPlotChart(container, data, config);
+    }
+  }
+
+  // uPlot Chart Rendering
+  private renderUPlotChart(
+    container: HTMLDivElement,
+    data: Record<string, unknown>[],
+    config: ChartConfig
+  ): void {
     const chartData = this.prepareChartData(data, config);
     if (!chartData) return;
 
     const { xData, yData, labels } = chartData;
 
-    // Create uPlot configuration
     const width = container.clientWidth || 800;
     const height = 400;
 
@@ -370,13 +398,13 @@ export class VisualizationComponent implements OnInit, OnDestroy, AfterViewInit 
       height,
       scales: {
         x: {
-          time: false, // Disable time-based X-axis
+          time: false,
         },
       },
       series: [
         {
-          label: config.xColumn, // X-axis label
-          value: (_u: uPlot, v: number) => labels[v] ?? String(v), // Format X values in legend
+          label: config.xColumn,
+          value: (_u: uPlot, v: number) => labels[v] ?? String(v),
         },
         seriesConfig,
       ],
@@ -384,8 +412,8 @@ export class VisualizationComponent implements OnInit, OnDestroy, AfterViewInit 
         {
           grid: { show: config.showGrid },
           values: (_u: uPlot, vals: number[]) => vals.map((v: number) => labels[v] || String(v)),
-          rotate: config.rotateLabels ? -45 : 0, // Rotate labels diagonally
-          gap: config.rotateLabels ? 8 : 5, // More gap when rotated
+          rotate: config.rotateLabels ? -45 : 0,
+          gap: config.rotateLabels ? 8 : 5,
           splits: this.getXAxisSplits(xData.length, config.xTickCount),
         },
         {
@@ -398,21 +426,214 @@ export class VisualizationComponent implements OnInit, OnDestroy, AfterViewInit 
       cursor: {
         drag: { x: true, y: true },
       },
-      hooks: {
-        setCursor: [
-          (u: uPlot) => {
-            const idx = u.cursor.idx;
-            if (idx !== null && idx !== undefined) {
-              // Could be used for tooltips
-            }
-          },
-        ],
-      },
     };
 
     const uplotData: uPlot.AlignedData = [xData, yData];
+    this.uplotChart = new uPlot(opts, uplotData, container);
+  }
 
-    this.chart = new uPlot(opts, uplotData, container);
+  // ECharts Rendering
+  private renderEChartsChart(
+    container: HTMLDivElement,
+    data: Record<string, unknown>[],
+    config: ChartConfig
+  ): void {
+    this.echartsInstance = echarts.init(container);
+
+    if (config.chartType === 'bubble') {
+      this.renderBubbleChart(data, config);
+    } else if (config.chartType === 'heatmap') {
+      this.renderHeatmapChart(data, config);
+    }
+  }
+
+  private renderBubbleChart(data: Record<string, unknown>[], config: ChartConfig): void {
+    if (!this.echartsInstance) return;
+
+    // Prepare bubble data: [x, y, size, label]
+    const bubbleData: [number | string, number, number, string][] = [];
+    const xLabels = new Set<string>();
+
+    for (const row of data) {
+      const xVal = String(row[config.xColumn] ?? 'null');
+      const yVal = Number(row[config.yColumn]) || 0;
+      const zVal = config.zColumn ? Number(row[config.zColumn]) || 1 : 1;
+      xLabels.add(xVal);
+      bubbleData.push([xVal, yVal, zVal, xVal]);
+    }
+
+    const xLabelArray = Array.from(xLabels).sort();
+
+    // Calculate max size for scaling
+    const maxZ = Math.max(...bubbleData.map(d => d[2]));
+    const minZ = Math.min(...bubbleData.map(d => d[2]));
+
+    const option: echarts.EChartsOption = {
+      title: {
+        text: config.title || undefined,
+        left: 'center',
+      },
+      tooltip: {
+        trigger: 'item',
+        formatter: (params: unknown) => {
+          const p = params as { data: [string, number, number, string] };
+          return `${p.data[3]}<br/>Y: ${p.data[1]}<br/>Size: ${p.data[2]}`;
+        },
+      },
+      legend: {
+        show: config.showLegend,
+        top: 'bottom',
+      },
+      grid: {
+        left: '10%',
+        right: '10%',
+        bottom: config.showLegend ? '15%' : '10%',
+        top: config.title ? '15%' : '10%',
+      },
+      xAxis: {
+        type: 'category',
+        data: xLabelArray,
+        axisLabel: {
+          rotate: config.rotateLabels ? -45 : 0,
+        },
+        splitLine: {
+          show: config.showGrid,
+        },
+      },
+      yAxis: {
+        type: 'value',
+        splitLine: {
+          show: config.showGrid,
+        },
+      },
+      series: [
+        {
+          name: config.yColumn || 'Value',
+          type: 'scatter',
+          symbolSize: (val: number[]) => {
+            // Scale bubble size between 10 and 60
+            const normalized = maxZ === minZ ? 0.5 : (val[2] - minZ) / (maxZ - minZ);
+            return 10 + normalized * 50;
+          },
+          data: bubbleData.map(d => [d[0], d[1], d[2]]),
+          itemStyle: {
+            color: 'rgba(74, 74, 224, 0.7)',
+          },
+          emphasis: {
+            itemStyle: {
+              color: 'rgba(74, 74, 224, 1)',
+            },
+          },
+        },
+      ],
+    };
+
+    this.echartsInstance.setOption(option);
+  }
+
+  private renderHeatmapChart(data: Record<string, unknown>[], config: ChartConfig): void {
+    if (!this.echartsInstance) return;
+
+    // Group data for heatmap: x-axis categories, y-axis categories, values
+    const xLabels = new Set<string>();
+    const yLabels = new Set<string>();
+    const valueMap = new Map<string, number>();
+
+    for (const row of data) {
+      const xVal = String(row[config.xColumn] ?? 'null');
+      const yVal = String(row[config.yColumn] ?? 'null');
+      const zVal = config.zColumn ? Number(row[config.zColumn]) || 0 : 1;
+
+      xLabels.add(xVal);
+      yLabels.add(yVal);
+
+      const key = `${xVal}|${yVal}`;
+      valueMap.set(key, (valueMap.get(key) || 0) + zVal);
+    }
+
+    const xLabelArray = Array.from(xLabels).sort();
+    const yLabelArray = Array.from(yLabels).sort();
+
+    // Create heatmap data: [xIndex, yIndex, value]
+    const heatmapData: [number, number, number][] = [];
+    let maxVal = 0;
+    let minVal = Infinity;
+
+    for (let xi = 0; xi < xLabelArray.length; xi++) {
+      for (let yi = 0; yi < yLabelArray.length; yi++) {
+        const key = `${xLabelArray[xi]}|${yLabelArray[yi]}`;
+        const val = valueMap.get(key) || 0;
+        heatmapData.push([xi, yi, val]);
+        if (val > maxVal) maxVal = val;
+        if (val < minVal) minVal = val;
+      }
+    }
+
+    const option: echarts.EChartsOption = {
+      title: {
+        text: config.title || undefined,
+        left: 'center',
+      },
+      tooltip: {
+        position: 'top',
+        formatter: (params: unknown) => {
+          const p = params as { data: [number, number, number] };
+          return `${xLabelArray[p.data[0]]} / ${yLabelArray[p.data[1]]}<br/>Value: ${p.data[2]}`;
+        },
+      },
+      grid: {
+        left: '15%',
+        right: '15%',
+        bottom: config.rotateLabels ? '20%' : '10%',
+        top: config.title ? '15%' : '10%',
+      },
+      xAxis: {
+        type: 'category',
+        data: xLabelArray,
+        axisLabel: {
+          rotate: config.rotateLabels ? -45 : 0,
+        },
+        splitArea: {
+          show: true,
+        },
+      },
+      yAxis: {
+        type: 'category',
+        data: yLabelArray,
+        splitArea: {
+          show: true,
+        },
+      },
+      visualMap: {
+        min: minVal,
+        max: maxVal,
+        calculable: true,
+        orient: 'horizontal',
+        left: 'center',
+        bottom: '0%',
+        inRange: {
+          color: ['#f0f9ff', '#4a4ae0', '#1e1e8f'],
+        },
+      },
+      series: [
+        {
+          name: config.zColumn || 'Value',
+          type: 'heatmap',
+          data: heatmapData,
+          label: {
+            show: heatmapData.length <= 100, // Only show labels for small datasets
+          },
+          emphasis: {
+            itemStyle: {
+              shadowBlur: 10,
+              shadowColor: 'rgba(0, 0, 0, 0.5)',
+            },
+          },
+        },
+      ],
+    };
+
+    this.echartsInstance.setOption(option);
   }
 
   private getSeriesConfig(chartType: ChartType, yColumn: string): uPlot.Series {
@@ -452,7 +673,7 @@ export class VisualizationComponent implements OnInit, OnDestroy, AfterViewInit 
       case 'stepped':
         return {
           ...baseConfig,
-          paths: uPlot.paths.stepped!({ align: 1 }), // align: 1 = after, -1 = before, 0 = center
+          paths: uPlot.paths.stepped!({ align: 1 }),
         };
       case 'stepped-area':
         return {
@@ -467,17 +688,14 @@ export class VisualizationComponent implements OnInit, OnDestroy, AfterViewInit 
   }
 
   private getXAxisSplits(dataLength: number, tickCount: number): number[] | undefined {
-    // Auto mode - let uPlot decide
     if (tickCount === 0) {
       return undefined;
     }
 
-    // All ticks
     if (tickCount === -1 || tickCount >= dataLength) {
       return Array.from({ length: dataLength }, (_, i) => i);
     }
 
-    // Specific tick count - distribute evenly
     const splits: number[] = [];
     const step = (dataLength - 1) / (tickCount - 1);
     for (let i = 0; i < tickCount; i++) {
@@ -492,7 +710,6 @@ export class VisualizationComponent implements OnInit, OnDestroy, AfterViewInit 
   ): { xData: number[]; yData: number[]; labels: Record<number, string> } | null {
     if (!config.xColumn) return null;
 
-    // Group and aggregate data
     const grouped = new Map<string, number[]>();
 
     for (const row of data) {
@@ -505,7 +722,6 @@ export class VisualizationComponent implements OnInit, OnDestroy, AfterViewInit 
       grouped.get(xVal)!.push(yVal);
     }
 
-    // Apply aggregation
     const aggregated: { label: string; value: number }[] = [];
     for (const [label, values] of grouped) {
       let value: number;
@@ -532,10 +748,8 @@ export class VisualizationComponent implements OnInit, OnDestroy, AfterViewInit 
       aggregated.push({ label, value });
     }
 
-    // Sort by label
     aggregated.sort((a, b) => a.label.localeCompare(b.label));
 
-    // Create arrays for uPlot
     const xData = aggregated.map((_, i) => i);
     const yData = aggregated.map((d) => d.value);
     const labels: Record<number, string> = {};
@@ -547,19 +761,20 @@ export class VisualizationComponent implements OnInit, OnDestroy, AfterViewInit 
   }
 
   private destroyChart(): void {
-    if (this.chart) {
-      this.chart.destroy();
-      this.chart = null;
+    if (this.uplotChart) {
+      this.uplotChart.destroy();
+      this.uplotChart = null;
+    }
+    if (this.echartsInstance) {
+      this.echartsInstance.dispose();
+      this.echartsInstance = null;
     }
   }
 
-  // Handle chart click for drill-down
   onChartClick(event: MouseEvent): void {
     // Implement drill-down on chart click
-    // This would require more sophisticated hit-testing
   }
 
-  // Utility
   formatValue(value: unknown): string {
     if (value === null || value === undefined) {
       return 'NULL';
