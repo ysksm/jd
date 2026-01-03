@@ -1,6 +1,6 @@
 use crate::application::dto::CreatedIssueDto;
 use crate::domain::entities::{
-    Component, FixVersion, Issue, IssueType, Label, Priority, Project, Status,
+    Component, FixVersion, Issue, IssueType, JiraField, Label, Priority, Project, Status,
 };
 use crate::domain::error::DomainResult;
 use async_trait::async_trait;
@@ -35,6 +35,9 @@ pub trait JiraService: Send + Sync {
 
     /// Fetch project versions
     async fn fetch_project_versions(&self, project_key: &str) -> DomainResult<Vec<FixVersion>>;
+
+    /// Fetch all JIRA fields metadata
+    async fn fetch_fields(&self) -> DomainResult<Vec<JiraField>>;
 
     /// Create a new issue
     async fn create_issue(

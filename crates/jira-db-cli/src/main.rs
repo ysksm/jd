@@ -14,7 +14,7 @@ use jira_db_core::infrastructure::database::{
 };
 use jira_db_core::infrastructure::external::jira::JiraApiClient;
 
-use cli::{Cli, CliHandler, Commands, ConfigAction, ProjectAction, SnapshotsAction};
+use cli::{Cli, CliHandler, Commands, ConfigAction, FieldsAction, ProjectAction, SnapshotsAction};
 
 #[tokio::main]
 async fn main() {
@@ -54,8 +54,9 @@ async fn run() -> DomainResult<()> {
     // Create JIRA service (DIP: implements application service trait)
     let jira_service = Arc::new(JiraApiClient::new(&settings.jira)?);
 
-    // Clone issue_repository for later use in embeddings command
+    // Clone repositories for later use in embeddings and fields commands
     let issue_repository_for_embeddings = issue_repository.clone();
+    let jira_service_for_fields = Arc::clone(&jira_service);
 
     // Create CLI handler with all dependencies injected
     let handler = CliHandler::new(
@@ -160,6 +161,9 @@ async fn run() -> DomainResult<()> {
                 handler.handle_snapshots_show(&issue_key, version)?;
             }
         },
+        Commands::Fields { action } => {
+            handle_fields_command(conn.clone(), jira_service_for_fields, action).await?;
+        }
     }
 
     Ok(())
@@ -366,6 +370,104 @@ async fn handle_embeddings_command(
         "  Store embeddings:    {:.2}s",
         result.timing.store_embeddings_secs
     );
+
+    Ok(())
+}
+
+async fn handle_fields_command(
+    conn: jira_db_core::infrastructure::database::DbConnection,
+    jira_service: Arc<JiraApiClient>,
+    action: FieldsAction,
+) -> DomainResult<()> {
+    use comfy_table::{Cell, Color, Table, presets::UTF8_FULL};
+    use jira_db_core::application::use_cases::SyncFieldsUseCase;
+    use jira_db_core::infrastructure::database::{
+        DuckDbFieldRepository, DuckDbIssuesExpandedRepository,
+    };
+
+    let field_repo = Arc::new(DuckDbFieldRepository::new(conn.clone()));
+    let expanded_repo = Arc::new(DuckDbIssuesExpandedRepository::new(conn));
+
+    match action {
+        FieldsAction::Sync => {
+            println!("Fetching field definitions from JIRA...");
+            let use_case =
+                SyncFieldsUseCase::new(jira_service, field_repo.clone(), expanded_repo.clone());
+
+            let count = use_case.sync_fields().await?;
+            println!("Synced {} field definitions", count);
+        }
+
+        FieldsAction::List { custom, navigable } => {
+            let fields = if navigable {
+                field_repo.find_navigable()?
+            } else {
+                field_repo.find_all()?
+            };
+
+            if fields.is_empty() {
+                println!("No field definitions found. Run 'jira-db fields sync' first.");
+                return Ok(());
+            }
+
+            let filtered: Vec<_> = if custom {
+                fields.into_iter().filter(|f| f.custom).collect()
+            } else {
+                fields
+            };
+
+            let mut table = Table::new();
+            table.load_preset(UTF8_FULL);
+            table.set_header(vec!["ID", "Name", "Type", "Custom", "Navigable"]);
+
+            for field in &filtered {
+                table.add_row(vec![
+                    Cell::new(&field.id),
+                    Cell::new(&field.name),
+                    Cell::new(field.schema_type.as_deref().unwrap_or("-")),
+                    if field.custom {
+                        Cell::new("Yes").fg(Color::Yellow)
+                    } else {
+                        Cell::new("No")
+                    },
+                    if field.navigable {
+                        Cell::new("Yes").fg(Color::Green)
+                    } else {
+                        Cell::new("No").fg(Color::DarkGrey)
+                    },
+                ]);
+            }
+
+            println!("{table}");
+            println!("\nTotal: {} fields", filtered.len());
+        }
+
+        FieldsAction::Expand { project } => {
+            println!("Adding columns based on field definitions...");
+            let use_case = SyncFieldsUseCase::new(jira_service, field_repo, expanded_repo.clone());
+
+            let added = use_case.add_columns()?;
+            if !added.is_empty() {
+                println!("Added {} new columns: {}", added.len(), added.join(", "));
+            }
+
+            println!("Expanding issues from raw_data...");
+            let count = use_case.expand_issues(project.as_deref())?;
+            println!("Expanded {} issues into issues_expanded table", count);
+        }
+
+        FieldsAction::Full { project } => {
+            println!("Running full field sync and expansion...\n");
+            let use_case = SyncFieldsUseCase::new(jira_service, field_repo, expanded_repo);
+
+            let result = use_case.execute(project.as_deref()).await?;
+
+            println!("Results:");
+            println!("  Fields synced:    {}", result.fields_synced);
+            println!("  Columns added:    {}", result.columns_added);
+            println!("  Issues expanded:  {}", result.issues_expanded);
+        }
+    }
 
     Ok(())
 }

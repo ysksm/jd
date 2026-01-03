@@ -18,12 +18,13 @@ pub use application::use_cases::{
     CreateTestTicketUseCase, EmbeddingGenerationConfig, EmbeddingGenerationResult, EmbeddingTiming,
     ExecuteSqlUseCase, GenerateEmbeddingsUseCase, GenerateReportUseCase, GenerateSnapshotsUseCase,
     GetChangeHistoryUseCase, GetProjectMetadataUseCase, ReportData, SearchIssuesUseCase,
-    SnapshotGenerationResult, SqlResult, SyncProjectListUseCase, SyncProjectUseCase,
+    SnapshotGenerationResult, SqlResult, SyncFieldsResult, SyncFieldsUseCase,
+    SyncProjectListUseCase, SyncProjectUseCase,
 };
 
 pub use domain::entities::{
-    ChangeHistoryItem, Component, FixVersion, Issue, IssueSnapshot, IssueType, Label, Priority,
-    Project, Status,
+    ChangeHistoryItem, Component, FixVersion, Issue, IssueSnapshot, IssueType, JiraField, Label,
+    Priority, Project, Status,
 };
 pub use domain::error::{DomainError, DomainResult};
 pub use domain::repositories::{
@@ -35,9 +36,10 @@ pub use infrastructure::config::{
     DatabaseConfig, EmbeddingsConfig, JiraConfig, ProjectConfig, Settings,
 };
 pub use infrastructure::database::{
-    Database, DbConnection, DuckDbChangeHistoryRepository, DuckDbIssueRepository,
-    DuckDbIssueSnapshotRepository, DuckDbMetadataRepository, DuckDbProjectRepository,
-    DuckDbSyncHistoryRepository, EmbeddingsRepository, SemanticSearchResult,
+    Database, DbConnection, DuckDbChangeHistoryRepository, DuckDbFieldRepository,
+    DuckDbIssueRepository, DuckDbIssueSnapshotRepository, DuckDbIssuesExpandedRepository,
+    DuckDbMetadataRepository, DuckDbProjectRepository, DuckDbSyncHistoryRepository,
+    EmbeddingsRepository, SemanticSearchResult,
 };
 pub use infrastructure::external::embeddings::{
     CohereConfig, CohereEmbeddingClient, EmbeddingConfig, EmbeddingProvider, EmbeddingProviderType,

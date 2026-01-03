@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
 use log::info;
+use serde_json::Value as JsonValue;
 
 use crate::domain::entities::{ChangeHistoryItem, Issue, IssueSnapshot};
 use crate::domain::error::DomainResult;
@@ -107,10 +108,14 @@ where
 
         let mut snapshots = Vec::new();
 
+        // Parse raw_json once for the current snapshot
+        let raw_data = Self::parse_raw_json(&issue.raw_json);
+
         // If no history, create a single snapshot from current state
         if timestamps.is_empty() {
             let created_at = issue.created_date.unwrap_or_else(Utc::now);
-            let snapshot = self.create_snapshot_from_issue(issue, 1, created_at, None);
+            // This is the only (and current) snapshot, so include raw_data
+            let snapshot = self.create_snapshot_from_issue(issue, 1, created_at, None, raw_data);
             snapshots.push(snapshot);
             return Ok(snapshots);
         }
@@ -120,6 +125,7 @@ where
         let issue_created = issue.created_date.unwrap_or_else(Utc::now);
 
         // Version 1: Initial state (from creation to first change)
+        // Historical snapshot - no raw_data
         let first_change_time = timestamps[0];
         let snapshot = IssueSnapshot::new(
             issue.id.clone(),
@@ -171,6 +177,7 @@ where
                 .get("parent")
                 .cloned()
                 .or_else(|| issue.parent_key.clone()),
+            None, // Historical snapshot - no raw_data
         );
         snapshots.push(snapshot);
 
@@ -196,6 +203,13 @@ where
             // Determine valid_to (next change time or None if this is the last)
             let valid_to = if i + 1 < timestamps.len() {
                 Some(timestamps[i + 1])
+            } else {
+                None
+            };
+
+            // Only include raw_data for the current (last) snapshot
+            let snapshot_raw_data = if valid_to.is_none() {
+                raw_data.clone()
             } else {
                 None
             };
@@ -251,6 +265,7 @@ where
                     .get("parent")
                     .cloned()
                     .or_else(|| issue.parent_key.clone()),
+                snapshot_raw_data,
             );
             snapshots.push(snapshot);
         }
@@ -337,6 +352,7 @@ where
         version: i32,
         valid_from: DateTime<Utc>,
         valid_to: Option<DateTime<Utc>>,
+        raw_data: Option<JsonValue>,
     ) -> IssueSnapshot {
         IssueSnapshot::new(
             issue.id.clone(),
@@ -358,6 +374,12 @@ where
             issue.fix_versions.clone(),
             issue.sprint.clone(),
             issue.parent_key.clone(),
+            raw_data,
         )
+    }
+
+    /// Parse raw_json string to JsonValue
+    fn parse_raw_json(raw_json: &Option<String>) -> Option<JsonValue> {
+        raw_json.as_ref().and_then(|s| serde_json::from_str(s).ok())
     }
 }

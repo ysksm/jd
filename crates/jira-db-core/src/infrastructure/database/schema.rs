@@ -11,6 +11,8 @@ impl Schema {
         Self::create_metadata_tables(conn)?;
         Self::create_change_history_table(conn)?;
         Self::create_issue_snapshots_table(conn)?;
+        Self::create_jira_fields_table(conn)?;
+        Self::create_issues_expanded_table(conn)?;
         Self::create_indexes(conn)?;
         Self::run_migrations(conn)?;
         Ok(())
@@ -20,6 +22,8 @@ impl Schema {
     fn run_migrations(conn: &Connection) -> DomainResult<()> {
         // Migration: issuesテーブルにsprintカラムを追加
         Self::add_column_if_not_exists(conn, "issues", "sprint", "VARCHAR")?;
+        // Migration: issue_snapshotsテーブルにraw_dataカラムを追加
+        Self::add_column_if_not_exists(conn, "issue_snapshots", "raw_data", "JSON")?;
         Ok(())
     }
 
@@ -328,6 +332,7 @@ impl Schema {
                 fix_versions VARCHAR,
                 sprint VARCHAR,
                 parent_key VARCHAR,
+                raw_data JSON,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 PRIMARY KEY (issue_id, version)
             )
@@ -355,6 +360,88 @@ impl Schema {
         .map_err(|e| DomainError::Repository(format!("Failed to create index: {}", e)))?;
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_snapshots_valid_to ON issue_snapshots(valid_to)",
+            [],
+        )
+        .map_err(|e| DomainError::Repository(format!("Failed to create index: {}", e)))?;
+
+        Ok(())
+    }
+
+    fn create_jira_fields_table(conn: &Connection) -> DomainResult<()> {
+        conn.execute(
+            r#"
+            CREATE TABLE IF NOT EXISTS jira_fields (
+                id VARCHAR PRIMARY KEY,
+                key VARCHAR NOT NULL,
+                name VARCHAR NOT NULL,
+                custom BOOLEAN DEFAULT false,
+                searchable BOOLEAN DEFAULT false,
+                navigable BOOLEAN DEFAULT false,
+                orderable BOOLEAN DEFAULT false,
+                schema_type VARCHAR,
+                schema_items VARCHAR,
+                schema_system VARCHAR,
+                schema_custom VARCHAR,
+                schema_custom_id BIGINT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            "#,
+            [],
+        )
+        .map_err(|e| {
+            DomainError::Repository(format!("Failed to create jira_fields table: {}", e))
+        })?;
+
+        Ok(())
+    }
+
+    fn create_issues_expanded_table(conn: &Connection) -> DomainResult<()> {
+        // Create base issues_expanded table with core columns
+        // Additional columns will be added dynamically based on jira_fields
+        conn.execute(
+            r#"
+            CREATE TABLE IF NOT EXISTS issues_expanded (
+                id VARCHAR PRIMARY KEY,
+                project_id VARCHAR NOT NULL,
+                issue_key VARCHAR NOT NULL,
+                summary TEXT,
+                description TEXT,
+                status VARCHAR,
+                priority VARCHAR,
+                assignee VARCHAR,
+                reporter VARCHAR,
+                issue_type VARCHAR,
+                resolution VARCHAR,
+                labels JSON,
+                components JSON,
+                fix_versions JSON,
+                sprint VARCHAR,
+                parent_key VARCHAR,
+                created_date TIMESTAMP,
+                updated_date TIMESTAMP,
+                synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            "#,
+            [],
+        )
+        .map_err(|e| {
+            DomainError::Repository(format!("Failed to create issues_expanded table: {}", e))
+        })?;
+
+        // Create indexes
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_issues_expanded_project ON issues_expanded(project_id)",
+            [],
+        )
+        .map_err(|e| DomainError::Repository(format!("Failed to create index: {}", e)))?;
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_issues_expanded_key ON issues_expanded(issue_key)",
+            [],
+        )
+        .map_err(|e| DomainError::Repository(format!("Failed to create index: {}", e)))?;
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_issues_expanded_status ON issues_expanded(status)",
             [],
         )
         .map_err(|e| DomainError::Repository(format!("Failed to create index: {}", e)))?;

@@ -6,6 +6,7 @@ mod generate_snapshots;
 mod get_change_history;
 mod get_project_metadata;
 mod search_issues;
+mod sync_fields;
 mod sync_project;
 mod sync_project_list;
 
@@ -20,5 +21,6 @@ pub use generate_snapshots::{GenerateSnapshotsUseCase, SnapshotGenerationResult}
 pub use get_change_history::GetChangeHistoryUseCase;
 pub use get_project_metadata::GetProjectMetadataUseCase;
 pub use search_issues::SearchIssuesUseCase;
+pub use sync_fields::{SyncFieldsResult, SyncFieldsUseCase};
 pub use sync_project::SyncProjectUseCase;
 pub use sync_project_list::SyncProjectListUseCase;
