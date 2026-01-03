@@ -86,9 +86,20 @@ cargo run -p jira-db-mcp -- --database ./data/jira.duckdb --http --port 8080
 
 ## Running Tauri App
 
+Tauri uses Angular for the frontend.
+
 ```bash
+# Navigate to Tauri crate
 cd crates/jira-db-tauri
-cargo tauri dev
+
+# Install npm dependencies (first time only)
+npm install
+
+# Run in development mode
+npm run tauri:dev
+
+# Build for production
+npm run tauri:build
 ```
 
 ## Adding Dependencies

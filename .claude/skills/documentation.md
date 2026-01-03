@@ -93,7 +93,7 @@
 
 | 変更パターン | 更新が必要なファイル |
 |-------------|---------------------|
-| `schema.rs` 変更 | CLAUDE.md, README.md, .claude/skills/database-schema.md |
+| `schema.rs` 変更 | CLAUDE.md, README.md, .claude/skills/database-schema.md, .claude/skills/architecture.md |
 | 新CLIコマンド追加 | README.md, CLAUDE.md |
 | 新MCPツール追加 | README.md, CLAUDE.md, docs/MCP.md |
 | 新use case追加 | CLAUDE.md, docs/ARCHITECTURE.md |
@@ -101,6 +101,7 @@
 | 埋め込み機能変更 | docs/EMBEDDINGS.md, CLAUDE.md |
 | 設定項目追加 | README.md, CLAUDE.md |
 | 依存関係変更 | README.md |
+| Tauriフロントエンド変更 | crates/jira-db-tauri/README.md |
 
 ## ドキュメント記述スタイル
 
