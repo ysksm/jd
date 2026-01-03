@@ -5,6 +5,9 @@ use std::sync::Mutex;
 
 use jira_db_core::{Database, DbConnection, Settings};
 
+/// Default database filename
+const DEFAULT_DB_FILENAME: &str = "jira.duckdb";
+
 /// Shared application state
 pub struct AppState {
     /// Path to settings file
@@ -25,10 +28,35 @@ impl Default for AppState {
     }
 }
 
+/// Ensure the database path is a file path, not a directory
+fn ensure_db_file_path(path: PathBuf) -> PathBuf {
+    // If path exists and is a directory, or if path has no extension (likely a directory),
+    // append the default database filename
+    if path.is_dir() {
+        return path.join(DEFAULT_DB_FILENAME);
+    }
+
+    // Check if path looks like a directory (no extension and no .duckdb suffix)
+    if path.extension().is_none() && !path.to_string_lossy().ends_with(".duckdb") {
+        // Check if it's "." or ".." or ends with separator
+        let path_str = path.to_string_lossy();
+        if path_str == "." || path_str == ".." || path_str.ends_with('/') {
+            return path.join(DEFAULT_DB_FILENAME);
+        }
+    }
+
+    path
+}
+
 impl AppState {
     /// Initialize the application state with a settings file
     pub fn initialize(&self, settings_path: PathBuf) -> anyhow::Result<()> {
         let mut settings = Settings::load(&settings_path)?;
+
+        tracing::info!(
+            "Loaded settings, database.path from file: {:?}",
+            settings.database.path
+        );
 
         // Resolve database path relative to settings file directory if it's relative
         let db_path = if settings.database.path.is_relative() {
@@ -42,6 +70,9 @@ impl AppState {
         } else {
             settings.database.path.clone()
         };
+
+        // Ensure the path is a file path, not a directory
+        let db_path = ensure_db_file_path(db_path);
 
         tracing::info!("Database path (resolved): {:?}", db_path);
 
@@ -77,6 +108,9 @@ impl AppState {
         } else {
             settings.database.path.clone()
         };
+
+        // Ensure the path is a file path, not a directory
+        let db_path = ensure_db_file_path(db_path);
 
         tracing::info!("Database path (resolved): {:?}", db_path);
 
