@@ -27,6 +27,7 @@ interface ChartConfig {
   showLegend: boolean;
   showGrid: boolean;
   rotateLabels: boolean;
+  xTickCount: number; // 0 = auto, otherwise specific count
 }
 
 interface FilterConfig {
@@ -69,7 +70,20 @@ export class VisualizationComponent implements OnInit, OnDestroy, AfterViewInit 
     showLegend: true,
     showGrid: true,
     rotateLabels: false,
+    xTickCount: 0, // 0 = auto
   });
+
+  // X-axis tick count options
+  xTickOptions: { value: number; label: string }[] = [
+    { value: 0, label: 'Auto' },
+    { value: 5, label: '5' },
+    { value: 10, label: '10' },
+    { value: 15, label: '15' },
+    { value: 20, label: '20' },
+    { value: 30, label: '30' },
+    { value: 50, label: '50' },
+    { value: -1, label: 'All' },
+  ];
 
   // Filters
   filters = signal<FilterConfig[]>([]);
@@ -369,6 +383,7 @@ export class VisualizationComponent implements OnInit, OnDestroy, AfterViewInit 
           values: (_u: uPlot, vals: number[]) => vals.map((v: number) => labels[v] || String(v)),
           rotate: config.rotateLabels ? -45 : 0, // Rotate labels diagonally
           gap: config.rotateLabels ? 8 : 5, // More gap when rotated
+          splits: this.getXAxisSplits(xData.length, config.xTickCount),
         },
         {
           grid: { show: config.showGrid },
@@ -430,6 +445,26 @@ export class VisualizationComponent implements OnInit, OnDestroy, AfterViewInit 
       default:
         return baseConfig;
     }
+  }
+
+  private getXAxisSplits(dataLength: number, tickCount: number): number[] | undefined {
+    // Auto mode - let uPlot decide
+    if (tickCount === 0) {
+      return undefined;
+    }
+
+    // All ticks
+    if (tickCount === -1 || tickCount >= dataLength) {
+      return Array.from({ length: dataLength }, (_, i) => i);
+    }
+
+    // Specific tick count - distribute evenly
+    const splits: number[] = [];
+    const step = (dataLength - 1) / (tickCount - 1);
+    for (let i = 0; i < tickCount; i++) {
+      splits.push(Math.round(i * step));
+    }
+    return splits;
   }
 
   private prepareChartData(

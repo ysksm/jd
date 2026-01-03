@@ -133,6 +133,18 @@
               />
             </div>
 
+            <div class="config-group">
+              <label>X-Axis Ticks</label>
+              <select
+                [ngModel]="chartConfig().xTickCount"
+                (ngModelChange)="updateChartConfig({ xTickCount: +$event })"
+              >
+                @for (opt of xTickOptions; track opt.value) {
+                  <option [value]="opt.value">{{ opt.label }}</option>
+                }
+              </select>
+            </div>
+
             <div class="config-row">
               <label class="checkbox-label">
                 <input
