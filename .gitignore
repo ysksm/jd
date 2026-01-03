@@ -28,3 +28,6 @@ target
 /reports
 
 /settings.json
+
+# Tauri generated files
+crates/jira-db-tauri/src-tauri/gen/
