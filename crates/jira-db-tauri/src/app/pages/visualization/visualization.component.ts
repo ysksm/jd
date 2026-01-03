@@ -356,7 +356,7 @@ export class VisualizationComponent implements OnInit, OnDestroy, AfterViewInit 
       axes: [
         {
           grid: { show: config.showGrid },
-          values: (_, vals) => vals.map((v) => labels[v] || String(v)),
+          values: (_u: uPlot, vals: number[]) => vals.map((v: number) => labels[v] || String(v)),
         },
         {
           grid: { show: config.showGrid },
