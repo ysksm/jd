@@ -27,24 +27,31 @@ if echo "$CHANGED_FILES" | grep -qE "schema\.rs|embeddings_repository\.rs"; then
     DOC_UPDATE_NEEDED=true
 fi
 
-# Check for CLI command changes -> update README.md, CLAUDE.md
+# Check for CLI command changes -> update README.md, CLAUDE.md, docs/FEATURE_MATRIX.md
 if echo "$CHANGED_FILES" | grep -qE "jira-db-cli/src/cli/commands\.rs|jira-db-cli/src/cli/handlers\.rs"; then
     echo "   ⚠️  CLI commands changed"
-    DOC_FILES_TO_CHECK="$DOC_FILES_TO_CHECK README.md CLAUDE.md"
+    DOC_FILES_TO_CHECK="$DOC_FILES_TO_CHECK README.md CLAUDE.md docs/FEATURE_MATRIX.md"
     DOC_UPDATE_NEEDED=true
 fi
 
-# Check for MCP tool changes -> update README.md, CLAUDE.md, docs/MCP.md
+# Check for Tauri command changes -> update docs/FEATURE_MATRIX.md
+if echo "$CHANGED_FILES" | grep -qE "jira-db-tauri/src-tauri/src/commands/"; then
+    echo "   ⚠️  Tauri commands changed"
+    DOC_FILES_TO_CHECK="$DOC_FILES_TO_CHECK docs/FEATURE_MATRIX.md"
+    DOC_UPDATE_NEEDED=true
+fi
+
+# Check for MCP tool changes -> update README.md, CLAUDE.md, docs/MCP.md, docs/FEATURE_MATRIX.md
 if echo "$CHANGED_FILES" | grep -qE "jira-db-mcp/src/tools/"; then
     echo "   ⚠️  MCP tools changed"
-    DOC_FILES_TO_CHECK="$DOC_FILES_TO_CHECK README.md CLAUDE.md docs/MCP.md"
+    DOC_FILES_TO_CHECK="$DOC_FILES_TO_CHECK README.md CLAUDE.md docs/MCP.md docs/FEATURE_MATRIX.md"
     DOC_UPDATE_NEEDED=true
 fi
 
-# Check for use case changes -> update CLAUDE.md, docs/ARCHITECTURE.md
+# Check for use case changes -> update CLAUDE.md, docs/ARCHITECTURE.md, docs/FEATURE_MATRIX.md
 if echo "$CHANGED_FILES" | grep -qE "application/use_cases/"; then
     echo "   ⚠️  Use cases changed"
-    DOC_FILES_TO_CHECK="$DOC_FILES_TO_CHECK CLAUDE.md docs/ARCHITECTURE.md"
+    DOC_FILES_TO_CHECK="$DOC_FILES_TO_CHECK CLAUDE.md docs/ARCHITECTURE.md docs/FEATURE_MATRIX.md"
     DOC_UPDATE_NEEDED=true
 fi
 
