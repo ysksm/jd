@@ -1,5 +1,17 @@
-# Ignore data directory and database files
-**/data/**
-**/*.duckdb
-**/*.duckdb.wal
-**/target/**
+# Ignore data directory (at workspace root)
+data/
+/data/
+../../../data/
+
+# Ignore DuckDB files
+*.duckdb
+*.duckdb.wal
+
+# Ignore build artifacts
+target/
+/target/
+
+# Ignore node_modules and Angular cache
+node_modules/
+.angular/
+dist/
