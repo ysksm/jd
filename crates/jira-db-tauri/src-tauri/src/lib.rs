@@ -16,7 +16,11 @@ const SETTINGS_FILE: &str = "./data/settings.json";
 /// Run the Tauri application
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Initialize tracing subscriber
     tracing_subscriber::fmt::init();
+
+    // Bridge log crate to tracing (for jira-db-core logs)
+    tracing_log::LogTracer::init().ok();
 
     tauri::Builder::default()
         .manage(AppState::default())
@@ -72,6 +76,11 @@ pub fn run() {
             // Embeddings
             commands::embeddings::embeddings_generate,
             commands::embeddings::embeddings_search,
+            // Fields
+            commands::fields::fields_sync,
+            commands::fields::fields_expand,
+            commands::fields::fields_full,
+            commands::fields::fields_list,
             // Reports
             commands::reports::reports_generate,
             // SQL
