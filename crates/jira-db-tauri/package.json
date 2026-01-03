@@ -8,7 +8,8 @@
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
     "tauri": "tauri",
-    "tauri:dev": "tauri dev --ignore '**/data/**' --ignore '**/*.duckdb' --ignore '**/*.duckdb.wal'",
+    "tauri:dev": "tauri dev",
+    "tauri:dev:no-watch": "tauri dev --no-watch",
     "tauri:build": "tauri build"
   },
   "prettier": {
