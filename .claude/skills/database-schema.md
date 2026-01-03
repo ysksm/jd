@@ -174,6 +174,99 @@ JIRAイシューの全データを格納
 | created_at | TIMESTAMP | NOT NULL - 作成日時 |
 | updated_at | TIMESTAMP | NOT NULL - 更新日時 |
 
+### Snapshot Tables
+
+#### issue_snapshots
+イシューのバージョン履歴を格納（時点管理）
+
+| Column | Type | Description |
+|--------|------|-------------|
+| issue_id | VARCHAR | NOT NULL - イシューID |
+| issue_key | VARCHAR | NOT NULL - イシューキー |
+| project_id | VARCHAR | NOT NULL - プロジェクトID |
+| version | INTEGER | NOT NULL - バージョン番号 |
+| valid_from | TIMESTAMP | NOT NULL - 有効開始日時 |
+| valid_to | TIMESTAMP | 有効終了日時 (NULLは現在有効) |
+| summary | TEXT | NOT NULL - サマリー |
+| description | TEXT | 説明 |
+| status | VARCHAR | ステータス |
+| priority | VARCHAR | 優先度 |
+| assignee | VARCHAR | 担当者 |
+| reporter | VARCHAR | 報告者 |
+| issue_type | VARCHAR | イシュータイプ |
+| resolution | VARCHAR | 解決状況 |
+| labels | VARCHAR | ラベル (カンマ区切り) |
+| components | VARCHAR | コンポーネント (カンマ区切り) |
+| fix_versions | VARCHAR | 修正バージョン (カンマ区切り) |
+| sprint | VARCHAR | スプリント名 |
+| parent_key | VARCHAR | 親イシューキー |
+| raw_data | JSON | 完全なAPIレスポンス |
+| created_at | TIMESTAMP | レコード作成日時 (DEFAULT CURRENT_TIMESTAMP) |
+
+**主キー:** `(issue_id, version)`
+
+**インデックス:**
+- `idx_snapshots_issue_key` ON (issue_key)
+- `idx_snapshots_project_id` ON (project_id)
+- `idx_snapshots_valid_from` ON (valid_from)
+- `idx_snapshots_valid_to` ON (valid_to)
+
+### Field Definition Tables
+
+#### jira_fields
+JIRAフィールド定義を格納
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | VARCHAR | PRIMARY KEY - フィールドID |
+| key | VARCHAR | NOT NULL - フィールドキー |
+| name | VARCHAR | NOT NULL - フィールド名 |
+| custom | BOOLEAN | カスタムフィールドフラグ (DEFAULT false) |
+| searchable | BOOLEAN | 検索可能フラグ (DEFAULT false) |
+| navigable | BOOLEAN | ナビゲート可能フラグ (DEFAULT false) |
+| orderable | BOOLEAN | 並び替え可能フラグ (DEFAULT false) |
+| schema_type | VARCHAR | スキーマタイプ |
+| schema_items | VARCHAR | スキーマアイテム |
+| schema_system | VARCHAR | スキーマシステム |
+| schema_custom | VARCHAR | カスタムスキーマ |
+| schema_custom_id | BIGINT | カスタムスキーマID |
+| created_at | TIMESTAMP | 作成日時 (DEFAULT CURRENT_TIMESTAMP) |
+| updated_at | TIMESTAMP | 更新日時 (DEFAULT CURRENT_TIMESTAMP) |
+
+### Expanded Views
+
+#### issues_expanded
+イシューの展開ビュー（raw_dataから抽出した全フィールド）
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | VARCHAR | PRIMARY KEY |
+| project_id | VARCHAR | NOT NULL - プロジェクトID |
+| issue_key | VARCHAR | NOT NULL - イシューキー |
+| summary | TEXT | サマリー |
+| description | TEXT | 説明 |
+| status | VARCHAR | ステータス |
+| priority | VARCHAR | 優先度 |
+| assignee | VARCHAR | 担当者 |
+| reporter | VARCHAR | 報告者 |
+| issue_type | VARCHAR | イシュータイプ |
+| resolution | VARCHAR | 解決状況 |
+| labels | JSON | ラベル (JSON配列) |
+| components | JSON | コンポーネント (JSON配列) |
+| fix_versions | JSON | 修正バージョン (JSON配列) |
+| sprint | VARCHAR | スプリント名 |
+| parent_key | VARCHAR | 親イシューキー |
+| created_date | TIMESTAMP | JIRA作成日時 |
+| updated_date | TIMESTAMP | JIRA更新日時 |
+| synced_at | TIMESTAMP | 同期日時 (DEFAULT CURRENT_TIMESTAMP) |
+
+**注:** 追加のカスタムフィールドはjira_fieldsに基づいて動的に追加される
+
+**インデックス:**
+- `idx_issues_expanded_project` ON (project_id)
+- `idx_issues_expanded_key` ON (issue_key)
+- `idx_issues_expanded_status` ON (status)
+
 ### Embeddings Table
 
 #### issue_embeddings
@@ -198,7 +291,9 @@ JIRAイシューの全データを格納
 ```
 projects (1) ──────── (N) issues
     │                      │
-    │                      └── (N) issue_change_history
+    │                      ├── (N) issue_change_history
+    │                      ├── (N) issue_snapshots
+    │                      └── (1) issue_embeddings
     │
     ├── (N) statuses
     ├── (N) priorities
@@ -207,7 +302,9 @@ projects (1) ──────── (N) issues
     ├── (N) components
     └── (N) fix_versions
 
-issues (1) ──────── (1) issue_embeddings
+issues (1) ──────── (1) issues_expanded
+
+jira_fields: 独立したフィールド定義テーブル（プロジェクト横断）
 ```
 
 ## SQL例

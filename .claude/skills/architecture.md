@@ -90,6 +90,11 @@ let issues = use_case.execute(SearchParams { ... })?;
 - `statuses`, `priorities`, `issue_types`, `labels`, `components`, `fix_versions`
 - All use composite primary key `(project_id, name)`
 
+### Snapshot & Field Tables
+- `issue_snapshots` - Point-in-time issue versions with `(issue_id, version)` primary key
+- `jira_fields` - JIRA field definitions (custom/system fields metadata)
+- `issues_expanded` - Expanded view of issues with all fields extracted from raw_data
+
 ### Embeddings Tables
 - `issue_embeddings` - Vector embeddings for semantic search
 - Uses DuckDB VSS extension with HNSW index
@@ -113,7 +118,7 @@ Read-only tools for AI assistants:
 
 ## Configuration
 
-Settings stored in `./settings.json` (current directory):
+Settings stored in `./data/settings.json`:
 ```json
 {
   "jira": { "endpoint": "...", "username": "...", "api_key": "..." },
