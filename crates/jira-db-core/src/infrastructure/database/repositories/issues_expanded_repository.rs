@@ -408,44 +408,73 @@ impl DuckDbIssuesExpandedRepository {
         // Get existing columns in issues_expanded
         let columns = self.get_existing_columns_internal(&conn)?;
 
-        // Build column mappings: column_name -> display_name
-        let mut column_aliases: Vec<(String, String)> = Vec::new();
-
-        // Base columns with readable names
-        let base_mappings: &[(&str, &str)] = &[
-            ("id", "ID"),
-            ("project_id", "プロジェクトID"),
-            ("issue_key", "課題キー"),
-            ("summary", "要約"),
-            ("description", "説明"),
-            ("status", "ステータス"),
-            ("priority", "優先度"),
-            ("assignee", "担当者"),
-            ("reporter", "報告者"),
-            ("issue_type", "課題タイプ"),
-            ("resolution", "解決状況"),
-            ("labels", "ラベル"),
-            ("components", "コンポーネント"),
-            ("fix_versions", "修正バージョン"),
-            ("sprint", "スプリント"),
-            ("parent_key", "親課題キー"),
-            ("created_date", "作成日"),
-            ("updated_date", "更新日"),
-            ("synced_at", "同期日時"),
-        ];
-
-        // Add base columns
-        for (col, display) in base_mappings {
-            if columns.contains(*col) {
-                column_aliases.push((col.to_string(), display.to_string()));
-            }
-        }
-
-        // Create a map from field id to field name
+        // Create a map from field id (lowercase) to field name
+        // This includes both base fields (like "summary", "status") and custom fields
         let field_name_map: std::collections::HashMap<String, String> = fields
             .iter()
             .map(|f| (f.id.to_lowercase(), f.name.clone()))
             .collect();
+
+        // Mapping from column name to JIRA field id (for base columns with different names)
+        let column_to_field_id: std::collections::HashMap<&str, &str> = [
+            ("issue_type", "issuetype"),
+            ("fix_versions", "fixversions"),
+            ("parent_key", "parent"),
+            ("created_date", "created"),
+            ("updated_date", "updated"),
+        ]
+        .into_iter()
+        .collect();
+
+        // Internal columns that don't come from JIRA fields (use column name as-is)
+        let internal_columns: std::collections::HashSet<&str> =
+            ["id", "project_id", "issue_key", "synced_at"]
+                .into_iter()
+                .collect();
+
+        // Build column aliases dynamically
+        let mut column_aliases: Vec<(String, String)> = Vec::new();
+
+        // Define column order for consistency
+        let base_column_order = [
+            "id",
+            "project_id",
+            "issue_key",
+            "summary",
+            "description",
+            "status",
+            "priority",
+            "assignee",
+            "reporter",
+            "issue_type",
+            "resolution",
+            "labels",
+            "components",
+            "fix_versions",
+            "sprint",
+            "parent_key",
+            "created_date",
+            "updated_date",
+            "synced_at",
+        ];
+
+        // Add base columns in order
+        for col in base_column_order {
+            if columns.contains(col) {
+                let display_name = if internal_columns.contains(col) {
+                    // Internal columns: use column name as-is
+                    col.to_string()
+                } else {
+                    // Look up field name from jira_fields
+                    let field_id = column_to_field_id.get(col).copied().unwrap_or(col);
+                    field_name_map
+                        .get(field_id)
+                        .cloned()
+                        .unwrap_or_else(|| col.to_string())
+                };
+                column_aliases.push((col.to_string(), display_name));
+            }
+        }
 
         // Add custom field columns with names from jira_fields
         for col in &columns {
@@ -455,8 +484,8 @@ impl DuckDbIssuesExpandedRepository {
                     .cloned()
                     .unwrap_or_else(|| col.clone());
                 column_aliases.push((col.clone(), display_name));
-            } else if !base_mappings.iter().any(|(c, _)| c == col) {
-                // Other columns not in base mappings - try to find a readable name
+            } else if !base_column_order.contains(&col.as_str()) {
+                // Other columns not in base order - try to find a readable name
                 let display_name = field_name_map
                     .get(col)
                     .cloned()
@@ -504,29 +533,74 @@ impl DuckDbIssuesExpandedRepository {
     pub fn create_snapshots_readable_view(&self, fields: &[JiraField]) -> DomainResult<()> {
         let conn = self.conn.lock().unwrap();
 
-        // issue_snapshots has fixed columns, so we can define them directly
-        let column_aliases: Vec<(&str, &str)> = vec![
-            ("issue_id", "課題ID"),
-            ("issue_key", "課題キー"),
-            ("project_id", "プロジェクトID"),
-            ("version", "バージョン"),
-            ("valid_from", "有効開始日"),
-            ("valid_to", "有効終了日"),
-            ("summary", "要約"),
-            ("description", "説明"),
-            ("status", "ステータス"),
-            ("priority", "優先度"),
-            ("assignee", "担当者"),
-            ("reporter", "報告者"),
-            ("issue_type", "課題タイプ"),
-            ("resolution", "解決状況"),
-            ("labels", "ラベル"),
-            ("components", "コンポーネント"),
-            ("fix_versions", "修正バージョン"),
-            ("sprint", "スプリント"),
-            ("parent_key", "親課題キー"),
-            ("created_at", "作成日時"),
+        // Create a map from field id (lowercase) to field name
+        let field_name_map: std::collections::HashMap<String, String> = fields
+            .iter()
+            .map(|f| (f.id.to_lowercase(), f.name.clone()))
+            .collect();
+
+        // Mapping from column name to JIRA field id (for columns with different names)
+        let column_to_field_id: std::collections::HashMap<&str, &str> = [
+            ("issue_type", "issuetype"),
+            ("fix_versions", "fixversions"),
+            ("parent_key", "parent"),
+        ]
+        .into_iter()
+        .collect();
+
+        // Internal columns that don't come from JIRA fields (use column name as-is)
+        let internal_columns: std::collections::HashSet<&str> = [
+            "issue_id",
+            "issue_key",
+            "project_id",
+            "version",
+            "valid_from",
+            "valid_to",
+            "created_at",
+        ]
+        .into_iter()
+        .collect();
+
+        // Define column order
+        let snapshot_columns = [
+            "issue_id",
+            "issue_key",
+            "project_id",
+            "version",
+            "valid_from",
+            "valid_to",
+            "summary",
+            "description",
+            "status",
+            "priority",
+            "assignee",
+            "reporter",
+            "issue_type",
+            "resolution",
+            "labels",
+            "components",
+            "fix_versions",
+            "sprint",
+            "parent_key",
+            "created_at",
         ];
+
+        // Build column aliases dynamically
+        let column_aliases: Vec<(String, String)> = snapshot_columns
+            .iter()
+            .map(|&col| {
+                let display_name = if internal_columns.contains(col) {
+                    col.to_string()
+                } else {
+                    let field_id = column_to_field_id.get(col).copied().unwrap_or(col);
+                    field_name_map
+                        .get(field_id)
+                        .cloned()
+                        .unwrap_or_else(|| col.to_string())
+                };
+                (col.to_string(), display_name)
+            })
+            .collect();
 
         // Build the SELECT clause with aliases
         let select_parts: Vec<String> = column_aliases
@@ -680,42 +754,74 @@ impl DuckDbIssuesExpandedRepository {
         conn: &Connection,
         fields: &[JiraField],
     ) -> DomainResult<()> {
-        // Base columns with Japanese labels
-        let base_mappings: Vec<(&str, &str)> = vec![
-            ("issue_id", "課題ID"),
-            ("issue_key", "課題キー"),
-            ("project_id", "プロジェクトID"),
-            ("version", "バージョン"),
-            ("valid_from", "有効開始日"),
-            ("valid_to", "有効終了日"),
-            ("summary", "要約"),
-            ("description", "説明"),
-            ("status", "ステータス"),
-            ("priority", "優先度"),
-            ("assignee", "担当者"),
-            ("reporter", "報告者"),
-            ("issue_type", "課題タイプ"),
-            ("resolution", "解決状況"),
-            ("labels", "ラベル"),
-            ("components", "コンポーネント"),
-            ("fix_versions", "修正バージョン"),
-            ("sprint", "スプリント"),
-            ("parent_key", "親課題キー"),
-            ("created_at", "作成日時"),
-        ];
-
-        let mut select_parts: Vec<String> = base_mappings
-            .iter()
-            .map(|(col, display)| {
-                let escaped_display = display.replace('"', "\"\"");
-                format!("\"{}\" AS \"{}\"", col, escaped_display)
-            })
-            .collect();
-
-        // Create a map from field id to field name
+        // Create a map from field id (lowercase) to field name
         let field_name_map: std::collections::HashMap<String, String> = fields
             .iter()
             .map(|f| (f.id.to_lowercase(), f.name.clone()))
+            .collect();
+
+        // Mapping from column name to JIRA field id (for columns with different names)
+        let column_to_field_id: std::collections::HashMap<&str, &str> = [
+            ("issue_type", "issuetype"),
+            ("fix_versions", "fixversions"),
+            ("parent_key", "parent"),
+        ]
+        .into_iter()
+        .collect();
+
+        // Internal columns that don't come from JIRA fields (use column name as-is)
+        let internal_columns: std::collections::HashSet<&str> = [
+            "issue_id",
+            "issue_key",
+            "project_id",
+            "version",
+            "valid_from",
+            "valid_to",
+            "created_at",
+        ]
+        .into_iter()
+        .collect();
+
+        // Define base column order
+        let base_columns = [
+            "issue_id",
+            "issue_key",
+            "project_id",
+            "version",
+            "valid_from",
+            "valid_to",
+            "summary",
+            "description",
+            "status",
+            "priority",
+            "assignee",
+            "reporter",
+            "issue_type",
+            "resolution",
+            "labels",
+            "components",
+            "fix_versions",
+            "sprint",
+            "parent_key",
+            "created_at",
+        ];
+
+        // Build select parts for base columns
+        let mut select_parts: Vec<String> = base_columns
+            .iter()
+            .map(|&col| {
+                let display_name = if internal_columns.contains(col) {
+                    col.to_string()
+                } else {
+                    let field_id = column_to_field_id.get(col).copied().unwrap_or(col);
+                    field_name_map
+                        .get(field_id)
+                        .cloned()
+                        .unwrap_or_else(|| col.to_string())
+                };
+                let escaped_display = display_name.replace('"', "\"\"");
+                format!("\"{}\" AS \"{}\"", col, escaped_display)
+            })
             .collect();
 
         // Add custom field columns with readable names
@@ -726,11 +832,8 @@ impl DuckDbIssuesExpandedRepository {
 
             if field.id.starts_with("customfield_") {
                 let col_name = field.get_safe_column_name();
-                let display_name = field_name_map
-                    .get(&col_name)
-                    .cloned()
-                    .unwrap_or_else(|| field.name.clone());
-                let escaped_display = display_name.replace('"', "\"\"");
+                // Use field.name directly as it's the human-readable name from JIRA
+                let escaped_display = field.name.replace('"', "\"\"");
                 select_parts.push(format!("\"{}\" AS \"{}\"", col_name, escaped_display));
             }
         }
