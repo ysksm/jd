@@ -151,6 +151,17 @@
                 Show Grid
               </label>
             </div>
+
+            <div class="config-row">
+              <label class="checkbox-label">
+                <input
+                  type="checkbox"
+                  [ngModel]="chartConfig().rotateLabels"
+                  (ngModelChange)="updateChartConfig({ rotateLabels: $event })"
+                />
+                Rotate X Labels
+              </label>
+            </div>
           </div>
 
           <!-- Filters -->

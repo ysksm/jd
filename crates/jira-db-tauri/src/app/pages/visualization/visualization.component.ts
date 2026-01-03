@@ -26,6 +26,7 @@ interface ChartConfig {
   title: string;
   showLegend: boolean;
   showGrid: boolean;
+  rotateLabels: boolean;
 }
 
 interface FilterConfig {
@@ -67,6 +68,7 @@ export class VisualizationComponent implements OnInit, OnDestroy, AfterViewInit 
     title: '',
     showLegend: true,
     showGrid: true,
+    rotateLabels: false,
   });
 
   // Filters
@@ -365,6 +367,8 @@ export class VisualizationComponent implements OnInit, OnDestroy, AfterViewInit 
         {
           grid: { show: config.showGrid },
           values: (_u: uPlot, vals: number[]) => vals.map((v: number) => labels[v] || String(v)),
+          rotate: config.rotateLabels ? -45 : 0, // Rotate labels diagonally
+          gap: config.rotateLabels ? 8 : 5, // More gap when rotated
         },
         {
           grid: { show: config.showGrid },
