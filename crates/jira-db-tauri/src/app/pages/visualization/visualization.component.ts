@@ -349,8 +349,16 @@ export class VisualizationComponent implements OnInit, OnDestroy, AfterViewInit 
       title: config.title || undefined,
       width,
       height,
+      scales: {
+        x: {
+          time: false, // Disable time-based X-axis
+        },
+      },
       series: [
-        {},
+        {
+          label: config.xColumn, // X-axis label
+          value: (_u: uPlot, v: number) => labels[v] ?? String(v), // Format X values in legend
+        },
         seriesConfig,
       ],
       axes: [
