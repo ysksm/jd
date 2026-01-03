@@ -70,11 +70,20 @@ pub async fn config_initialize(
         .get_settings_path()
         .ok_or("Settings path not configured. App may not be properly initialized.")?;
 
-    // Use ./data/jira.duckdb by default (same as CLI)
-    let database_path = request
-        .database_path
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("./data/jira.duckdb"));
+    // Determine database path - use provided path or default relative to settings directory
+    let database_path = if let Some(db_path) = request.database_path {
+        PathBuf::from(db_path)
+    } else {
+        // Default: put database in the same directory as settings file
+        if let Some(parent) = settings_path.parent() {
+            parent.join("jira.duckdb")
+        } else {
+            // Fallback to current directory with absolute path
+            std::env::current_dir()
+                .map(|cwd| cwd.join("data").join("jira.duckdb"))
+                .unwrap_or_else(|_| PathBuf::from("./data/jira.duckdb"))
+        }
+    };
 
     // Ensure the database directory exists
     if let Some(parent) = database_path.parent() {

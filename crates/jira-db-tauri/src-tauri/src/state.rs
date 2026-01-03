@@ -3,7 +3,10 @@
 use std::path::PathBuf;
 use std::sync::Mutex;
 
-use jira_db_core::{Database, DbConnection, Settings};
+use jira_db_core::{Database, DbConnection, Settings, checkpoint_connection};
+
+/// Default database filename
+const DEFAULT_DB_FILENAME: &str = "jira.duckdb";
 
 /// Shared application state
 pub struct AppState {
@@ -25,13 +28,59 @@ impl Default for AppState {
     }
 }
 
+/// Ensure the database path is a file path, not a directory
+fn ensure_db_file_path(path: PathBuf) -> PathBuf {
+    // If path exists and is a directory, or if path has no extension (likely a directory),
+    // append the default database filename
+    if path.is_dir() {
+        return path.join(DEFAULT_DB_FILENAME);
+    }
+
+    // Check if path looks like a directory (no extension and no .duckdb suffix)
+    if path.extension().is_none() && !path.to_string_lossy().ends_with(".duckdb") {
+        // Check if it's "." or ".." or ends with separator
+        let path_str = path.to_string_lossy();
+        if path_str == "." || path_str == ".." || path_str.ends_with('/') {
+            return path.join(DEFAULT_DB_FILENAME);
+        }
+    }
+
+    path
+}
+
 impl AppState {
     /// Initialize the application state with a settings file
     pub fn initialize(&self, settings_path: PathBuf) -> anyhow::Result<()> {
-        let settings = Settings::load(&settings_path)?;
+        let mut settings = Settings::load(&settings_path)?;
 
-        // Initialize database
-        let db = Database::new(&settings.database.path)?;
+        tracing::info!(
+            "Loaded settings, database.path from file: {:?}",
+            settings.database.path
+        );
+
+        // Resolve database path relative to settings file directory if it's relative
+        let db_path = if settings.database.path.is_relative() {
+            if let Some(settings_dir) = settings_path.parent() {
+                let resolved = settings_dir.join(&settings.database.path);
+                // Canonicalize if possible, otherwise use resolved path
+                resolved.canonicalize().unwrap_or(resolved)
+            } else {
+                settings.database.path.clone()
+            }
+        } else {
+            settings.database.path.clone()
+        };
+
+        // Ensure the path is a file path, not a directory
+        let db_path = ensure_db_file_path(db_path);
+
+        tracing::info!("Database path (resolved): {:?}", db_path);
+
+        // Initialize database with resolved path
+        let db = Database::new(&db_path)?;
+
+        // Update settings with resolved path for consistency
+        settings.database.path = db_path;
 
         // Store state
         *self.settings_path.lock().unwrap() = Some(settings_path);
@@ -47,11 +96,32 @@ impl AppState {
         settings_path: PathBuf,
         settings: Settings,
     ) -> anyhow::Result<()> {
-        // Save settings
+        let mut settings = settings;
+
+        // Resolve database path relative to settings file directory if it's relative
+        let db_path = if settings.database.path.is_relative() {
+            if let Some(settings_dir) = settings_path.parent() {
+                settings_dir.join(&settings.database.path)
+            } else {
+                settings.database.path.clone()
+            }
+        } else {
+            settings.database.path.clone()
+        };
+
+        // Ensure the path is a file path, not a directory
+        let db_path = ensure_db_file_path(db_path);
+
+        tracing::info!("Database path (resolved): {:?}", db_path);
+
+        // Update settings with resolved path before saving
+        settings.database.path = db_path.clone();
+
+        // Save settings with absolute path
         settings.save(&settings_path)?;
 
         // Initialize database
-        let db = Database::new(&settings.database.path)?;
+        let db = Database::new(&db_path)?;
 
         // Store state
         *self.settings_path.lock().unwrap() = Some(settings_path);
@@ -105,5 +175,22 @@ impl AppState {
     #[allow(dead_code)]
     pub fn is_initialized(&self) -> bool {
         self.settings.lock().unwrap().is_some()
+    }
+
+    /// Cleanup the database connection by running a checkpoint.
+    /// This flushes the WAL file to the main database file.
+    /// Should be called before the application exits.
+    pub fn cleanup(&self) {
+        if let Some(ref db) = *self.db.lock().unwrap() {
+            tracing::info!("Running database checkpoint before exit...");
+            match checkpoint_connection(db) {
+                Ok(()) => {
+                    tracing::info!("Database checkpoint completed successfully");
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to checkpoint database: {}", e);
+                }
+            }
+        }
     }
 }

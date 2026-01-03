@@ -8,10 +8,59 @@ mod state;
 
 use state::AppState;
 use std::path::PathBuf;
-use tauri::Manager;
+use tauri::{Manager, RunEvent};
 
-/// Settings file path (in data directory to avoid triggering file watcher during dev)
-const SETTINGS_FILE: &str = "./data/settings.json";
+/// Default settings file path (relative, will be resolved to absolute)
+const DEFAULT_SETTINGS_FILE: &str = "./data/settings.json";
+
+/// Resolve a relative path to an absolute path based on the executable's directory
+/// or the current working directory.
+fn resolve_data_path() -> PathBuf {
+    // First, try to use the executable's directory (works for bundled apps)
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(exe_dir) = exe_path.parent() {
+            // For macOS app bundles, go up from Contents/MacOS to the app bundle's parent
+            #[cfg(target_os = "macos")]
+            {
+                // Check if we're in an app bundle (path contains .app/Contents/MacOS)
+                let exe_dir_str = exe_dir.to_string_lossy();
+                if exe_dir_str.contains(".app/Contents/MacOS") {
+                    // Go up to the directory containing the .app bundle
+                    if let Some(app_parent) = exe_dir
+                        .parent()
+                        .and_then(|p| p.parent())
+                        .and_then(|p| p.parent())
+                    {
+                        let settings_path = app_parent.join("data").join("settings.json");
+                        if settings_path.exists() {
+                            return settings_path;
+                        }
+                    }
+                }
+            }
+
+            // For non-bundled apps, check relative to executable
+            let settings_path = exe_dir.join("data").join("settings.json");
+            if settings_path.exists() {
+                return settings_path;
+            }
+        }
+    }
+
+    // Fall back to current working directory and resolve to absolute path
+    let relative_path = PathBuf::from(DEFAULT_SETTINGS_FILE);
+    if let Ok(cwd) = std::env::current_dir() {
+        let absolute_path = cwd.join(&relative_path);
+        // Canonicalize if the file exists, otherwise just use the joined path
+        if absolute_path.exists() {
+            absolute_path.canonicalize().unwrap_or(absolute_path)
+        } else {
+            absolute_path
+        }
+    } else {
+        relative_path
+    }
+}
 
 /// Run the Tauri application
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -25,10 +74,11 @@ pub fn run() {
     tauri::Builder::default()
         .manage(AppState::default())
         .setup(|app| {
-            let settings_path = PathBuf::from(SETTINGS_FILE);
+            // Resolve the settings path to an absolute path
+            let settings_path = resolve_data_path();
             let state = app.state::<AppState>();
 
-            tracing::info!("Settings path: {:?}", settings_path);
+            tracing::info!("Settings path (resolved): {:?}", settings_path);
 
             // Try to load existing settings
             if settings_path.exists() {
@@ -41,6 +91,8 @@ pub fn run() {
                             "Failed to load settings: {}. Will need to reinitialize.",
                             e
                         );
+                        // Still store the path for later use
+                        *state.settings_path.lock().unwrap() = Some(settings_path);
                     }
                 }
             } else {
@@ -90,6 +142,13 @@ pub fn run() {
             commands::sql::sql_query_save,
             commands::sql::sql_query_delete,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app_handle, event| {
+            if let RunEvent::Exit = event {
+                // Run cleanup before exit
+                let state = app_handle.state::<AppState>();
+                state.cleanup();
+            }
+        });
 }
