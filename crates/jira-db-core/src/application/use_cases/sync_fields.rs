@@ -52,7 +52,13 @@ impl SyncFieldsUseCase {
         self.expanded_repo.expand_issues(project_id)
     }
 
-    /// Execute full sync: fetch fields, add columns, and expand issues
+    /// Create a readable view with human-friendly column names
+    pub fn create_readable_view(&self) -> DomainResult<()> {
+        let fields = self.field_repo.find_all()?;
+        self.expanded_repo.create_readable_view(&fields)
+    }
+
+    /// Execute full sync: fetch fields, add columns, expand issues, and create view
     pub async fn execute(&self, project_id: Option<&str>) -> DomainResult<SyncFieldsResult> {
         // Step 1: Fetch fields from JIRA
         let fields_synced = self.sync_fields().await?;
@@ -63,6 +69,9 @@ impl SyncFieldsUseCase {
 
         // Step 3: Expand issues
         let issues_expanded = self.expand_issues(project_id)?;
+
+        // Step 4: Create readable view
+        self.create_readable_view()?;
 
         Ok(SyncFieldsResult {
             fields_synced,

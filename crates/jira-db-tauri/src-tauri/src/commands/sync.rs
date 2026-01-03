@@ -191,6 +191,16 @@ pub async fn sync_execute(
         }
     }
 
+    // Step 5: Create readable view with human-friendly column names
+    match fields_use_case.create_readable_view() {
+        Ok(()) => {
+            tracing::info!("Created issues_readable view");
+        }
+        Err(e) => {
+            tracing::warn!("Failed to create readable view: {}", e);
+        }
+    }
+
     // Update last_synced for successful projects
     state
         .update_settings(|s| {

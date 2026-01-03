@@ -399,4 +399,104 @@ impl DuckDbIssuesExpandedRepository {
         }
         Ok(columns)
     }
+
+    /// Create or replace a view with human-readable column names
+    /// The view maps column names from issues_expanded to jira_fields.name
+    pub fn create_readable_view(&self, fields: &[JiraField]) -> DomainResult<()> {
+        let conn = self.conn.lock().unwrap();
+
+        // Get existing columns in issues_expanded
+        let columns = self.get_existing_columns_internal(&conn)?;
+
+        // Build column mappings: column_name -> display_name
+        let mut column_aliases: Vec<(String, String)> = Vec::new();
+
+        // Base columns with readable names
+        let base_mappings: &[(&str, &str)] = &[
+            ("id", "ID"),
+            ("project_id", "プロジェクトID"),
+            ("issue_key", "課題キー"),
+            ("summary", "要約"),
+            ("description", "説明"),
+            ("status", "ステータス"),
+            ("priority", "優先度"),
+            ("assignee", "担当者"),
+            ("reporter", "報告者"),
+            ("issue_type", "課題タイプ"),
+            ("resolution", "解決状況"),
+            ("labels", "ラベル"),
+            ("components", "コンポーネント"),
+            ("fix_versions", "修正バージョン"),
+            ("sprint", "スプリント"),
+            ("parent_key", "親課題キー"),
+            ("created_date", "作成日"),
+            ("updated_date", "更新日"),
+            ("synced_at", "同期日時"),
+        ];
+
+        // Add base columns
+        for (col, display) in base_mappings {
+            if columns.contains(*col) {
+                column_aliases.push((col.to_string(), display.to_string()));
+            }
+        }
+
+        // Create a map from field id to field name
+        let field_name_map: std::collections::HashMap<String, String> = fields
+            .iter()
+            .map(|f| (f.id.to_lowercase(), f.name.clone()))
+            .collect();
+
+        // Add custom field columns with names from jira_fields
+        for col in &columns {
+            if col.starts_with("customfield_") || col.starts_with("cf_") {
+                let display_name = field_name_map
+                    .get(col)
+                    .cloned()
+                    .unwrap_or_else(|| col.clone());
+                column_aliases.push((col.clone(), display_name));
+            } else if !base_mappings.iter().any(|(c, _)| c == col) {
+                // Other columns not in base mappings - try to find a readable name
+                let display_name = field_name_map
+                    .get(col)
+                    .cloned()
+                    .unwrap_or_else(|| col.clone());
+                column_aliases.push((col.clone(), display_name));
+            }
+        }
+
+        // Build the SELECT clause with aliases
+        let select_parts: Vec<String> = column_aliases
+            .iter()
+            .map(|(col, display)| {
+                // Escape quotes in display name and use as alias
+                let escaped_display = display.replace('"', "\"\"");
+                format!("\"{}\" AS \"{}\"", col, escaped_display)
+            })
+            .collect();
+
+        let select_clause = select_parts.join(",\n    ");
+
+        // Create the view
+        let sql = format!(
+            r#"
+            CREATE OR REPLACE VIEW issues_readable AS
+            SELECT
+                {select_clause}
+            FROM issues_expanded
+            "#
+        );
+
+        conn.execute(&sql, []).map_err(|e| {
+            log::error!("Failed to create view. SQL: {}", sql);
+            DomainError::Repository(format!("Failed to create readable view: {}", e))
+        })?;
+
+        info!(
+            "Created issues_readable view with {} columns",
+            column_aliases.len()
+        );
+
+        Ok(())
+    }
 }
