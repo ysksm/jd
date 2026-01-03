@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 use std::sync::Mutex;
 
-use jira_db_core::{Database, DbConnection, Settings};
+use jira_db_core::{Database, DbConnection, Settings, checkpoint_connection};
 
 /// Default database filename
 const DEFAULT_DB_FILENAME: &str = "jira.duckdb";
@@ -175,5 +175,22 @@ impl AppState {
     #[allow(dead_code)]
     pub fn is_initialized(&self) -> bool {
         self.settings.lock().unwrap().is_some()
+    }
+
+    /// Cleanup the database connection by running a checkpoint.
+    /// This flushes the WAL file to the main database file.
+    /// Should be called before the application exits.
+    pub fn cleanup(&self) {
+        if let Some(ref db) = *self.db.lock().unwrap() {
+            tracing::info!("Running database checkpoint before exit...");
+            match checkpoint_connection(db) {
+                Ok(()) => {
+                    tracing::info!("Database checkpoint completed successfully");
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to checkpoint database: {}", e);
+                }
+            }
+        }
     }
 }

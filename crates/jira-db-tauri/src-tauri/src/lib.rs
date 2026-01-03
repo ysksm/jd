@@ -8,7 +8,7 @@ mod state;
 
 use state::AppState;
 use std::path::PathBuf;
-use tauri::Manager;
+use tauri::{Manager, RunEvent};
 
 /// Default settings file path (relative, will be resolved to absolute)
 const DEFAULT_SETTINGS_FILE: &str = "./data/settings.json";
@@ -142,6 +142,13 @@ pub fn run() {
             commands::sql::sql_query_save,
             commands::sql::sql_query_delete,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app_handle, event| {
+            if let RunEvent::Exit = event {
+                // Run cleanup before exit
+                let state = app_handle.state::<AppState>();
+                state.cleanup();
+            }
+        });
 }

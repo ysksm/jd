@@ -35,4 +35,32 @@ impl Database {
     pub fn connection(&self) -> Arc<Mutex<Connection>> {
         self.conn.clone()
     }
+
+    /// Run a checkpoint to flush WAL file to the main database file.
+    /// This should be called before closing the application to ensure
+    /// all data is properly persisted and WAL file is removed.
+    pub fn checkpoint(&self) -> DomainResult<()> {
+        let conn = self.conn.lock().map_err(|e| {
+            DomainError::Repository(format!("Failed to acquire database lock: {}", e))
+        })?;
+
+        conn.execute_batch("CHECKPOINT").map_err(|e| {
+            DomainError::Repository(format!("Failed to checkpoint database: {}", e))
+        })?;
+
+        Ok(())
+    }
+}
+
+/// Run checkpoint on a database connection.
+/// This is a standalone function for use with DbConnection type.
+pub fn checkpoint_connection(conn: &DbConnection) -> DomainResult<()> {
+    let conn = conn
+        .lock()
+        .map_err(|e| DomainError::Repository(format!("Failed to acquire database lock: {}", e)))?;
+
+    conn.execute_batch("CHECKPOINT")
+        .map_err(|e| DomainError::Repository(format!("Failed to checkpoint database: {}", e)))?;
+
+    Ok(())
 }
