@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use serde_json::Value as JsonValue;
 
 /// Represents a snapshot of an issue at a specific point in time.
 /// Each snapshot captures the state of the issue after a change.
@@ -27,6 +28,8 @@ pub struct IssueSnapshot {
     pub fix_versions: Option<Vec<String>>,
     pub sprint: Option<String>,
     pub parent_key: Option<String>,
+    /// Raw JIRA API response (only available for current snapshot)
+    pub raw_data: Option<JsonValue>,
     pub created_at: DateTime<Utc>,
 }
 
@@ -53,6 +56,7 @@ impl IssueSnapshot {
         fix_versions: Option<Vec<String>>,
         sprint: Option<String>,
         parent_key: Option<String>,
+        raw_data: Option<JsonValue>,
     ) -> Self {
         Self {
             issue_id,
@@ -74,6 +78,7 @@ impl IssueSnapshot {
             fix_versions,
             sprint,
             parent_key,
+            raw_data,
             created_at: Utc::now(),
         }
     }

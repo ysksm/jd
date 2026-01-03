@@ -58,6 +58,12 @@ impl SyncFieldsUseCase {
         self.expanded_repo.create_readable_view(&fields)
     }
 
+    /// Create readable views for issue_snapshots
+    pub fn create_snapshots_readable_view(&self) -> DomainResult<()> {
+        let fields = self.field_repo.find_all()?;
+        self.expanded_repo.create_snapshots_readable_view(&fields)
+    }
+
     /// Execute full sync: fetch fields, add columns, expand issues, and create view
     pub async fn execute(&self, project_id: Option<&str>) -> DomainResult<SyncFieldsResult> {
         // Step 1: Fetch fields from JIRA

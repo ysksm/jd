@@ -22,6 +22,8 @@ impl Schema {
     fn run_migrations(conn: &Connection) -> DomainResult<()> {
         // Migration: issuesテーブルにsprintカラムを追加
         Self::add_column_if_not_exists(conn, "issues", "sprint", "VARCHAR")?;
+        // Migration: issue_snapshotsテーブルにraw_dataカラムを追加
+        Self::add_column_if_not_exists(conn, "issue_snapshots", "raw_data", "JSON")?;
         Ok(())
     }
 
@@ -330,6 +332,7 @@ impl Schema {
                 fix_versions VARCHAR,
                 sprint VARCHAR,
                 parent_key VARCHAR,
+                raw_data JSON,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 PRIMARY KEY (issue_id, version)
             )

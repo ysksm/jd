@@ -499,4 +499,266 @@ impl DuckDbIssuesExpandedRepository {
 
         Ok(())
     }
+
+    /// Create or replace a view for issue_snapshots with human-readable column names
+    pub fn create_snapshots_readable_view(&self, fields: &[JiraField]) -> DomainResult<()> {
+        let conn = self.conn.lock().unwrap();
+
+        // issue_snapshots has fixed columns, so we can define them directly
+        let column_aliases: Vec<(&str, &str)> = vec![
+            ("issue_id", "課題ID"),
+            ("issue_key", "課題キー"),
+            ("project_id", "プロジェクトID"),
+            ("version", "バージョン"),
+            ("valid_from", "有効開始日"),
+            ("valid_to", "有効終了日"),
+            ("summary", "要約"),
+            ("description", "説明"),
+            ("status", "ステータス"),
+            ("priority", "優先度"),
+            ("assignee", "担当者"),
+            ("reporter", "報告者"),
+            ("issue_type", "課題タイプ"),
+            ("resolution", "解決状況"),
+            ("labels", "ラベル"),
+            ("components", "コンポーネント"),
+            ("fix_versions", "修正バージョン"),
+            ("sprint", "スプリント"),
+            ("parent_key", "親課題キー"),
+            ("created_at", "作成日時"),
+        ];
+
+        // Build the SELECT clause with aliases
+        let select_parts: Vec<String> = column_aliases
+            .iter()
+            .map(|(col, display)| {
+                let escaped_display = display.replace('"', "\"\"");
+                format!("s.\"{}\" AS \"{}\"", col, escaped_display)
+            })
+            .collect();
+
+        let select_clause = select_parts.join(",\n    ");
+
+        // Create the basic readable view
+        let sql = format!(
+            r#"
+            CREATE OR REPLACE VIEW issue_snapshots_readable AS
+            SELECT
+                {select_clause}
+            FROM issue_snapshots s
+            "#
+        );
+
+        conn.execute(&sql, []).map_err(|e| {
+            log::error!("Failed to create view. SQL: {}", sql);
+            DomainError::Repository(format!("Failed to create snapshots readable view: {}", e))
+        })?;
+
+        info!(
+            "Created issue_snapshots_readable view with {} columns",
+            column_aliases.len()
+        );
+
+        // Create expanded view for current snapshots (valid_to IS NULL)
+        // This joins with issues.raw_data to get custom field values
+        self.create_snapshots_expanded_view_internal(&conn, fields)?;
+
+        Ok(())
+    }
+
+    /// Create an expanded view for current snapshots with custom fields from issue_snapshots.raw_data
+    fn create_snapshots_expanded_view_internal(
+        &self,
+        conn: &Connection,
+        fields: &[JiraField],
+    ) -> DomainResult<()> {
+        // Base snapshot columns
+        let base_columns = vec![
+            ("s.issue_id", "issue_id"),
+            ("s.issue_key", "issue_key"),
+            ("s.project_id", "project_id"),
+            ("s.version", "version"),
+            ("s.valid_from", "valid_from"),
+            ("s.valid_to", "valid_to"),
+            ("s.summary", "summary"),
+            ("s.description", "description"),
+            ("s.status", "status"),
+            ("s.priority", "priority"),
+            ("s.assignee", "assignee"),
+            ("s.reporter", "reporter"),
+            ("s.issue_type", "issue_type"),
+            ("s.resolution", "resolution"),
+            ("s.labels", "labels"),
+            ("s.components", "components"),
+            ("s.fix_versions", "fix_versions"),
+            ("s.sprint", "sprint"),
+            ("s.parent_key", "parent_key"),
+            ("s.created_at", "created_at"),
+        ];
+
+        let mut select_parts: Vec<String> = base_columns
+            .iter()
+            .map(|(expr, alias)| format!("{} AS \"{}\"", expr, alias))
+            .collect();
+
+        // Add custom field columns from issues.raw_data
+        // Only include expandable custom fields
+        for field in fields {
+            if !field.is_expandable() {
+                continue;
+            }
+
+            // Skip base fields that are already included
+            let field_id_lower = field.id.to_lowercase();
+            let skip_fields = [
+                "summary",
+                "description",
+                "status",
+                "priority",
+                "assignee",
+                "reporter",
+                "issuetype",
+                "resolution",
+                "labels",
+                "components",
+                "fixversions",
+                "parent",
+                "created",
+                "updated",
+            ];
+
+            if skip_fields.contains(&field_id_lower.as_str()) {
+                continue;
+            }
+
+            if field.id.starts_with("customfield_") {
+                let col_name = field.get_safe_column_name();
+                // Use s.raw_data (from issue_snapshots) instead of joining with issues
+                let expr = format!(
+                    "COALESCE(
+                        s.raw_data->'fields'->'{}'->>'name',
+                        s.raw_data->'fields'->'{}'->>'value',
+                        s.raw_data->'fields'->'{}'->>'displayName',
+                        s.raw_data->'fields'->>'{}'
+                    ) AS \"{}\"",
+                    field.id, field.id, field.id, field.id, col_name
+                );
+                select_parts.push(expr);
+            }
+        }
+
+        let select_clause = select_parts.join(",\n    ");
+
+        // Create view using issue_snapshots.raw_data directly
+        // Note: raw_data is only available for current snapshots (valid_to IS NULL)
+        let sql = format!(
+            r#"
+            CREATE OR REPLACE VIEW issue_snapshots_expanded AS
+            SELECT
+                {select_clause}
+            FROM issue_snapshots s
+            WHERE s.raw_data IS NOT NULL
+            "#
+        );
+
+        conn.execute(&sql, []).map_err(|e| {
+            log::error!("Failed to create expanded snapshots view. SQL: {}", sql);
+            DomainError::Repository(format!("Failed to create snapshots expanded view: {}", e))
+        })?;
+
+        info!("Created issue_snapshots_expanded view with custom fields");
+
+        // Create readable version of the expanded view
+        self.create_snapshots_expanded_readable_view_internal(conn, fields)?;
+
+        Ok(())
+    }
+
+    /// Create a readable version of issue_snapshots_expanded
+    fn create_snapshots_expanded_readable_view_internal(
+        &self,
+        conn: &Connection,
+        fields: &[JiraField],
+    ) -> DomainResult<()> {
+        // Base columns with Japanese labels
+        let base_mappings: Vec<(&str, &str)> = vec![
+            ("issue_id", "課題ID"),
+            ("issue_key", "課題キー"),
+            ("project_id", "プロジェクトID"),
+            ("version", "バージョン"),
+            ("valid_from", "有効開始日"),
+            ("valid_to", "有効終了日"),
+            ("summary", "要約"),
+            ("description", "説明"),
+            ("status", "ステータス"),
+            ("priority", "優先度"),
+            ("assignee", "担当者"),
+            ("reporter", "報告者"),
+            ("issue_type", "課題タイプ"),
+            ("resolution", "解決状況"),
+            ("labels", "ラベル"),
+            ("components", "コンポーネント"),
+            ("fix_versions", "修正バージョン"),
+            ("sprint", "スプリント"),
+            ("parent_key", "親課題キー"),
+            ("created_at", "作成日時"),
+        ];
+
+        let mut select_parts: Vec<String> = base_mappings
+            .iter()
+            .map(|(col, display)| {
+                let escaped_display = display.replace('"', "\"\"");
+                format!("\"{}\" AS \"{}\"", col, escaped_display)
+            })
+            .collect();
+
+        // Create a map from field id to field name
+        let field_name_map: std::collections::HashMap<String, String> = fields
+            .iter()
+            .map(|f| (f.id.to_lowercase(), f.name.clone()))
+            .collect();
+
+        // Add custom field columns with readable names
+        for field in fields {
+            if !field.is_expandable() {
+                continue;
+            }
+
+            if field.id.starts_with("customfield_") {
+                let col_name = field.get_safe_column_name();
+                let display_name = field_name_map
+                    .get(&col_name)
+                    .cloned()
+                    .unwrap_or_else(|| field.name.clone());
+                let escaped_display = display_name.replace('"', "\"\"");
+                select_parts.push(format!("\"{}\" AS \"{}\"", col_name, escaped_display));
+            }
+        }
+
+        let select_clause = select_parts.join(",\n    ");
+
+        let sql = format!(
+            r#"
+            CREATE OR REPLACE VIEW issue_snapshots_expanded_readable AS
+            SELECT
+                {select_clause}
+            FROM issue_snapshots_expanded
+            "#
+        );
+
+        conn.execute(&sql, []).map_err(|e| {
+            log::error!(
+                "Failed to create readable expanded snapshots view. SQL: {}",
+                sql
+            );
+            DomainError::Repository(format!(
+                "Failed to create snapshots expanded readable view: {}",
+                e
+            ))
+        })?;
+
+        info!("Created issue_snapshots_expanded_readable view");
+
+        Ok(())
+    }
 }
