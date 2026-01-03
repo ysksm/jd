@@ -28,10 +28,28 @@ impl Default for AppState {
 impl AppState {
     /// Initialize the application state with a settings file
     pub fn initialize(&self, settings_path: PathBuf) -> anyhow::Result<()> {
-        let settings = Settings::load(&settings_path)?;
+        let mut settings = Settings::load(&settings_path)?;
 
-        // Initialize database
-        let db = Database::new(&settings.database.path)?;
+        // Resolve database path relative to settings file directory if it's relative
+        let db_path = if settings.database.path.is_relative() {
+            if let Some(settings_dir) = settings_path.parent() {
+                let resolved = settings_dir.join(&settings.database.path);
+                // Canonicalize if possible, otherwise use resolved path
+                resolved.canonicalize().unwrap_or(resolved)
+            } else {
+                settings.database.path.clone()
+            }
+        } else {
+            settings.database.path.clone()
+        };
+
+        tracing::info!("Database path (resolved): {:?}", db_path);
+
+        // Initialize database with resolved path
+        let db = Database::new(&db_path)?;
+
+        // Update settings with resolved path for consistency
+        settings.database.path = db_path;
 
         // Store state
         *self.settings_path.lock().unwrap() = Some(settings_path);
@@ -47,11 +65,29 @@ impl AppState {
         settings_path: PathBuf,
         settings: Settings,
     ) -> anyhow::Result<()> {
-        // Save settings
+        let mut settings = settings;
+
+        // Resolve database path relative to settings file directory if it's relative
+        let db_path = if settings.database.path.is_relative() {
+            if let Some(settings_dir) = settings_path.parent() {
+                settings_dir.join(&settings.database.path)
+            } else {
+                settings.database.path.clone()
+            }
+        } else {
+            settings.database.path.clone()
+        };
+
+        tracing::info!("Database path (resolved): {:?}", db_path);
+
+        // Update settings with resolved path before saving
+        settings.database.path = db_path.clone();
+
+        // Save settings with absolute path
         settings.save(&settings_path)?;
 
         // Initialize database
-        let db = Database::new(&settings.database.path)?;
+        let db = Database::new(&db_path)?;
 
         // Store state
         *self.settings_path.lock().unwrap() = Some(settings_path);
