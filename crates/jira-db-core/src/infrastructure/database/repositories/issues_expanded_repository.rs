@@ -259,23 +259,19 @@ impl DuckDbIssuesExpandedRepository {
         }
 
         // Add custom field columns
+        // Simplified extraction: try to get common properties, fallback to text representation
         for col in &columns {
             if col.starts_with("customfield_") {
                 column_names.push(col.as_str());
+                // Try to extract name/value/displayName for objects, or just the text value
+                // Using COALESCE to handle different field structures
                 let expr = format!(
-                    "CASE
-                        WHEN i.raw_data->'fields'->'{col}' IS NULL THEN NULL
-                        WHEN typeof(i.raw_data->'fields'->'{col}') = 'JSON' AND json_type(i.raw_data->'fields'->'{col}') = 'OBJECT'
-                        THEN COALESCE(
-                            i.raw_data->'fields'->'{col}'->>'name',
-                            i.raw_data->'fields'->'{col}'->>'value',
-                            i.raw_data->'fields'->'{col}'->>'displayName',
-                            TRY_CAST(i.raw_data->'fields'->'{col}' AS VARCHAR)
-                        )
-                        WHEN typeof(i.raw_data->'fields'->'{col}') = 'JSON' AND json_type(i.raw_data->'fields'->'{col}') = 'ARRAY'
-                        THEN TRY_CAST(i.raw_data->'fields'->'{col}' AS VARCHAR)
-                        ELSE i.raw_data->'fields'->>'{col}'
-                    END AS \"{col}\""
+                    "COALESCE(
+                        i.raw_data->'fields'->'{col}'->>'name',
+                        i.raw_data->'fields'->'{col}'->>'value',
+                        i.raw_data->'fields'->'{col}'->>'displayName',
+                        i.raw_data->'fields'->>'{col}'
+                    ) AS \"{col}\""
                 );
                 select_parts.push(expr);
             }
