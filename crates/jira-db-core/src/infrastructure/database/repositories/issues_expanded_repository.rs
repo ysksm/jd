@@ -228,15 +228,15 @@ impl DuckDbIssuesExpandedRepository {
             ),
             (
                 "labels",
-                "CASE WHEN i.raw_data->'fields'->'labels' IS NOT NULL THEN CAST(i.raw_data->'fields'->'labels' AS JSON) ELSE NULL END AS labels",
+                "TRY_CAST(i.raw_data->'fields'->'labels' AS JSON) AS labels",
             ),
             (
                 "components",
-                "CASE WHEN i.raw_data->'fields'->'components' IS NOT NULL THEN CAST(i.raw_data->'fields'->'components' AS JSON) ELSE NULL END AS components",
+                "TRY_CAST(i.raw_data->'fields'->'components' AS JSON) AS components",
             ),
             (
                 "fix_versions",
-                "CASE WHEN i.raw_data->'fields'->'fixVersions' IS NOT NULL THEN CAST(i.raw_data->'fields'->'fixVersions' AS JSON) ELSE NULL END AS fix_versions",
+                "TRY_CAST(i.raw_data->'fields'->'fixVersions' AS JSON) AS fix_versions",
             ),
             ("sprint", "i.sprint"),
             (
