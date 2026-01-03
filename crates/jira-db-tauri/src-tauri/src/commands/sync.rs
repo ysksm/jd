@@ -135,18 +135,28 @@ pub async fn sync_execute(
         let start_time = std::time::Instant::now();
         let result = sync_use_case.execute(&project.key, &project.id).await;
 
-        // Step 4: Expand issues for this project
-        let (issues_expanded, expand_error) =
-            match fields_use_case.expand_issues(Some(&project.key)) {
-                Ok(count) => {
-                    tracing::info!("Expanded {} issues for project {}", count, project.key);
-                    (count as i32, None)
-                }
-                Err(e) => {
-                    tracing::warn!("Failed to expand issues for project {}: {}", project.key, e);
-                    (0, Some(e.to_string()))
-                }
-            };
+        // Step 4: Expand issues for this project (use project.id, not project.key)
+        let (issues_expanded, expand_error) = match fields_use_case.expand_issues(Some(&project.id))
+        {
+            Ok(count) => {
+                tracing::info!(
+                    "Expanded {} issues for project {} (id: {})",
+                    count,
+                    project.key,
+                    project.id
+                );
+                (count as i32, None)
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "Failed to expand issues for project {} (id: {}): {}",
+                    project.key,
+                    project.id,
+                    e
+                );
+                (0, Some(e.to_string()))
+            }
+        };
 
         let duration = start_time.elapsed().as_secs_f64();
 
