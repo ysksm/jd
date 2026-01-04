@@ -153,7 +153,16 @@
         </div>
         @for (issue of issues(); track issue.key) {
           <div class="issue-row" (click)="selectIssue(issue)">
-            <div class="issue-key">{{ issue.key }}</div>
+            <div class="issue-key">
+              {{ issue.key }}
+              <button
+                class="jira-link-btn"
+                (click)="openJiraLink($event, issue.key)"
+                title="JIRAで開く"
+              >
+                <span class="icon-external-link"></span>
+              </button>
+            </div>
             <div class="issue-type" [attr.data-type]="issue.issueType.toLowerCase()">
               {{ issue.issueType }}
             </div>
@@ -216,7 +225,16 @@
                         @for (issue of column.issues; track issue.key) {
                           <div class="board-card" (click)="selectIssue(issue)">
                             <div class="card-header">
-                              <span class="card-key">{{ issue.key }}</span>
+                              <span class="card-key">
+                                {{ issue.key }}
+                                <button
+                                  class="jira-link-btn jira-link-btn-sm"
+                                  (click)="openJiraLink($event, issue.key)"
+                                  title="JIRAで開く"
+                                >
+                                  <span class="icon-external-link"></span>
+                                </button>
+                              </span>
                               <span class="card-type" [attr.data-type]="issue.issueType.toLowerCase()">
                                 {{ issue.issueType }}
                               </span>
@@ -251,7 +269,16 @@
     <div class="modal-overlay" (click)="closeDetail()">
       <div class="modal-content" (click)="$event.stopPropagation()">
         <div class="modal-header">
-          <h3>{{ selectedIssue()!.key }}</h3>
+          <h3>
+            {{ selectedIssue()!.key }}
+            <button
+              class="jira-link-btn"
+              (click)="openJiraLink($event, selectedIssue()!.key)"
+              title="JIRAで開く"
+            >
+              <span class="icon-external-link"></span>
+            </button>
+          </h3>
           <button class="close-btn" (click)="closeDetail()">&times;</button>
         </div>
         <div class="modal-body">
