@@ -149,13 +149,29 @@ export class IssuesComponent implements OnInit {
     this.epics.set(Array.from(epicSet).sort());
   }
 
-  // Get status names for board header
+  // Category order for workflow sorting
+  private readonly categoryOrder: Record<string, number> = {
+    'new': 0,
+    'to do': 0,
+    'indeterminate': 1,
+    'in progress': 1,
+    'done': 2,
+  };
+
+  // Get status names for board header (sorted by workflow order)
   statusNames = computed<string[]>(() => {
     const statusList = this.statuses();
     const issues = this.issues();
-    return statusList.length > 0
-      ? statusList.map(s => s.name)
-      : [...new Set(issues.map(i => i.status))];
+    if (statusList.length > 0) {
+      // Sort by category order (To Do -> In Progress -> Done)
+      const sorted = [...statusList].sort((a, b) => {
+        const orderA = this.categoryOrder[a.category.toLowerCase()] ?? 1;
+        const orderB = this.categoryOrder[b.category.toLowerCase()] ?? 1;
+        return orderA - orderB;
+      });
+      return sorted.map(s => s.name);
+    }
+    return [...new Set(issues.map(i => i.status))];
   });
 
   // Build a map of issue keys to their issue data for Epic resolution
