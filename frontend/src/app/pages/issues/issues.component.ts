@@ -1,8 +1,22 @@
-import { Component, OnInit, signal, inject } from '@angular/core';
+import { Component, OnInit, signal, inject, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Issue, Project, Status, IssueType } from '../../generated/models';
 import { API_SERVICE, IApiService } from '../../api.provider';
+
+type ViewMode = 'list' | 'board';
+type GroupBy = 'none' | 'assignee' | 'epic';
+
+interface BoardGroup {
+  name: string;
+  issues: Issue[];
+}
+
+interface BoardColumn {
+  status: string;
+  category: string;
+  groups: BoardGroup[];
+}
 
 @Component({
   selector: 'app-issues',
@@ -20,11 +34,16 @@ export class IssuesComponent implements OnInit {
   error = signal<string | null>(null);
   total = signal(0);
 
+  // View mode
+  viewMode = signal<ViewMode>('list');
+  groupBy = signal<GroupBy>('none');
+
   // Filter options
   projects = signal<Project[]>([]);
   statuses = signal<Status[]>([]);
   issueTypes = signal<IssueType[]>([]);
   assignees = signal<string[]>([]);
+  epics = signal<string[]>([]);
 
   // Search filters
   searchQuery = signal('');
@@ -116,6 +135,93 @@ export class IssuesComponent implements OnInit {
     this.assignees.set(Array.from(assigneeSet).sort());
   }
 
+  extractEpics(): void {
+    const epicSet = new Set<string>();
+    this.issues().forEach(issue => {
+      if (issue.parentKey) {
+        epicSet.add(issue.parentKey);
+      }
+    });
+    this.epics.set(Array.from(epicSet).sort());
+  }
+
+  // Board view computed property
+  boardColumns = computed<BoardColumn[]>(() => {
+    const statusList = this.statuses();
+    const issues = this.issues();
+    const groupByValue = this.groupBy();
+
+    // Create a map of status to category
+    const statusCategoryMap = new Map<string, string>();
+    statusList.forEach(s => statusCategoryMap.set(s.name, s.category));
+
+    // Get unique statuses from issues if no metadata is loaded
+    const statusNames = statusList.length > 0
+      ? statusList.map(s => s.name)
+      : [...new Set(issues.map(i => i.status))];
+
+    return statusNames.map(status => {
+      const statusIssues = issues.filter(i => i.status === status);
+      const category = statusCategoryMap.get(status) || 'default';
+
+      let groups: BoardGroup[];
+      if (groupByValue === 'none') {
+        groups = [{ name: '', issues: statusIssues }];
+      } else if (groupByValue === 'assignee') {
+        const assigneeMap = new Map<string, Issue[]>();
+        assigneeMap.set('Unassigned', []);
+        statusIssues.forEach(issue => {
+          const key = issue.assignee || 'Unassigned';
+          if (!assigneeMap.has(key)) {
+            assigneeMap.set(key, []);
+          }
+          assigneeMap.get(key)!.push(issue);
+        });
+        groups = Array.from(assigneeMap.entries())
+          .filter(([, issues]) => issues.length > 0)
+          .sort((a, b) => {
+            if (a[0] === 'Unassigned') return 1;
+            if (b[0] === 'Unassigned') return -1;
+            return a[0].localeCompare(b[0]);
+          })
+          .map(([name, issues]) => ({ name, issues }));
+      } else {
+        // Group by epic (parentKey)
+        const epicMap = new Map<string, Issue[]>();
+        epicMap.set('No Epic', []);
+        statusIssues.forEach(issue => {
+          const key = issue.parentKey || 'No Epic';
+          if (!epicMap.has(key)) {
+            epicMap.set(key, []);
+          }
+          epicMap.get(key)!.push(issue);
+        });
+        groups = Array.from(epicMap.entries())
+          .filter(([, issues]) => issues.length > 0)
+          .sort((a, b) => {
+            if (a[0] === 'No Epic') return 1;
+            if (b[0] === 'No Epic') return -1;
+            return a[0].localeCompare(b[0]);
+          })
+          .map(([name, issues]) => ({ name, issues }));
+      }
+
+      return { status, category, groups };
+    });
+  });
+
+  setViewMode(mode: ViewMode): void {
+    this.viewMode.set(mode);
+  }
+
+  setGroupBy(group: GroupBy): void {
+    this.groupBy.set(group);
+  }
+
+  getColumnIssueCount(column: BoardColumn): number {
+    return column.groups.reduce((sum, g) => sum + g.issues.length, 0);
+  }
+
   search(): void {
     this.loading.set(true);
     this.error.set(null);
@@ -126,13 +232,14 @@ export class IssuesComponent implements OnInit {
       status: this.statusFilter() || undefined,
       issueType: this.issueTypeFilter() || undefined,
       assignee: this.assigneeFilter() || undefined,
-      limit: 50
+      limit: 200
     }).subscribe({
       next: (response) => {
         this.issues.set(response.issues);
         this.total.set(response.total);
         this.loading.set(false);
         this.extractAssignees();
+        this.extractEpics();
       },
       error: (err) => {
         this.error.set('Search failed: ' + err);

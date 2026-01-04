@@ -1,5 +1,40 @@
 <div class="issues">
-  <h2>Issues</h2>
+  <div class="issues-header">
+    <h2>Issues</h2>
+    <div class="view-controls">
+      <div class="view-toggle">
+        <button
+          class="view-btn"
+          [class.active]="viewMode() === 'list'"
+          (click)="setViewMode('list')"
+          title="List View"
+        >
+          <span class="icon-list"></span>
+        </button>
+        <button
+          class="view-btn"
+          [class.active]="viewMode() === 'board'"
+          (click)="setViewMode('board')"
+          title="Board View"
+        >
+          <span class="icon-board"></span>
+        </button>
+      </div>
+      @if (viewMode() === 'board') {
+        <div class="group-by">
+          <label>Group by:</label>
+          <select
+            [ngModel]="groupBy()"
+            (ngModelChange)="setGroupBy($event)"
+          >
+            <option value="none">None</option>
+            <option value="assignee">Assignee</option>
+            <option value="epic">Epic</option>
+          </select>
+        </div>
+      }
+    </div>
+  </div>
 
   <!-- Search Bar -->
   <div class="search-bar">
@@ -75,7 +110,8 @@
         <p>No issues found.</p>
         <p>Try adjusting your search filters.</p>
       </div>
-    } @else {
+    } @else if (viewMode() === 'list') {
+      <!-- List View -->
       <div class="issue-list">
         <div class="issue-header">
           <div class="header-key">Key</div>
@@ -97,6 +133,46 @@
             </div>
             <div class="issue-priority">{{ issue.priority }}</div>
             <div class="issue-assignee">{{ issue.assignee || '-' }}</div>
+          </div>
+        }
+      </div>
+    } @else {
+      <!-- Board View -->
+      <div class="board-view">
+        @for (column of boardColumns(); track column.status) {
+          <div class="board-column" [attr.data-category]="column.category.toLowerCase()">
+            <div class="column-header">
+              <span class="column-title">{{ column.status }}</span>
+              <span class="column-count">{{ getColumnIssueCount(column) }}</span>
+            </div>
+            <div class="column-content">
+              @for (group of column.groups; track group.name) {
+                @if (group.name) {
+                  <div class="group-header">{{ group.name }}</div>
+                }
+                @for (issue of group.issues; track issue.key) {
+                  <div class="board-card" (click)="selectIssue(issue)">
+                    <div class="card-header">
+                      <span class="card-key">{{ issue.key }}</span>
+                      <span class="card-type" [attr.data-type]="issue.issueType.toLowerCase()">
+                        {{ issue.issueType }}
+                      </span>
+                    </div>
+                    <div class="card-summary">{{ issue.summary }}</div>
+                    <div class="card-footer">
+                      <span class="card-status" [attr.data-status]="issue.status.toLowerCase()">
+                        {{ issue.status }}
+                      </span>
+                      @if (issue.assignee) {
+                        <span class="card-assignee" title="{{ issue.assignee }}">
+                          {{ issue.assignee.charAt(0).toUpperCase() }}
+                        </span>
+                      }
+                    </div>
+                  </div>
+                }
+              }
+            </div>
           </div>
         }
       </div>

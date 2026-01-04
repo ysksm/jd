@@ -25,6 +25,7 @@ fn convert_issue(i: jira_db_core::Issue) -> Issue {
         issue_type: i.issue_type.unwrap_or_default(),
         assignee: i.assignee,
         reporter: i.reporter,
+        parent_key: i.parent_key,
         labels: i.labels.unwrap_or_default(),
         components: i.components.unwrap_or_default(),
         fix_versions: i.fix_versions.unwrap_or_default(),

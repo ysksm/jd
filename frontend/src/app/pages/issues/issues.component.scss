@@ -1,7 +1,92 @@
 .issues {
   h2 {
-    margin: 0 0 1.5rem;
+    margin: 0;
     color: #333;
+  }
+}
+
+.issues-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.view-controls {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.view-toggle {
+  display: flex;
+  background: #e5e7eb;
+  border-radius: 6px;
+  padding: 2px;
+
+  .view-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 32px;
+    border: none;
+    background: transparent;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+
+    &:hover {
+      background: #d1d5db;
+    }
+
+    &.active {
+      background: white;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+    }
+
+    .icon-list,
+    .icon-board {
+      display: block;
+      width: 18px;
+      height: 18px;
+      background-size: contain;
+      background-repeat: no-repeat;
+      background-position: center;
+    }
+
+    .icon-list {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23374151' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cline x1='8' y1='6' x2='21' y2='6'%3E%3C/line%3E%3Cline x1='8' y1='12' x2='21' y2='12'%3E%3C/line%3E%3Cline x1='8' y1='18' x2='21' y2='18'%3E%3C/line%3E%3Cline x1='3' y1='6' x2='3.01' y2='6'%3E%3C/line%3E%3Cline x1='3' y1='12' x2='3.01' y2='12'%3E%3C/line%3E%3Cline x1='3' y1='18' x2='3.01' y2='18'%3E%3C/line%3E%3C/svg%3E");
+    }
+
+    .icon-board {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23374151' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='3' width='7' height='7'%3E%3C/rect%3E%3Crect x='14' y='3' width='7' height='7'%3E%3C/rect%3E%3Crect x='14' y='14' width='7' height='7'%3E%3C/rect%3E%3Crect x='3' y='14' width='7' height='7'%3E%3C/rect%3E%3C/svg%3E");
+    }
+  }
+}
+
+.group-by {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+
+  label {
+    font-size: 0.875rem;
+    color: #666;
+  }
+
+  select {
+    padding: 0.375rem 0.75rem;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    background-color: white;
+    cursor: pointer;
+
+    &:focus {
+      outline: none;
+      border-color: #4a4ae0;
+    }
   }
 }
 
@@ -372,5 +457,234 @@
     border-radius: 4px;
     font-size: 0.75rem;
     margin-right: 0.25rem;
+  }
+}
+
+// Board View Styles
+.board-view {
+  display: flex;
+  gap: 1rem;
+  overflow-x: auto;
+  padding-bottom: 1rem;
+  min-height: 400px;
+}
+
+.board-column {
+  flex: 0 0 280px;
+  background: #f3f4f6;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 280px);
+
+  &[data-category="done"] {
+    .column-header {
+      background: #dcfce7;
+      border-bottom-color: #bbf7d0;
+
+      .column-title {
+        color: #166534;
+      }
+    }
+  }
+
+  &[data-category="indeterminate"],
+  &[data-category="in progress"] {
+    .column-header {
+      background: #dbeafe;
+      border-bottom-color: #bfdbfe;
+
+      .column-title {
+        color: #1e40af;
+      }
+    }
+  }
+
+  &[data-category="new"],
+  &[data-category="to do"] {
+    .column-header {
+      background: #fef3c7;
+      border-bottom-color: #fde68a;
+
+      .column-title {
+        color: #92400e;
+      }
+    }
+  }
+}
+
+.column-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  background: #e5e7eb;
+  border-bottom: 2px solid #d1d5db;
+  border-radius: 8px 8px 0 0;
+  flex-shrink: 0;
+
+  .column-title {
+    font-weight: 600;
+    font-size: 0.875rem;
+    color: #374151;
+  }
+
+  .column-count {
+    font-size: 0.75rem;
+    font-weight: 500;
+    background: rgba(0, 0, 0, 0.1);
+    padding: 0.125rem 0.5rem;
+    border-radius: 10px;
+    color: inherit;
+  }
+}
+
+.column-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.5rem;
+}
+
+.group-header {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #6b7280;
+  padding: 0.5rem 0.25rem;
+  margin-top: 0.5rem;
+  border-bottom: 1px solid #e5e7eb;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+
+  &:first-child {
+    margin-top: 0;
+  }
+}
+
+.board-card {
+  background: white;
+  border-radius: 6px;
+  padding: 0.75rem;
+  margin-bottom: 0.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+  transition: box-shadow 0.2s, transform 0.1s;
+
+  &:hover {
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15);
+    transform: translateY(-1px);
+  }
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+
+  .card-key {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #4a4ae0;
+  }
+
+  .card-type {
+    font-size: 0.625rem;
+    padding: 0.125rem 0.375rem;
+    border-radius: 3px;
+    background: #f3e8ff;
+    color: #7c3aed;
+    text-transform: uppercase;
+    font-weight: 500;
+
+    &[data-type="bug"] {
+      background: #fee2e2;
+      color: #dc2626;
+    }
+
+    &[data-type="task"] {
+      background: #dbeafe;
+      color: #2563eb;
+    }
+
+    &[data-type="story"] {
+      background: #dcfce7;
+      color: #16a34a;
+    }
+
+    &[data-type="epic"] {
+      background: #fae8ff;
+      color: #a855f7;
+    }
+
+    &[data-type="sub-task"],
+    &[data-type="subtask"] {
+      background: #e0e7ff;
+      color: #4f46e5;
+    }
+  }
+}
+
+.card-summary {
+  font-size: 0.875rem;
+  color: #333;
+  line-height: 1.4;
+  margin-bottom: 0.5rem;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+
+  .card-status {
+    font-size: 0.625rem;
+    padding: 0.125rem 0.375rem;
+    border-radius: 3px;
+    background: #e5e7eb;
+    color: #374151;
+
+    &[data-status="done"],
+    &[data-status="closed"],
+    &[data-status="resolved"],
+    &[data-status="完了"] {
+      background: #dcfce7;
+      color: #166534;
+    }
+
+    &[data-status="in progress"],
+    &[data-status="in review"],
+    &[data-status="進行中"] {
+      background: #dbeafe;
+      color: #1e40af;
+    }
+
+    &[data-status="to do"],
+    &[data-status="open"],
+    &[data-status="オープン"] {
+      background: #fef3c7;
+      color: #92400e;
+    }
+  }
+
+  .card-assignee {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: #4a4ae0;
+    color: white;
+    font-size: 0.75rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 }
