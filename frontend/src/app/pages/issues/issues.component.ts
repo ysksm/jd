@@ -255,20 +255,6 @@ export class IssuesComponent implements OnInit {
     const issueMap = this.issueMap();
     const epicKeys = this.epicKeys();
 
-    // Debug logging for Epic grouping
-    if (groupByValue === 'epic') {
-      console.group('Epic Grouping Debug');
-      console.log('Total issues:', issues.length);
-      console.log('Unique issueTypes:', [...new Set(issues.map(i => i.issueType))]);
-      console.log('Epic keys found:', Array.from(epicKeys));
-      console.log('Issues with parentKey:', issues.filter(i => i.parentKey).map(i => ({
-        key: i.key,
-        issueType: i.issueType,
-        parentKey: i.parentKey
-      })));
-      console.groupEnd();
-    }
-
     issues.forEach(issue => {
       let key: string;
       if (groupByValue === 'assignee') {
