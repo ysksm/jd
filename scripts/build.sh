@@ -101,12 +101,9 @@ build_web() {
     build_rust "jira-db-web"
     build_frontend "web"
 
-    # Copy frontend build to static directory
-    info "Copying frontend build to static directory..."
-    mkdir -p "$PROJECT_ROOT/static"
-    rm -rf "$PROJECT_ROOT/static/browser"
-    cp -r "$PROJECT_ROOT/frontend/dist/jira-db-frontend/browser" "$PROJECT_ROOT/static/"
-    success "Static files copied to static/browser"
+    # Angular outputs directly to crates/jira-db-web/static/browser
+    # No copy needed - angular.json has outputPath configured
+    success "Web build completed. Static files at: crates/jira-db-web/static/browser"
 }
 
 # Build Tauri app
@@ -136,13 +133,8 @@ build_all() {
     build_rust ""
 
     # Build Angular frontend for web
+    # Angular outputs directly to crates/jira-db-web/static/browser
     build_frontend "web"
-
-    # Copy frontend build to static directory
-    info "Copying frontend build to static directory..."
-    mkdir -p "$PROJECT_ROOT/static"
-    rm -rf "$PROJECT_ROOT/static/browser"
-    cp -r "$PROJECT_ROOT/frontend/dist/jira-db-frontend/browser" "$PROJECT_ROOT/static/"
 
     success "All builds completed!"
     echo ""
@@ -152,7 +144,7 @@ build_all() {
     info "  - jira-db-api (API Server)"
     info "  - jira-db-web (Web Server)"
     info ""
-    info "Static files are available in: static/browser/"
+    info "Static files are available in: crates/jira-db-web/static/browser/"
 }
 
 # Main

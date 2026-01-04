@@ -61,10 +61,10 @@ info "Copying jira-db-web binary..."
 cp "$PROJECT_ROOT/target/release/jira-db-web" "$DEPLOY_DIR/bin/"
 chmod +x "$DEPLOY_DIR/bin/jira-db-web"
 
-# Copy static files
+# Copy static files (Angular outputs to crates/jira-db-web/static/browser)
 info "Copying static files..."
 rm -rf "$DEPLOY_DIR/static/browser"
-cp -r "$PROJECT_ROOT/static/browser" "$DEPLOY_DIR/static/"
+cp -r "$PROJECT_ROOT/crates/jira-db-web/static/browser" "$DEPLOY_DIR/static/"
 
 # Create config.toml if not exists
 if [ ! -f "$DEPLOY_DIR/config.toml" ]; then
