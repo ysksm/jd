@@ -210,8 +210,10 @@ impl IssueRepository for DuckDbIssueRepository {
         }
 
         if let Some(project_key) = &params.project_key {
-            conditions.push("p.key = ?");
-            sql_params.push(Box::new(project_key.clone()));
+            // Filter by issue key prefix (e.g., "PROJ-%" for project key "PROJ")
+            conditions.push("i.key LIKE ?");
+            let project_pattern = format!("{}-%", project_key);
+            sql_params.push(Box::new(project_pattern));
         }
 
         if let Some(status) = &params.status {
