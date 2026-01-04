@@ -1,0 +1,8 @@
+# Dependencies
+node_modules/
+
+# Angular cache
+.angular/
+
+# Distribution
+dist/

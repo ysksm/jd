@@ -1,0 +1,47 @@
+<div class="dashboard">
+  <h2>Dashboard</h2>
+
+  @if (error()) {
+    <div class="alert alert-error">{{ error() }}</div>
+  }
+
+  <div class="stats-grid">
+    <div class="stat-card">
+      <h3>Projects</h3>
+      <div class="stat-value">{{ projects().length }}</div>
+    </div>
+    <div class="stat-card">
+      <h3>Sync Status</h3>
+      <div class="stat-value">
+        @if (syncStatus()?.inProgress) {
+          <span class="status-syncing">Syncing...</span>
+        } @else {
+          <span class="status-idle">Idle</span>
+        }
+      </div>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button class="btn btn-primary" (click)="startSync()">
+      Start Sync
+    </button>
+  </div>
+
+  <h3>Enabled Projects</h3>
+  <div class="project-list">
+    @for (project of projects(); track project.key) {
+      @if (project.enabled) {
+        <div class="project-card">
+          <div class="project-key">{{ project.key }}</div>
+          <div class="project-name">{{ project.name }}</div>
+          @if (project.lastSyncedAt) {
+            <div class="project-synced">Last synced: {{ project.lastSyncedAt }}</div>
+          }
+        </div>
+      }
+    } @empty {
+      <p class="no-projects">No enabled projects. Go to Settings to enable project sync.</p>
+    }
+  </div>
+</div>

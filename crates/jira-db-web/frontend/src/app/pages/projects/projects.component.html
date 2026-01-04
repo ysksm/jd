@@ -1,0 +1,58 @@
+<div class="projects">
+  <div class="page-header">
+    <h2>Projects</h2>
+    <button class="btn btn-primary" (click)="initializeProjects()" [disabled]="syncing()">
+      {{ syncing() ? 'Fetching...' : 'Fetch from JIRA' }}
+    </button>
+  </div>
+
+  @if (error()) {
+    <div class="alert alert-error">{{ error() }}</div>
+  }
+
+  @if (success()) {
+    <div class="alert alert-success">{{ success() }}</div>
+  }
+
+  @if (loading()) {
+    <div class="loading">Loading projects...</div>
+  } @else {
+    <div class="stats">
+      <span class="stat">{{ enabledCount }} enabled</span>
+      <span class="separator">/</span>
+      <span class="stat">{{ totalCount }} total</span>
+    </div>
+
+    @if (projects().length === 0) {
+      <div class="empty-state">
+        <p>No projects found.</p>
+        <p>Click "Fetch from JIRA" to get your project list.</p>
+      </div>
+    } @else {
+      <div class="project-list">
+        @for (project of projects(); track project.key) {
+          <div class="project-card" [class.enabled]="project.enabled">
+            <div class="project-info">
+              <div class="project-key">{{ project.key }}</div>
+              <div class="project-name">{{ project.name }}</div>
+              @if (project.lastSyncedAt) {
+                <div class="project-synced">Last synced: {{ project.lastSyncedAt }}</div>
+              }
+            </div>
+            <div class="project-actions">
+              @if (project.enabled) {
+                <button class="btn btn-secondary" (click)="disableProject(project.key)">
+                  Disable
+                </button>
+              } @else {
+                <button class="btn btn-primary" (click)="enableProject(project.key)">
+                  Enable
+                </button>
+              }
+            </div>
+          </div>
+        }
+      </div>
+    }
+  }
+</div>
