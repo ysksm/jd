@@ -3,7 +3,6 @@ members = [
     "crates/jira-db-core",
     "crates/jira-db-cli",
     "crates/jira-db-mcp",
-    "crates/jira-db-api",
     "crates/jira-db-service",
     "crates/jira-db-web",
     "crates/jira-db-tauri/src-tauri",

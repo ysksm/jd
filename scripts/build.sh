@@ -7,7 +7,6 @@
 #   ./scripts/build.sh cli      # Build CLI only
 #   ./scripts/build.sh web      # Build Web server + Angular frontend
 #   ./scripts/build.sh mcp      # Build MCP server only
-#   ./scripts/build.sh api      # Build API server only
 #   ./scripts/build.sh tauri    # Build Tauri app
 #   ./scripts/build.sh frontend # Build Angular frontend only
 
@@ -92,11 +91,6 @@ build_mcp() {
     build_rust "jira-db-mcp"
 }
 
-# Build API server
-build_api() {
-    build_rust "jira-db-api"
-}
-
 # Build Web server (Rust + Angular)
 build_web() {
     build_rust "jira-db-web"
@@ -142,7 +136,6 @@ build_all() {
     info "Built binaries are available in: target/release/"
     info "  - jira-db (CLI)"
     info "  - jira-db-mcp (MCP Server)"
-    info "  - jira-db-api (API Server)"
     info "  - jira-db-web (Web Server)"
     info ""
     info "Static files are available in: crates/jira-db-web/static/browser/"
@@ -162,9 +155,6 @@ case "${1:-all}" in
     mcp)
         build_mcp
         ;;
-    api)
-        build_api
-        ;;
     tauri)
         build_tauri
         ;;
@@ -172,14 +162,13 @@ case "${1:-all}" in
         build_frontend "${2:-web}"
         ;;
     *)
-        echo "Usage: $0 {all|cli|web|mcp|api|tauri|frontend}"
+        echo "Usage: $0 {all|cli|web|mcp|tauri|frontend}"
         echo ""
         echo "Options:"
         echo "  all       Build all applications (default)"
         echo "  cli       Build CLI only"
         echo "  web       Build Web server + Angular frontend"
         echo "  mcp       Build MCP server only"
-        echo "  api       Build API server only"
         echo "  tauri     Build Tauri desktop app"
         echo "  frontend  Build Angular frontend only (optional: config name)"
         exit 1

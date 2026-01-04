@@ -14,7 +14,8 @@ jira-db/
 │   ├── jira-db-cli/              # CLI binary (jira-db command)
 │   ├── jira-db-mcp/              # MCP Server (stdio + HTTP)
 │   ├── jira-db-tauri/            # Tauri GUI application
-│   └── jira-db-api/              # REST API server
+│   ├── jira-db-web/              # Web server (ActixWeb + Angular)
+│   └── jira-db-service/          # Shared service layer for web/tauri
 ```
 
 ## Layer Architecture (jira-db-core)
