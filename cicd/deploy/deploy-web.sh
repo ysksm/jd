@@ -23,7 +23,7 @@ if [ -f "$DEPLOY_PATH/data/settings.json" ]; then
 fi
 
 pgrep -f 'jira-db-web .*--config' | xargs kill || true
-./jira-db/scripts/deploy.sh "$DEPLOY_PATH"
+./scripts/deploy.sh "$DEPLOY_PATH"
 cp ./config.toml "$DEPLOY_PATH/"
 cp ./settings.json "$DEPLOY_PATH/data/"
 
