@@ -46,7 +46,8 @@
     }
 
     .icon-list,
-    .icon-board {
+    .icon-board,
+    .icon-mindmap {
       display: block;
       width: 18px;
       height: 18px;
@@ -61,6 +62,10 @@
 
     .icon-board {
       background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23374151' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='3' width='7' height='7'%3E%3C/rect%3E%3Crect x='14' y='3' width='7' height='7'%3E%3C/rect%3E%3Crect x='14' y='14' width='7' height='7'%3E%3C/rect%3E%3Crect x='3' y='14' width='7' height='7'%3E%3C/rect%3E%3C/svg%3E");
+    }
+
+    .icon-mindmap {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23374151' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='3'%3E%3C/circle%3E%3Cline x1='12' y1='3' x2='12' y2='9'%3E%3C/line%3E%3Cline x1='12' y1='15' x2='12' y2='21'%3E%3C/line%3E%3Cline x1='3' y1='12' x2='9' y2='12'%3E%3C/line%3E%3Cline x1='15' y1='12' x2='21' y2='12'%3E%3C/line%3E%3Ccircle cx='12' cy='3' r='1.5'%3E%3C/circle%3E%3Ccircle cx='12' cy='21' r='1.5'%3E%3C/circle%3E%3Ccircle cx='3' cy='12' r='1.5'%3E%3C/circle%3E%3Ccircle cx='21' cy='12' r='1.5'%3E%3C/circle%3E%3C/svg%3E");
     }
   }
 }

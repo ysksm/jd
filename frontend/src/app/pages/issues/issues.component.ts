@@ -3,8 +3,9 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Issue, Project, Status, IssueType } from '../../generated/models';
 import { API_SERVICE, IApiService } from '../../api.provider';
+import { MindmapComponent } from './mindmap/mindmap.component';
 
-type ViewMode = 'list' | 'board';
+type ViewMode = 'list' | 'board' | 'mindmap';
 type GroupBy = 'none' | 'assignee' | 'epic';
 
 interface StatusColumn {
@@ -22,7 +23,7 @@ interface Swimlane {
 @Component({
   selector: 'app-issues',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, MindmapComponent],
   templateUrl: './issues.component.html',
   styleUrl: './issues.component.scss'
 })

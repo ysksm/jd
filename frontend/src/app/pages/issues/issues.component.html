@@ -19,6 +19,14 @@
         >
           <span class="icon-board"></span>
         </button>
+        <button
+          class="view-btn"
+          [class.active]="viewMode() === 'mindmap'"
+          (click)="setViewMode('mindmap')"
+          title="Mindmap View"
+        >
+          <span class="icon-mindmap"></span>
+        </button>
       </div>
     </div>
   </div>
@@ -126,6 +134,12 @@
         <p>No issues found.</p>
         <p>Try adjusting your search filters.</p>
       </div>
+    } @else if (viewMode() === 'mindmap') {
+      <!-- Mindmap View -->
+      <app-mindmap
+        [issues]="issues()"
+        (issueClick)="selectIssue($event)"
+      ></app-mindmap>
     } @else if (viewMode() === 'list') {
       <!-- List View -->
       <div class="issue-list">
