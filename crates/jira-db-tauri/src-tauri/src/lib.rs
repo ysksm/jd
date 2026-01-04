@@ -72,6 +72,7 @@ pub fn run() {
     tracing_log::LogTracer::init().ok();
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
         .manage(AppState::default())
         .setup(|app| {
             // Resolve the settings path to an absolute path

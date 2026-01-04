@@ -65,3 +65,4 @@ actix-files = "0.6"
 # Tauri
 tauri = { version = "2.0", features = [] }
 tauri-build = { version = "2.0" }
+tauri-plugin-opener = "2.0"
