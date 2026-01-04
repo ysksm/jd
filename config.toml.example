@@ -1,0 +1,17 @@
+# JiraDb Web Server Configuration
+# Copy this file to config.toml and customize as needed.
+
+[server]
+# Host address to bind to
+# Use "0.0.0.0" to listen on all interfaces
+host = "127.0.0.1"
+
+# Port to bind to
+port = 8080
+
+[app]
+# Path to JiraDb settings.json file
+settings_path = "./data/settings.json"
+
+# Path to static files directory (Angular build output)
+static_dir = "./static/browser"

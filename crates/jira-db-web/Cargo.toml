@@ -38,3 +38,6 @@ tracing-log.workspace = true
 
 # CLI
 clap.workspace = true
+
+# Configuration
+toml.workspace = true
