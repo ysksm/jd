@@ -154,8 +154,9 @@ export class MindmapComponent implements OnChanges, OnDestroy, AfterViewInit {
     this.echartsInstance = echarts.init(this.chartContainer.nativeElement);
     this.updateChart();
 
-    // Handle click events
-    this.echartsInstance.on('click', (params: echarts.ECElementEvent) => {
+    // Handle double-click for showing issue details
+    // Single click is used for expand/collapse (handled by ECharts)
+    this.echartsInstance.on('dblclick', (params: echarts.ECElementEvent) => {
       const data = params.data as TreeNodeData | undefined;
       if (data?.issueData) {
         this.issueClick.emit(data.issueData);
