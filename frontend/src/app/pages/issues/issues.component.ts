@@ -1,4 +1,4 @@
-import { Component, OnInit, signal, inject, effect } from '@angular/core';
+import { Component, OnInit, signal, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Issue, Project, Status, IssueType } from '../../generated/models';
@@ -33,19 +33,6 @@ export class IssuesComponent implements OnInit {
   issueTypeFilter = signal('');
   assigneeFilter = signal('');
 
-  constructor() {
-    // Watch for project filter changes to load metadata
-    effect(() => {
-      const project = this.projectFilter();
-      if (project) {
-        this.loadProjectMetadata(project);
-      } else {
-        // Load metadata from all projects
-        this.loadAllMetadata();
-      }
-    });
-  }
-
   ngOnInit(): void {
     this.loadProjects();
     this.search();
@@ -54,7 +41,10 @@ export class IssuesComponent implements OnInit {
   loadProjects(): void {
     this.api.projectsList({}).subscribe({
       next: (response) => {
-        this.projects.set(response.projects.filter(p => p.enabled));
+        const enabledProjects = response.projects.filter(p => p.enabled);
+        this.projects.set(enabledProjects);
+        // Load metadata after projects are loaded
+        this.loadAllMetadata();
       },
       error: (err) => {
         console.error('Failed to load projects:', err);
@@ -172,6 +162,17 @@ export class IssuesComponent implements OnInit {
     // Reset dependent filters when project changes
     this.statusFilter.set('');
     this.issueTypeFilter.set('');
+
+    // Load metadata for the selected project
+    const project = this.projectFilter();
+    if (project) {
+      this.loadProjectMetadata(project);
+    } else {
+      this.loadAllMetadata();
+    }
+
+    // Execute search with new project filter
+    this.search();
   }
 
   onSearchKeypress(event: KeyboardEvent): void {

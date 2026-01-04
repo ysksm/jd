@@ -29,7 +29,7 @@
 
       <select
         [ngModel]="statusFilter()"
-        (ngModelChange)="statusFilter.set($event)"
+        (ngModelChange)="statusFilter.set($event); search()"
       >
         <option value="">All Statuses</option>
         @for (status of statuses(); track status.name) {
@@ -39,7 +39,7 @@
 
       <select
         [ngModel]="issueTypeFilter()"
-        (ngModelChange)="issueTypeFilter.set($event)"
+        (ngModelChange)="issueTypeFilter.set($event); search()"
       >
         <option value="">All Types</option>
         @for (type of issueTypes(); track type.name) {
@@ -49,7 +49,7 @@
 
       <select
         [ngModel]="assigneeFilter()"
-        (ngModelChange)="assigneeFilter.set($event)"
+        (ngModelChange)="assigneeFilter.set($event); search()"
       >
         <option value="">All Assignees</option>
         @for (assignee of assignees(); track assignee) {
