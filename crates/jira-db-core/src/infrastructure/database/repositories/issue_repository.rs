@@ -210,8 +210,10 @@ impl IssueRepository for DuckDbIssueRepository {
         }
 
         if let Some(project_key) = &params.project_key {
-            conditions.push("p.key = ?");
-            sql_params.push(Box::new(project_key.clone()));
+            // Filter by issue key prefix (e.g., "PROJ-%" for project key "PROJ")
+            conditions.push("i.key LIKE ?");
+            let project_pattern = format!("{}-%", project_key);
+            sql_params.push(Box::new(project_pattern));
         }
 
         if let Some(status) = &params.status {
@@ -223,6 +225,16 @@ impl IssueRepository for DuckDbIssueRepository {
             conditions.push("i.assignee LIKE ?");
             let assignee_pattern = format!("%{}%", assignee);
             sql_params.push(Box::new(assignee_pattern));
+        }
+
+        if let Some(issue_type) = &params.issue_type {
+            conditions.push("i.issue_type = ?");
+            sql_params.push(Box::new(issue_type.clone()));
+        }
+
+        if let Some(priority) = &params.priority {
+            conditions.push("i.priority = ?");
+            sql_params.push(Box::new(priority.clone()));
         }
 
         for condition in conditions {

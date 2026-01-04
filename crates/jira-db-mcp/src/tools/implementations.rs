@@ -52,6 +52,8 @@ impl ToolHandler for SearchIssuesTool {
             project_key: params.project,
             status: params.status,
             assignee: params.assignee,
+            issue_type: None,
+            priority: None,
             limit: Some(params.limit.unwrap_or(20)),
             offset: params.offset,
         };

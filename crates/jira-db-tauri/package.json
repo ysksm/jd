@@ -1,49 +1,13 @@
 {
-  "name": "jira-db-frontend",
-  "version": "0.0.0",
+  "name": "jira-db-tauri",
+  "version": "0.1.0",
+  "private": true,
   "scripts": {
-    "ng": "ng",
-    "start": "ng serve",
-    "build": "ng build",
-    "watch": "ng build --watch --configuration development",
-    "test": "ng test",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:dev:no-watch": "tauri dev --no-watch",
     "tauri:build": "tauri build"
   },
-  "prettier": {
-    "printWidth": 100,
-    "singleQuote": true,
-    "overrides": [
-      {
-        "files": "*.html",
-        "options": {
-          "parser": "angular"
-        }
-      }
-    ]
-  },
-  "private": true,
-  "packageManager": "npm@10.9.4",
-  "dependencies": {
-    "@angular/common": "^21.0.0",
-    "@angular/compiler": "^21.0.0",
-    "@angular/core": "^21.0.0",
-    "@angular/forms": "^21.0.0",
-    "@angular/platform-browser": "^21.0.0",
-    "@angular/router": "^21.0.0",
-    "@tauri-apps/api": "^2.9.1",
-    "echarts": "^6.0.0",
-    "rxjs": "~7.8.0",
-    "tslib": "^2.3.0",
-    "uplot": "^1.6.32"
-  },
   "devDependencies": {
-    "@angular/build": "^21.0.4",
-    "@angular/cli": "^21.0.4",
-    "@angular/compiler-cli": "^21.0.0",
-    "@tauri-apps/cli": "^2.5.0",
-    "typescript": "~5.9.2"
+    "@tauri-apps/cli": "^2.0.0"
   }
 }

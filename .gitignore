@@ -31,3 +31,9 @@ data/
 
 # Tauri generated files
 crates/jira-db-tauri/src-tauri/gen/
+
+# Node.js / Angular
+node_modules/
+frontend/dist/
+crates/jira-db-tauri/dist/
+.angular/

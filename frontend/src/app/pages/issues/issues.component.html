@@ -17,24 +17,46 @@
     </div>
 
     <div class="filters">
-      <input
-        type="text"
-        placeholder="Project"
+      <select
         [ngModel]="projectFilter()"
-        (ngModelChange)="projectFilter.set($event)"
-      />
-      <input
-        type="text"
-        placeholder="Status"
+        (ngModelChange)="projectFilter.set($event); onProjectChange()"
+      >
+        <option value="">All Projects</option>
+        @for (project of projects(); track project.key) {
+          <option [value]="project.key">{{ project.key }} - {{ project.name }}</option>
+        }
+      </select>
+
+      <select
         [ngModel]="statusFilter()"
-        (ngModelChange)="statusFilter.set($event)"
-      />
-      <input
-        type="text"
-        placeholder="Assignee"
+        (ngModelChange)="statusFilter.set($event); search()"
+      >
+        <option value="">All Statuses</option>
+        @for (status of statuses(); track status.name) {
+          <option [value]="status.name">{{ status.name }}</option>
+        }
+      </select>
+
+      <select
+        [ngModel]="issueTypeFilter()"
+        (ngModelChange)="issueTypeFilter.set($event); search()"
+      >
+        <option value="">All Types</option>
+        @for (type of issueTypes(); track type.name) {
+          <option [value]="type.name">{{ type.name }}</option>
+        }
+      </select>
+
+      <select
         [ngModel]="assigneeFilter()"
-        (ngModelChange)="assigneeFilter.set($event)"
-      />
+        (ngModelChange)="assigneeFilter.set($event); search()"
+      >
+        <option value="">All Assignees</option>
+        @for (assignee of assignees(); track assignee) {
+          <option [value]="assignee">{{ assignee }}</option>
+        }
+      </select>
+
       <button class="btn btn-secondary" (click)="clearFilters()">Clear</button>
     </div>
   </div>
@@ -55,9 +77,20 @@
       </div>
     } @else {
       <div class="issue-list">
+        <div class="issue-header">
+          <div class="header-key">Key</div>
+          <div class="header-type">Type</div>
+          <div class="header-summary">Summary</div>
+          <div class="header-status">Status</div>
+          <div class="header-priority">Priority</div>
+          <div class="header-assignee">Assignee</div>
+        </div>
         @for (issue of issues(); track issue.key) {
           <div class="issue-row" (click)="selectIssue(issue)">
             <div class="issue-key">{{ issue.key }}</div>
+            <div class="issue-type" [attr.data-type]="issue.issueType.toLowerCase()">
+              {{ issue.issueType }}
+            </div>
             <div class="issue-summary">{{ issue.summary }}</div>
             <div class="issue-status" [attr.data-status]="issue.status.toLowerCase()">
               {{ issue.status }}

@@ -140,6 +140,8 @@ pub async fn embeddings_search(
             project_key: None,
             status: None,
             assignee: None,
+            issue_type: None,
+            priority: None,
             limit: Some(1),
             offset: None,
         };

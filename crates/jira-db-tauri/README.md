@@ -1,59 +1,52 @@
-# JiraDbFrontend
+# JiraDb Tauri Desktop App
 
-This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 21.0.4.
+Tauri-based desktop application for JiraDb.
 
-## Development server
+## Prerequisites
 
-To start a local development server, run:
+- Rust (with Cargo)
+- Node.js (with npm)
+- Tauri CLI: `cargo install tauri-cli`
 
-```bash
-ng serve
-```
+## Development
 
-Once the server is running, open your browser and navigate to `http://localhost:4200/`. The application will automatically reload whenever you modify any of the source files.
+The Tauri app uses the shared frontend from `/frontend`.
 
-## Code scaffolding
-
-Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
+### Development Server
 
 ```bash
-ng generate component component-name
+# From the project root
+cd crates/jira-db-tauri/src-tauri
+cargo tauri dev
 ```
 
-For a complete list of available schematics (such as `components`, `directives`, or `pipes`), run:
+This will:
+1. Start the Angular dev server with Tauri configuration
+2. Launch the Tauri development window
+
+### Building
 
 ```bash
-ng generate --help
+# From the project root
+cd crates/jira-db-tauri/src-tauri
+cargo tauri build
 ```
 
-## Building
+This will:
+1. Build the frontend with Tauri configuration
+2. Build the Rust backend
+3. Create platform-specific installers
 
-To build the project run:
+## Architecture
 
-```bash
-ng build
-```
+- **Frontend**: Shared Angular app from `/frontend` with `tauri` build configuration
+- **Backend**: Rust Tauri commands in `src-tauri/src/commands/`
+- **Generated Types**: TypeSpec-generated types in `src-tauri/src/generated/`
 
-This will compile your project and store the build artifacts in the `dist/` directory. By default, the production build optimizes your application for performance and speed.
+## Configuration
 
-## Running unit tests
+The frontend build configuration is in `/frontend/angular.json`:
+- `tauri`: Production build for Tauri
+- `tauri-dev`: Development build for Tauri
 
-To execute unit tests with the [Vitest](https://vitest.dev/) test runner, use the following command:
-
-```bash
-ng test
-```
-
-## Running end-to-end tests
-
-For end-to-end (e2e) testing, run:
-
-```bash
-ng e2e
-```
-
-Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
-
-## Additional Resources
-
-For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
+Output is written to `/crates/jira-db-tauri/dist/`.
