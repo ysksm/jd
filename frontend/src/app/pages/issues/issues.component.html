@@ -20,31 +20,6 @@
           <span class="icon-board"></span>
         </button>
       </div>
-      @if (viewMode() === 'board') {
-        <div class="group-by">
-          <label>Group by:</label>
-          <select
-            [ngModel]="groupBy()"
-            (ngModelChange)="setGroupBy($event)"
-          >
-            <option value="none">None</option>
-            <option value="assignee">Assignee</option>
-            <option value="epic">Epic</option>
-          </select>
-        </div>
-        @if (groupBy() !== 'none') {
-          <div class="swimlane-controls">
-            <button class="btn btn-secondary btn-sm" (click)="expandAllSwimlanes()" title="すべて開く">
-              <span class="icon-expand"></span>
-              開く
-            </button>
-            <button class="btn btn-secondary btn-sm" (click)="collapseAllSwimlanes()" title="すべて閉じる">
-              <span class="icon-collapse"></span>
-              閉じる
-            </button>
-          </div>
-        }
-      }
     </div>
   </div>
 
@@ -107,6 +82,35 @@
       <button class="btn btn-secondary" (click)="clearFilters()">Clear</button>
     </div>
   </div>
+
+  <!-- Board Controls (shown when board view is active) -->
+  @if (viewMode() === 'board') {
+    <div class="board-controls">
+      <div class="group-by">
+        <label>Group by:</label>
+        <select
+          [ngModel]="groupBy()"
+          (ngModelChange)="setGroupBy($event)"
+        >
+          <option value="none">None</option>
+          <option value="assignee">Assignee</option>
+          <option value="epic">Epic</option>
+        </select>
+      </div>
+      @if (groupBy() !== 'none') {
+        <div class="swimlane-controls">
+          <button class="btn btn-secondary btn-sm" (click)="expandAllSwimlanes()" title="すべて開く">
+            <span class="icon-expand"></span>
+            開く
+          </button>
+          <button class="btn btn-secondary btn-sm" (click)="collapseAllSwimlanes()" title="すべて閉じる">
+            <span class="icon-collapse"></span>
+            閉じる
+          </button>
+        </div>
+      }
+    </div>
+  }
 
   @if (error()) {
     <div class="alert alert-error">{{ error() }}</div>
