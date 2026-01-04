@@ -26,6 +26,7 @@ export interface Issue {
   issueType: string;
   assignee?: string;
   reporter?: string;
+  parentKey?: string;
   labels: string[];
   components: string[];
   fixVersions: string[];

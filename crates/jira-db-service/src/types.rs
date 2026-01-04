@@ -39,6 +39,8 @@ pub struct Issue {
     pub assignee: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reporter: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_key: Option<String>,
     pub labels: Vec<String>,
     pub components: Vec<String>,
     pub fix_versions: Vec<String>,

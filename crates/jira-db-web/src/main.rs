@@ -139,11 +139,14 @@ async fn main() -> std::io::Result<()> {
                     )
                     // SQL
                     .route("/sql.execute", web::post().to(handlers::sql_execute))
-                    .route("/sql.getSchema", web::post().to(handlers::sql_get_schema))
-                    .route("/sql.queryList", web::post().to(handlers::sql_query_list))
-                    .route("/sql.querySave", web::post().to(handlers::sql_query_save))
+                    .route("/sql.get-schema", web::post().to(handlers::sql_get_schema))
                     .route(
-                        "/sql.queryDelete",
+                        "/sql.list-queries",
+                        web::post().to(handlers::sql_query_list),
+                    )
+                    .route("/sql.save-query", web::post().to(handlers::sql_query_save))
+                    .route(
+                        "/sql.delete-query",
                         web::post().to(handlers::sql_query_delete),
                     ),
             );

@@ -13,8 +13,6 @@
 // Command naming convention: {namespace}_{operation}
 // Example: config_get, projects_initialize, sync_execute
 //
-// NOTE: #[tauri::command] attributes are removed to avoid conflicts
-// with actual implementations in src/commands/*.rs
 
 #![allow(dead_code)]
 #![allow(unused_variables)]
@@ -29,6 +27,7 @@ use crate::state::AppState;
 // ============================================================
 
 /// Get current configuration
+#[tauri::command]
 pub async fn config_get(
     state: State<'_, AppState>,
     request: ConfigGetRequest,
@@ -37,6 +36,7 @@ pub async fn config_get(
 }
 
 /// Update configuration
+#[tauri::command]
 pub async fn config_update(
     state: State<'_, AppState>,
     request: ConfigUpdateRequest,
@@ -45,6 +45,7 @@ pub async fn config_update(
 }
 
 /// Initialize configuration
+#[tauri::command]
 pub async fn config_initialize(
     state: State<'_, AppState>,
     request: ConfigInitRequest,
@@ -57,6 +58,7 @@ pub async fn config_initialize(
 // ============================================================
 
 /// List all projects
+#[tauri::command]
 pub async fn projects_list(
     state: State<'_, AppState>,
     request: ProjectListRequest,
@@ -65,6 +67,7 @@ pub async fn projects_list(
 }
 
 /// Initialize projects from JIRA
+#[tauri::command]
 pub async fn projects_initialize(
     state: State<'_, AppState>,
     request: ProjectInitRequest,
@@ -73,6 +76,7 @@ pub async fn projects_initialize(
 }
 
 /// Enable project sync
+#[tauri::command]
 pub async fn projects_enable(
     state: State<'_, AppState>,
     request: ProjectEnableRequest,
@@ -81,6 +85,7 @@ pub async fn projects_enable(
 }
 
 /// Disable project sync
+#[tauri::command]
 pub async fn projects_disable(
     state: State<'_, AppState>,
     request: ProjectDisableRequest,
@@ -93,6 +98,7 @@ pub async fn projects_disable(
 // ============================================================
 
 /// Execute sync for enabled projects
+#[tauri::command]
 pub async fn sync_execute(
     state: State<'_, AppState>,
     request: SyncExecuteRequest,
@@ -101,6 +107,7 @@ pub async fn sync_execute(
 }
 
 /// Get sync status
+#[tauri::command]
 pub async fn sync_status(
     state: State<'_, AppState>,
     request: SyncStatusRequest,
@@ -113,6 +120,7 @@ pub async fn sync_status(
 // ============================================================
 
 /// Search issues with filters
+#[tauri::command]
 pub async fn issues_search(
     state: State<'_, AppState>,
     request: IssueSearchRequest,
@@ -121,6 +129,7 @@ pub async fn issues_search(
 }
 
 /// Get issue by key
+#[tauri::command]
 pub async fn issues_get(
     state: State<'_, AppState>,
     request: IssueGetRequest,
@@ -129,6 +138,7 @@ pub async fn issues_get(
 }
 
 /// Get issue change history
+#[tauri::command]
 pub async fn issues_history(
     state: State<'_, AppState>,
     request: IssueHistoryRequest,
@@ -141,6 +151,7 @@ pub async fn issues_history(
 // ============================================================
 
 /// Get project metadata
+#[tauri::command]
 pub async fn metadata_get(
     state: State<'_, AppState>,
     request: MetadataGetRequest,
@@ -153,6 +164,7 @@ pub async fn metadata_get(
 // ============================================================
 
 /// Generate embeddings for semantic search
+#[tauri::command]
 pub async fn embeddings_generate(
     state: State<'_, AppState>,
     request: EmbeddingsGenerateRequest,
@@ -161,6 +173,7 @@ pub async fn embeddings_generate(
 }
 
 /// Semantic search using embeddings
+#[tauri::command]
 pub async fn embeddings_search(
     state: State<'_, AppState>,
     request: SemanticSearchRequest,
@@ -173,6 +186,7 @@ pub async fn embeddings_search(
 // ============================================================
 
 /// Generate HTML report
+#[tauri::command]
 pub async fn reports_generate(
     state: State<'_, AppState>,
     request: ReportGenerateRequest,
@@ -185,6 +199,7 @@ pub async fn reports_generate(
 // ============================================================
 
 /// Execute SQL query (read-only)
+#[tauri::command]
 pub async fn sql_execute(
     state: State<'_, AppState>,
     request: SqlExecuteRequest,
@@ -193,6 +208,7 @@ pub async fn sql_execute(
 }
 
 /// Get database schema
+#[tauri::command]
 pub async fn sql_get_schema(
     state: State<'_, AppState>,
     request: SqlGetSchemaRequest,
@@ -201,6 +217,7 @@ pub async fn sql_get_schema(
 }
 
 /// List saved queries
+#[tauri::command]
 pub async fn sql_list_queries(
     state: State<'_, AppState>,
     request: SqlQueryListRequest,
@@ -209,6 +226,7 @@ pub async fn sql_list_queries(
 }
 
 /// Save a query
+#[tauri::command]
 pub async fn sql_save_query(
     state: State<'_, AppState>,
     request: SqlQuerySaveRequest,
@@ -217,9 +235,44 @@ pub async fn sql_save_query(
 }
 
 /// Delete a saved query
+#[tauri::command]
 pub async fn sql_delete_query(
     state: State<'_, AppState>,
     request: SqlQueryDeleteRequest,
 ) -> Result<SqlQueryDeleteResponse, String> {
     todo!("Implement sql_delete_query")
+}
+
+// ============================================================
+// Command Registration
+// ============================================================
+
+/// Register all commands with Tauri
+#[macro_export]
+macro_rules! register_commands {
+    ($builder:expr) => {
+        $builder.invoke_handler(tauri::generate_handler![
+            config_get,
+            config_update,
+            config_initialize,
+            projects_list,
+            projects_initialize,
+            projects_enable,
+            projects_disable,
+            sync_execute,
+            sync_status,
+            issues_search,
+            issues_get,
+            issues_history,
+            metadata_get,
+            embeddings_generate,
+            embeddings_search,
+            reports_generate,
+            sql_execute,
+            sql_get_schema,
+            sql_list_queries,
+            sql_save_query,
+            sql_delete_query,
+        ])
+    };
 }

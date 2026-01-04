@@ -1,5 +1,27 @@
 <div class="issues">
-  <h2>Issues</h2>
+  <div class="issues-header">
+    <h2>Issues</h2>
+    <div class="view-controls">
+      <div class="view-toggle">
+        <button
+          class="view-btn"
+          [class.active]="viewMode() === 'list'"
+          (click)="setViewMode('list')"
+          title="List View"
+        >
+          <span class="icon-list"></span>
+        </button>
+        <button
+          class="view-btn"
+          [class.active]="viewMode() === 'board'"
+          (click)="setViewMode('board')"
+          title="Board View"
+        >
+          <span class="icon-board"></span>
+        </button>
+      </div>
+    </div>
+  </div>
 
   <!-- Search Bar -->
   <div class="search-bar">
@@ -61,6 +83,35 @@
     </div>
   </div>
 
+  <!-- Board Controls (shown when board view is active) -->
+  @if (viewMode() === 'board') {
+    <div class="board-controls">
+      <div class="group-by">
+        <label>Group by:</label>
+        <select
+          [ngModel]="groupBy()"
+          (ngModelChange)="setGroupBy($event)"
+        >
+          <option value="none">None</option>
+          <option value="assignee">Assignee</option>
+          <option value="epic">Epic</option>
+        </select>
+      </div>
+      @if (groupBy() !== 'none') {
+        <div class="swimlane-controls">
+          <button class="btn btn-secondary btn-sm" (click)="expandAllSwimlanes()" title="すべて開く">
+            <span class="icon-expand"></span>
+            開く
+          </button>
+          <button class="btn btn-secondary btn-sm" (click)="collapseAllSwimlanes()" title="すべて閉じる">
+            <span class="icon-collapse"></span>
+            閉じる
+          </button>
+        </div>
+      }
+    </div>
+  }
+
   @if (error()) {
     <div class="alert alert-error">{{ error() }}</div>
   }
@@ -75,7 +126,8 @@
         <p>No issues found.</p>
         <p>Try adjusting your search filters.</p>
       </div>
-    } @else {
+    } @else if (viewMode() === 'list') {
+      <!-- List View -->
       <div class="issue-list">
         <div class="issue-header">
           <div class="header-key">Key</div>
@@ -97,6 +149,83 @@
             </div>
             <div class="issue-priority">{{ issue.priority }}</div>
             <div class="issue-assignee">{{ issue.assignee || '-' }}</div>
+          </div>
+        }
+      </div>
+    } @else {
+      <!-- Board View with Swimlanes -->
+      <div class="board-view" [class.grouped]="groupBy() !== 'none'">
+        <!-- Status Header Row (shown when grouping is enabled) -->
+        @if (groupBy() !== 'none') {
+          <div class="board-header">
+            <div class="swimlane-label-header"></div>
+            <div class="status-columns-wrapper">
+              @for (status of statusNames(); track status) {
+                <div class="status-header">{{ status }}</div>
+              }
+            </div>
+          </div>
+        }
+
+        <!-- Swimlanes -->
+        @for (swimlane of swimlanes(); track swimlane.name) {
+          <div class="swimlane" [class.collapsed]="isSwimlaneCollapsed(swimlane.name)">
+            <div class="swimlane-row">
+              <!-- Swimlane Label (left side, only when grouping) -->
+              @if (swimlane.name) {
+                <div class="swimlane-label" (click)="toggleSwimlane(swimlane.name)">
+                  <span class="swimlane-toggle">
+                    @if (isSwimlaneCollapsed(swimlane.name)) {
+                      <span class="icon-chevron-right"></span>
+                    } @else {
+                      <span class="icon-chevron-down"></span>
+                    }
+                  </span>
+                  <span class="swimlane-title">{{ swimlane.name }}</span>
+                  <span class="swimlane-count">{{ swimlane.issueCount }}</span>
+                </div>
+              }
+
+              <!-- Status Columns -->
+              @if (!isSwimlaneCollapsed(swimlane.name)) {
+                <div class="status-columns-wrapper">
+                  @for (column of swimlane.columns; track column.status) {
+                    <div class="board-column" [attr.data-category]="column.category.toLowerCase()">
+                      <!-- Show column header only when no grouping -->
+                      @if (groupBy() === 'none') {
+                        <div class="column-header">
+                          <span class="column-title">{{ column.status }}</span>
+                          <span class="column-count">{{ column.issues.length }}</span>
+                        </div>
+                      }
+                      <div class="column-content">
+                        @for (issue of column.issues; track issue.key) {
+                          <div class="board-card" (click)="selectIssue(issue)">
+                            <div class="card-header">
+                              <span class="card-key">{{ issue.key }}</span>
+                              <span class="card-type" [attr.data-type]="issue.issueType.toLowerCase()">
+                                {{ issue.issueType }}
+                              </span>
+                            </div>
+                            <div class="card-summary">{{ issue.summary }}</div>
+                            <div class="card-footer">
+                              <span class="card-status" [attr.data-status]="issue.status.toLowerCase()">
+                                {{ issue.status }}
+                              </span>
+                              @if (issue.assignee) {
+                                <span class="card-assignee" title="{{ issue.assignee }}">
+                                  {{ issue.assignee.charAt(0).toUpperCase() }}
+                                </span>
+                              }
+                            </div>
+                          </div>
+                        }
+                      </div>
+                    </div>
+                  }
+                </div>
+              }
+            </div>
           </div>
         }
       </div>
