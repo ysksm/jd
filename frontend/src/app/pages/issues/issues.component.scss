@@ -470,6 +470,12 @@
   background: white;
   border-radius: 8px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+
+  // CSS variables for consistent sizing
+  --swimlane-label-width: 240px;
+  --status-column-width: 220px;
+  --column-gap: 0.5rem;
+  --wrapper-padding: 0.75rem;
 }
 
 // Fixed header row for status columns
@@ -483,7 +489,8 @@
   z-index: 10;
 
   .swimlane-label-header {
-    flex: 0 0 220px;
+    flex: 0 0 var(--swimlane-label-width);
+    box-sizing: border-box;
     padding: 0.75rem 1rem;
     background: #f9fafb;
     border-right: 1px solid #e5e7eb;
@@ -491,13 +498,15 @@
 
   .status-columns-wrapper {
     display: flex;
-    gap: 0.5rem;
-    padding: 0.75rem;
+    gap: var(--column-gap);
+    padding: var(--wrapper-padding);
     flex: 1;
+    min-width: 0;
   }
 
   .status-header {
-    flex: 0 0 220px;
+    flex: 0 0 var(--status-column-width);
+    box-sizing: border-box;
     font-weight: 600;
     font-size: 0.875rem;
     color: #374151;
@@ -528,7 +537,8 @@
 
 // Swimlane label (left side)
 .swimlane-label {
-  flex: 0 0 220px;
+  flex: 0 0 var(--swimlane-label-width);
+  box-sizing: border-box;
   display: flex;
   align-items: flex-start;
   gap: 0.5rem;
@@ -593,16 +603,18 @@
 // Status columns wrapper
 .status-columns-wrapper {
   display: flex;
-  gap: 0.5rem;
-  padding: 0.75rem;
+  gap: var(--column-gap);
+  padding: var(--wrapper-padding);
   background: #fafafa;
   flex: 1;
+  min-width: 0;
   overflow-x: auto;
 }
 
 // Individual column in swimlane
 .board-column {
-  flex: 0 0 220px;
+  flex: 0 0 var(--status-column-width);
+  box-sizing: border-box;
   min-height: 100px;
   background: #f3f4f6;
   border-radius: 6px;
