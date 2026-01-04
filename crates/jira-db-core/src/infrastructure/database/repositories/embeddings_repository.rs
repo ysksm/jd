@@ -18,6 +18,12 @@ pub struct IssueEmbedding {
     pub embedding: Vec<f32>,
     /// The text that was embedded
     pub embedded_text: String,
+    /// Embedding provider (e.g., "openai", "ollama", "cohere")
+    pub provider: String,
+    /// Model name (e.g., "text-embedding-3-small", "nomic-embed-text")
+    pub model: String,
+    /// Embedding dimensions
+    pub dimensions: i32,
     /// Timestamp when the embedding was created
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
@@ -70,14 +76,18 @@ impl EmbeddingsRepository {
             })?;
 
         // Create embeddings table with ARRAY type for vectors
+        // Using FLOAT[] (variable length) to support different embedding providers
         conn.execute(
             r#"
             CREATE TABLE IF NOT EXISTS issue_embeddings (
                 issue_id VARCHAR PRIMARY KEY,
                 issue_key VARCHAR NOT NULL,
-                embedding FLOAT[1536] NOT NULL,
+                embedding FLOAT[] NOT NULL,
                 embedded_text TEXT NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                provider VARCHAR NOT NULL DEFAULT 'openai',
+                model VARCHAR NOT NULL DEFAULT 'text-embedding-3-small',
+                dimensions INTEGER NOT NULL DEFAULT 1536,
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
             )
             "#,
             [],
@@ -110,6 +120,8 @@ impl EmbeddingsRepository {
         issue_key: &str,
         embedding: &[f32],
         embedded_text: &str,
+        provider: &str,
+        model: &str,
     ) -> DomainResult<()> {
         let conn = self.conn.lock().map_err(|e| {
             DomainError::Repository(format!("Failed to acquire connection lock: {}", e))
@@ -125,17 +137,22 @@ impl EmbeddingsRepository {
                 .join(",")
         );
 
+        let dimensions = embedding.len() as i32;
+
         conn.execute(
             r#"
-            INSERT INTO issue_embeddings (issue_id, issue_key, embedding, embedded_text, created_at)
-            VALUES (?, ?, ?::FLOAT[1536], ?, CURRENT_TIMESTAMP)
+            INSERT INTO issue_embeddings (issue_id, issue_key, embedding, embedded_text, provider, model, dimensions, created_at)
+            VALUES (?, ?, ?::FLOAT[], ?, ?, ?, ?, CURRENT_TIMESTAMP)
             ON CONFLICT (issue_id) DO UPDATE SET
                 issue_key = excluded.issue_key,
                 embedding = excluded.embedding,
                 embedded_text = excluded.embedded_text,
+                provider = excluded.provider,
+                model = excluded.model,
+                dimensions = excluded.dimensions,
                 created_at = CURRENT_TIMESTAMP
             "#,
-            duckdb::params![issue_id, issue_key, embedding_str, embedded_text],
+            duckdb::params![issue_id, issue_key, embedding_str, embedded_text, provider, model, dimensions],
         )
         .map_err(|e| DomainError::Repository(format!("Failed to upsert embedding: {}", e)))?;
 
@@ -164,6 +181,7 @@ impl EmbeddingsRepository {
         );
 
         // Build the query with optional project filter
+        // Using FLOAT[] cast to support variable-length embeddings from different providers
         let query = match project_filter {
             Some(_) => {
                 r#"
@@ -173,7 +191,7 @@ impl EmbeddingsRepository {
                     i.description,
                     i.status,
                     i.project_id,
-                    array_cosine_distance(e.embedding, ?::FLOAT[1536]) as distance
+                    array_cosine_distance(e.embedding, ?::FLOAT[]) as distance
                 FROM issue_embeddings e
                 JOIN issues i ON e.issue_id = i.id
                 WHERE i.project_id = ?
@@ -189,7 +207,7 @@ impl EmbeddingsRepository {
                     i.description,
                     i.status,
                     i.project_id,
-                    array_cosine_distance(e.embedding, ?::FLOAT[1536]) as distance
+                    array_cosine_distance(e.embedding, ?::FLOAT[]) as distance
                 FROM issue_embeddings e
                 JOIN issues i ON e.issue_id = i.id
                 ORDER BY distance ASC

@@ -21,8 +21,8 @@ JIRAプロジェクトのメタデータを格納
 | name | VARCHAR | NOT NULL - プロジェクト名 |
 | description | TEXT | プロジェクト説明 |
 | raw_data | JSON | JIRA APIレスポンスの生データ |
-| created_at | TIMESTAMP | 作成日時 (DEFAULT CURRENT_TIMESTAMP) |
-| updated_at | TIMESTAMP | 更新日時 (DEFAULT CURRENT_TIMESTAMP) |
+| created_at | TIMESTAMPTZ | 作成日時 (DEFAULT CURRENT_TIMESTAMP) |
+| updated_at | TIMESTAMPTZ | 更新日時 (DEFAULT CURRENT_TIMESTAMP) |
 
 #### issues
 JIRAイシューの全データを格納
@@ -40,15 +40,15 @@ JIRAイシューの全データを格納
 | reporter | VARCHAR | 報告者 |
 | issue_type | VARCHAR | イシュータイプ |
 | resolution | VARCHAR | 解決状況 |
-| labels | VARCHAR | ラベル (カンマ区切り) |
-| components | VARCHAR | コンポーネント (カンマ区切り) |
-| fix_versions | VARCHAR | 修正バージョン (カンマ区切り) |
+| labels | JSON | ラベル (JSON配列) |
+| components | JSON | コンポーネント (JSON配列) |
+| fix_versions | JSON | 修正バージョン (JSON配列) |
 | sprint | VARCHAR | スプリント名 |
 | parent_key | VARCHAR | 親イシューキー |
-| created_date | TIMESTAMP | JIRA作成日時 |
-| updated_date | TIMESTAMP | JIRA更新日時 |
+| created_date | TIMESTAMPTZ | JIRA作成日時 |
+| updated_date | TIMESTAMPTZ | JIRA更新日時 |
 | raw_data | JSON | 完全なAPIレスポンス (changelog含む) |
-| synced_at | TIMESTAMP | 同期日時 (DEFAULT CURRENT_TIMESTAMP) |
+| synced_at | TIMESTAMPTZ | 同期日時 (DEFAULT CURRENT_TIMESTAMP) |
 
 **インデックス:**
 - `idx_issues_project` ON (project_id)
@@ -63,8 +63,8 @@ JIRAイシューの全データを格納
 | id | INTEGER | PRIMARY KEY (シーケンス: sync_history_id_seq) |
 | project_id | VARCHAR | NOT NULL - プロジェクトID |
 | sync_type | VARCHAR | NOT NULL - 同期タイプ |
-| started_at | TIMESTAMP | NOT NULL - 開始日時 |
-| completed_at | TIMESTAMP | 完了日時 |
+| started_at | TIMESTAMPTZ | NOT NULL - 開始日時 |
+| completed_at | TIMESTAMPTZ | 完了日時 |
 | status | VARCHAR | NOT NULL - ステータス |
 | items_synced | INTEGER | 同期アイテム数 |
 | error_message | TEXT | エラーメッセージ |
@@ -85,12 +85,12 @@ JIRAイシューの全データを格納
 | author_display_name | VARCHAR | 変更者の表示名 |
 | field | VARCHAR | NOT NULL - 変更されたフィールド |
 | field_type | VARCHAR | フィールドタイプ |
-| from_value | VARCHAR | 変更前の値 |
-| from_string | VARCHAR | 変更前の表示文字列 |
-| to_value | VARCHAR | 変更後の値 |
-| to_string | VARCHAR | 変更後の表示文字列 |
-| changed_at | TIMESTAMP | NOT NULL - 変更日時 |
-| created_at | TIMESTAMP | レコード作成日時 (DEFAULT CURRENT_TIMESTAMP) |
+| from_value | TEXT | 変更前の値 |
+| from_string | TEXT | 変更前の表示文字列 |
+| to_value | TEXT | 変更後の値 |
+| to_string | TEXT | 変更後の表示文字列 |
+| changed_at | TIMESTAMPTZ | NOT NULL - 変更日時 |
+| created_at | TIMESTAMPTZ | レコード作成日時 (DEFAULT CURRENT_TIMESTAMP) |
 
 **インデックス:**
 - `idx_change_history_issue_id` ON (issue_id)
@@ -111,8 +111,8 @@ JIRAイシューの全データを格納
 | name | VARCHAR | NOT NULL - ステータス名 |
 | description | VARCHAR | 説明 |
 | category | VARCHAR | カテゴリ (例: "To Do", "In Progress", "Done") |
-| created_at | TIMESTAMP | NOT NULL - 作成日時 |
-| updated_at | TIMESTAMP | NOT NULL - 更新日時 |
+| created_at | TIMESTAMPTZ | NOT NULL - 作成日時 |
+| updated_at | TIMESTAMPTZ | NOT NULL - 更新日時 |
 
 #### priorities
 優先度定義
@@ -123,8 +123,8 @@ JIRAイシューの全データを格納
 | name | VARCHAR | NOT NULL - 優先度名 |
 | description | VARCHAR | 説明 |
 | icon_url | VARCHAR | アイコンURL |
-| created_at | TIMESTAMP | NOT NULL - 作成日時 |
-| updated_at | TIMESTAMP | NOT NULL - 更新日時 |
+| created_at | TIMESTAMPTZ | NOT NULL - 作成日時 |
+| updated_at | TIMESTAMPTZ | NOT NULL - 更新日時 |
 
 #### issue_types
 イシュータイプ定義
@@ -136,8 +136,8 @@ JIRAイシューの全データを格納
 | description | VARCHAR | 説明 |
 | icon_url | VARCHAR | アイコンURL |
 | subtask | BOOLEAN | サブタスクフラグ (DEFAULT false) |
-| created_at | TIMESTAMP | NOT NULL - 作成日時 |
-| updated_at | TIMESTAMP | NOT NULL - 更新日時 |
+| created_at | TIMESTAMPTZ | NOT NULL - 作成日時 |
+| updated_at | TIMESTAMPTZ | NOT NULL - 更新日時 |
 
 #### labels
 ラベル定義
@@ -146,8 +146,8 @@ JIRAイシューの全データを格納
 |--------|------|-------------|
 | project_id | VARCHAR | NOT NULL - プロジェクトID |
 | name | VARCHAR | NOT NULL - ラベル名 |
-| created_at | TIMESTAMP | NOT NULL - 作成日時 |
-| updated_at | TIMESTAMP | NOT NULL - 更新日時 |
+| created_at | TIMESTAMPTZ | NOT NULL - 作成日時 |
+| updated_at | TIMESTAMPTZ | NOT NULL - 更新日時 |
 
 #### components
 コンポーネント定義
@@ -158,8 +158,8 @@ JIRAイシューの全データを格納
 | name | VARCHAR | NOT NULL - コンポーネント名 |
 | description | VARCHAR | 説明 |
 | lead | VARCHAR | リード担当者 |
-| created_at | TIMESTAMP | NOT NULL - 作成日時 |
-| updated_at | TIMESTAMP | NOT NULL - 更新日時 |
+| created_at | TIMESTAMPTZ | NOT NULL - 作成日時 |
+| updated_at | TIMESTAMPTZ | NOT NULL - 更新日時 |
 
 #### fix_versions
 バージョン/リリース定義
@@ -170,9 +170,9 @@ JIRAイシューの全データを格納
 | name | VARCHAR | NOT NULL - バージョン名 |
 | description | VARCHAR | 説明 |
 | released | BOOLEAN | リリース済みフラグ (DEFAULT false) |
-| release_date | TIMESTAMP | リリース日 |
-| created_at | TIMESTAMP | NOT NULL - 作成日時 |
-| updated_at | TIMESTAMP | NOT NULL - 更新日時 |
+| release_date | TIMESTAMPTZ | リリース日 |
+| created_at | TIMESTAMPTZ | NOT NULL - 作成日時 |
+| updated_at | TIMESTAMPTZ | NOT NULL - 更新日時 |
 
 ### Snapshot Tables
 
@@ -185,8 +185,8 @@ JIRAイシューの全データを格納
 | issue_key | VARCHAR | NOT NULL - イシューキー |
 | project_id | VARCHAR | NOT NULL - プロジェクトID |
 | version | INTEGER | NOT NULL - バージョン番号 |
-| valid_from | TIMESTAMP | NOT NULL - 有効開始日時 |
-| valid_to | TIMESTAMP | 有効終了日時 (NULLは現在有効) |
+| valid_from | TIMESTAMPTZ | NOT NULL - 有効開始日時 |
+| valid_to | TIMESTAMPTZ | 有効終了日時 (NULLは現在有効) |
 | summary | TEXT | NOT NULL - サマリー |
 | description | TEXT | 説明 |
 | status | VARCHAR | ステータス |
@@ -195,13 +195,13 @@ JIRAイシューの全データを格納
 | reporter | VARCHAR | 報告者 |
 | issue_type | VARCHAR | イシュータイプ |
 | resolution | VARCHAR | 解決状況 |
-| labels | VARCHAR | ラベル (カンマ区切り) |
-| components | VARCHAR | コンポーネント (カンマ区切り) |
-| fix_versions | VARCHAR | 修正バージョン (カンマ区切り) |
+| labels | JSON | ラベル (JSON配列) |
+| components | JSON | コンポーネント (JSON配列) |
+| fix_versions | JSON | 修正バージョン (JSON配列) |
 | sprint | VARCHAR | スプリント名 |
 | parent_key | VARCHAR | 親イシューキー |
 | raw_data | JSON | 完全なAPIレスポンス |
-| created_at | TIMESTAMP | レコード作成日時 (DEFAULT CURRENT_TIMESTAMP) |
+| created_at | TIMESTAMPTZ | レコード作成日時 (DEFAULT CURRENT_TIMESTAMP) |
 
 **主キー:** `(issue_id, version)`
 
@@ -230,8 +230,8 @@ JIRAフィールド定義を格納
 | schema_system | VARCHAR | スキーマシステム |
 | schema_custom | VARCHAR | カスタムスキーマ |
 | schema_custom_id | BIGINT | カスタムスキーマID |
-| created_at | TIMESTAMP | 作成日時 (DEFAULT CURRENT_TIMESTAMP) |
-| updated_at | TIMESTAMP | 更新日時 (DEFAULT CURRENT_TIMESTAMP) |
+| created_at | TIMESTAMPTZ | 作成日時 (DEFAULT CURRENT_TIMESTAMP) |
+| updated_at | TIMESTAMPTZ | 更新日時 (DEFAULT CURRENT_TIMESTAMP) |
 
 ### Expanded Views
 
@@ -243,7 +243,7 @@ JIRAフィールド定義を格納
 | id | VARCHAR | PRIMARY KEY |
 | project_id | VARCHAR | NOT NULL - プロジェクトID |
 | issue_key | VARCHAR | NOT NULL - イシューキー |
-| summary | TEXT | サマリー |
+| summary | TEXT | NOT NULL - サマリー |
 | description | TEXT | 説明 |
 | status | VARCHAR | ステータス |
 | priority | VARCHAR | 優先度 |
@@ -256,9 +256,9 @@ JIRAフィールド定義を格納
 | fix_versions | JSON | 修正バージョン (JSON配列) |
 | sprint | VARCHAR | スプリント名 |
 | parent_key | VARCHAR | 親イシューキー |
-| created_date | TIMESTAMP | JIRA作成日時 |
-| updated_date | TIMESTAMP | JIRA更新日時 |
-| synced_at | TIMESTAMP | 同期日時 (DEFAULT CURRENT_TIMESTAMP) |
+| created_date | TIMESTAMPTZ | JIRA作成日時 |
+| updated_date | TIMESTAMPTZ | JIRA更新日時 |
+| synced_at | TIMESTAMPTZ | 同期日時 (DEFAULT CURRENT_TIMESTAMP) |
 
 **注:** 追加のカスタムフィールドはjira_fieldsに基づいて動的に追加される
 
@@ -276,12 +276,22 @@ JIRAフィールド定義を格納
 |--------|------|-------------|
 | issue_id | VARCHAR | PRIMARY KEY |
 | issue_key | VARCHAR | NOT NULL - イシューキー |
-| embedding | FLOAT[1536] | NOT NULL - ベクトルEmbedding |
+| embedding | FLOAT[] | NOT NULL - ベクトルEmbedding (可変長) |
 | embedded_text | TEXT | NOT NULL - Embedding対象のテキスト |
-| created_at | TIMESTAMP | 作成日時 (DEFAULT CURRENT_TIMESTAMP) |
+| provider | VARCHAR | NOT NULL - プロバイダー名 (DEFAULT 'openai') |
+| model | VARCHAR | NOT NULL - モデル名 (DEFAULT 'text-embedding-3-small') |
+| dimensions | INTEGER | NOT NULL - ベクトル次元数 (DEFAULT 1536) |
+| created_at | TIMESTAMPTZ | 作成日時 (DEFAULT CURRENT_TIMESTAMP) |
 
 **インデックス:**
 - `idx_embeddings_hnsw` USING HNSW (embedding) WITH (metric = 'cosine')
+
+**サポートされるプロバイダー:**
+| Provider | Default Model | Dimensions |
+|----------|---------------|------------|
+| openai | text-embedding-3-small | 1536 |
+| ollama | nomic-embed-text | 768 |
+| cohere | embed-multilingual-v3.0 | 1024 |
 
 **必要な拡張:**
 - DuckDB VSS extension (`INSTALL vss; LOAD vss;`)
@@ -337,7 +347,7 @@ SELECT name, subtask FROM issue_types WHERE project_id = 'PROJECT_ID';
 ### セマンティック検索
 ```sql
 SELECT e.issue_key, i.summary,
-       array_cosine_distance(e.embedding, ?::FLOAT[1536]) as distance
+       array_cosine_distance(e.embedding, ?::FLOAT[]) as distance
 FROM issue_embeddings e
 JOIN issues i ON e.issue_id = i.id
 ORDER BY distance ASC
@@ -354,5 +364,6 @@ LIMIT 10;
 
 - `raw_data` JSONには完全なJIRA APIレスポンス（changelog含む）が格納される
 - メタデータテーブルは `ON CONFLICT DO UPDATE` でupsert
-- Embeddingsは1536次元（OpenAI text-embedding-3-small用）
+- Embeddingsは可変長FLOAT[]配列（プロバイダーによって次元数が異なる）
 - HNSWインデックスはcosine距離を使用
+- 全てのタイムスタンプはTIMESTAMPTZ（タイムゾーン付き）を使用

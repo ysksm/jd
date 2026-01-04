@@ -389,6 +389,12 @@ pub trait EmbeddingProvider: Send + Sync {
 
     /// embedding次元数
     fn dimension(&self) -> usize;
+
+    /// プロバイダー名（例: "openai", "ollama", "cohere"）
+    fn provider_name(&self) -> &str;
+
+    /// モデル名（例: "text-embedding-3-small", "nomic-embed-text"）
+    fn model_name(&self) -> &str;
 }
 ```
 

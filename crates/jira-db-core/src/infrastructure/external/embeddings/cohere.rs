@@ -241,6 +241,14 @@ impl EmbeddingProvider for CohereEmbeddingClient {
     fn dimension(&self) -> usize {
         self.config.dimension
     }
+
+    fn provider_name(&self) -> &str {
+        "cohere"
+    }
+
+    fn model_name(&self) -> &str {
+        &self.config.model
+    }
 }
 
 // Cohere API request/response types
