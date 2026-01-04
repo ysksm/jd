@@ -160,6 +160,7 @@ pub async fn embeddings_search(
                         issue_type: issue.issue_type.unwrap_or_default(),
                         assignee: issue.assignee,
                         reporter: issue.reporter,
+                        parent_key: issue.parent_key,
                         labels: issue.labels.unwrap_or_default(),
                         components: issue.components.unwrap_or_default(),
                         fix_versions: issue.fix_versions.unwrap_or_default(),
