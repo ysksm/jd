@@ -45,7 +45,7 @@ error() {
 # Build Rust binaries
 build_rust() {
     local target=$1
-    info "Building Rust target: $target"
+    info "Building Rust target: ${target:-all workspace members}"
 
     # Set library path for DuckDB on macOS
     if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -54,7 +54,8 @@ build_rust() {
     fi
 
     if [ -z "$target" ]; then
-        cargo build --release
+        # Build all workspace members (--workspace overrides default-members)
+        cargo build --release --workspace
     else
         cargo build --release -p "$target"
     fi
