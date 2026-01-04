@@ -153,6 +153,83 @@ export class VisualizationComponent implements OnInit, OnDestroy, AfterViewInit 
     { value: 'contains', label: 'Contains' },
   ];
 
+  // EVM用SQLテンプレート
+  // プレースホルダー: {{見積もり工数}}, {{実工数}} をユーザーが実際のカラム名に置き換える
+  evmSqlTemplate = `-- EVM（アーンドバリューマネジメント）分析用SQL
+-- ※ {{見積もり工数}} と {{実工数}} を実際のカラム名に置き換えてください
+-- 例: "Story Points", "ストーリーポイント", "見積もり時間" など
+
+WITH daily_data AS (
+  SELECT
+    DATE_TRUNC('day', valid_from) AS 日付,
+    SUM(CASE WHEN status = '完了' OR status = 'Done' OR status = 'Closed' THEN COALESCE({{見積もり工数}}, 0) ELSE 0 END) AS 完了見積もり,
+    SUM(COALESCE({{見積もり工数}}, 0)) AS 総見積もり,
+    SUM(COALESCE({{実工数}}, 0)) AS 総実工数
+  FROM issue_snapshots_expanded_readable
+  WHERE valid_from IS NOT NULL
+  GROUP BY DATE_TRUNC('day', valid_from)
+),
+cumulative AS (
+  SELECT
+    日付,
+    SUM(完了見積もり) OVER (ORDER BY 日付) AS EV,  -- Earned Value（出来高）
+    SUM(総見積もり) OVER (ORDER BY 日付) AS PV,    -- Planned Value（計画価値）
+    SUM(総実工数) OVER (ORDER BY 日付) AS AC       -- Actual Cost（実コスト）
+  FROM daily_data
+)
+SELECT
+  日付,
+  PV AS "計画価値(PV)",
+  EV AS "出来高(EV)",
+  AC AS "実コスト(AC)",
+  ROUND(EV - PV, 2) AS "SV(スケジュール差異)",
+  ROUND(EV - AC, 2) AS "CV(コスト差異)",
+  CASE WHEN PV > 0 THEN ROUND(EV / PV, 2) ELSE NULL END AS "SPI(スケジュール効率)",
+  CASE WHEN AC > 0 THEN ROUND(EV / AC, 2) ELSE NULL END AS "CPI(コスト効率)"
+FROM cumulative
+ORDER BY 日付`;
+
+  // バーンダウンチャート用SQLテンプレート
+  burndownSqlTemplate = `-- バーンダウンチャート用SQL
+-- ※ {{見積もり工数}} を実際のカラム名に置き換えてください
+-- 例: "Story Points", "ストーリーポイント", "見積もり時間" など
+
+WITH daily_snapshots AS (
+  SELECT
+    DATE_TRUNC('day', valid_from) AS 日付,
+    issue_key,
+    status,
+    COALESCE({{見積もり工数}}, 0) AS 見積もり,
+    -- 最新のスナップショットを取得
+    ROW_NUMBER() OVER (PARTITION BY issue_key, DATE_TRUNC('day', valid_from) ORDER BY valid_from DESC) AS rn
+  FROM issue_snapshots_expanded_readable
+  WHERE valid_from IS NOT NULL
+),
+daily_status AS (
+  SELECT
+    日付,
+    SUM(見積もり) AS 総見積もり,
+    SUM(CASE WHEN status = '完了' OR status = 'Done' OR status = 'Closed' THEN 見積もり ELSE 0 END) AS 完了分
+  FROM daily_snapshots
+  WHERE rn = 1
+  GROUP BY 日付
+),
+burndown AS (
+  SELECT
+    日付,
+    総見積もり,
+    完了分,
+    総見積もり - SUM(完了分) OVER (ORDER BY 日付) AS 残作業量
+  FROM daily_status
+)
+SELECT
+  日付,
+  残作業量 AS "残作業量",
+  総見積もり AS "総見積もり",
+  完了分 AS "当日完了分"
+FROM burndown
+ORDER BY 日付`;
+
   private api = inject<IApiService>(API_SERVICE);
 
   ngOnInit(): void {
@@ -810,5 +887,19 @@ export class VisualizationComponent implements OnInit, OnDestroy, AfterViewInit 
     } else if (this.useCustomQuery() && this.customQuery()) {
       this.executeQuery(this.customQuery());
     }
+  }
+
+  // EVM用サンプルSQLをセット
+  applyEvmTemplate(): void {
+    this.customQuery.set(this.evmSqlTemplate);
+    this.selectedQuery.set(null);
+    this.useCustomQuery.set(true);
+  }
+
+  // バーンダウン用サンプルSQLをセット
+  applyBurndownTemplate(): void {
+    this.customQuery.set(this.burndownSqlTemplate);
+    this.selectedQuery.set(null);
+    this.useCustomQuery.set(true);
   }
 }

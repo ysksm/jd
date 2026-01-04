@@ -52,6 +52,22 @@
         <!-- Custom Query -->
         <div class="panel-section">
           <h3>Or Custom Query</h3>
+          <div class="template-buttons">
+            <button
+              class="btn btn-secondary btn-sm"
+              (click)="applyEvmTemplate()"
+              title="EVM（アーンドバリューマネジメント）分析用SQLを挿入"
+            >
+              EVM用サンプルSQL
+            </button>
+            <button
+              class="btn btn-secondary btn-sm"
+              (click)="applyBurndownTemplate()"
+              title="バーンダウンチャート用SQLを挿入"
+            >
+              バーンダウン用サンプルSQL
+            </button>
+          </div>
           <textarea
             class="custom-query-input"
             [ngModel]="customQuery()"
