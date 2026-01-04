@@ -7,11 +7,12 @@ import {
   ElementRef,
   ViewChild,
   AfterViewInit,
+  inject,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { ApiService } from '../../generated/api.service';
 import { SavedQuery } from '../../generated/models';
+import { API_SERVICE, IApiService } from '../../api.provider';
 import uPlot from 'uplot';
 import * as echarts from 'echarts';
 
@@ -152,7 +153,7 @@ export class VisualizationComponent implements OnInit, OnDestroy, AfterViewInit 
     { value: 'contains', label: 'Contains' },
   ];
 
-  constructor(private api: ApiService) {}
+  private api = inject<IApiService>(API_SERVICE);
 
   ngOnInit(): void {
     this.loadSavedQueries();
@@ -167,7 +168,7 @@ export class VisualizationComponent implements OnInit, OnDestroy, AfterViewInit 
   }
 
   loadSavedQueries(): void {
-    this.api.sqlQueryList({}).subscribe({
+    this.api.sqlListQueries({}).subscribe({
       next: (response) => {
         this.savedQueries.set(response.queries);
       },
@@ -202,8 +203,8 @@ export class VisualizationComponent implements OnInit, OnDestroy, AfterViewInit 
     this.api.sqlExecute({ query, limit: 10000 }).subscribe({
       next: (response) => {
         this.columns.set(response.columns);
-        this.rows.set(response.rows);
-        this.filteredRows.set(response.rows);
+        this.rows.set(response.rows as Record<string, unknown>[]);
+        this.filteredRows.set(response.rows as Record<string, unknown>[]);
         this.rowCount.set(response.rowCount);
         this.executionTimeMs.set(response.executionTimeMs);
         this.loading.set(false);

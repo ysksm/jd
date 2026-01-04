@@ -1,7 +1,7 @@
-import { Component, OnInit, signal } from '@angular/core';
+import { Component, OnInit, signal, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ApiService } from '../../generated/api.service';
 import { Project } from '../../generated/models';
+import { API_SERVICE, IApiService } from '../../api.provider';
 
 @Component({
   selector: 'app-projects',
@@ -11,13 +11,13 @@ import { Project } from '../../generated/models';
   styleUrl: './projects.component.scss'
 })
 export class ProjectsComponent implements OnInit {
+  private api = inject<IApiService>(API_SERVICE);
+
   projects = signal<Project[]>([]);
   loading = signal(true);
   syncing = signal(false);
   error = signal<string | null>(null);
   success = signal<string | null>(null);
-
-  constructor(private api: ApiService) {}
 
   ngOnInit(): void {
     this.loadProjects();

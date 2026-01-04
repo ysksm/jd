@@ -218,6 +218,7 @@ function scalarToTypeScript(scalar: ScalarKind): string {
     float32: "number",
     float64: "number",
     utcDateTime: "string", // ISO 8601 string
+    unknown: "unknown", // TypeScript unknown type
   };
   return map[scalar] || "string";
 }

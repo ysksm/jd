@@ -32,6 +32,11 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/embeddings.generate", post(embeddings_generate))
         .route("/embeddings.search", post(embeddings_search))
         .route("/reports.generate", post(reports_generate))
+        .route("/sql.execute", post(sql_execute))
+        .route("/sql.get-schema", post(sql_get_schema))
+        .route("/sql.list-queries", post(sql_list_queries))
+        .route("/sql.save-query", post(sql_save_query))
+        .route("/sql.delete-query", post(sql_delete_query))
 }
 
 // ============================================================
@@ -178,5 +183,47 @@ async fn reports_generate(
     Json(request): Json<ReportGenerateRequest>,
 ) -> Result<Json<ReportGenerateResponse>, ApiError> {
     handlers::reports::generate(state, request).await
+}
+
+// -- Sql --
+
+/// Execute SQL query (read-only)
+async fn sql_execute(
+    State(state): State<Arc<AppState>>,
+    Json(request): Json<SqlExecuteRequest>,
+) -> Result<Json<SqlExecuteResponse>, ApiError> {
+    handlers::sql::execute(state, request).await
+}
+
+/// Get database schema
+async fn sql_get_schema(
+    State(state): State<Arc<AppState>>,
+    Json(request): Json<SqlGetSchemaRequest>,
+) -> Result<Json<SqlGetSchemaResponse>, ApiError> {
+    handlers::sql::get_schema(state, request).await
+}
+
+/// List saved queries
+async fn sql_list_queries(
+    State(state): State<Arc<AppState>>,
+    Json(request): Json<SqlQueryListRequest>,
+) -> Result<Json<SqlQueryListResponse>, ApiError> {
+    handlers::sql::list_queries(state, request).await
+}
+
+/// Save a query
+async fn sql_save_query(
+    State(state): State<Arc<AppState>>,
+    Json(request): Json<SqlQuerySaveRequest>,
+) -> Result<Json<SqlQuerySaveResponse>, ApiError> {
+    handlers::sql::save_query(state, request).await
+}
+
+/// Delete a saved query
+async fn sql_delete_query(
+    State(state): State<Arc<AppState>>,
+    Json(request): Json<SqlQueryDeleteRequest>,
+) -> Result<Json<SqlQueryDeleteResponse>, ApiError> {
+    handlers::sql::delete_query(state, request).await
 }
 

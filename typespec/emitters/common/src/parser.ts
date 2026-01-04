@@ -33,6 +33,7 @@ const API_NAMESPACES = [
   "Metadata",
   "Embeddings",
   "Reports",
+  "Sql",
 ];
 
 /**
@@ -243,6 +244,16 @@ function parseType(type: Type): TypeRef | null {
         scalar: "string",
       };
 
+    case "Intrinsic":
+      // Handle intrinsic types like "unknown"
+      if (type.name === "unknown") {
+        return {
+          kind: "scalar",
+          scalar: "unknown",
+        };
+      }
+      return null;
+
     default:
       return null;
   }
@@ -261,6 +272,7 @@ function parseScalarType(name: string): TypeRef | null {
     float64: "float64",
     float: "float64",
     utcDateTime: "utcDateTime",
+    unknown: "string", // Treat unknown as any/string
   };
 
   const scalar = scalarMap[name];

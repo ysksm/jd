@@ -10,4 +10,5 @@ options:
   "@jira-db/emit-tauri":
     emitter-output-dir: "{project-root}/../crates/jira-db-tauri/src-tauri/src/generated"
   "@jira-db/emit-angular":
-    emitter-output-dir: "{project-root}/../crates/jira-db-tauri/src/app/generated"
+    # Emit to shared frontend location
+    emitter-output-dir: "{project-root}/../frontend/src/app/generated"

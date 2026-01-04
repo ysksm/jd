@@ -125,6 +125,26 @@ export interface ReportResult {
   issueCount: number;
 }
 
+export interface SavedQuery {
+  id: string;
+  name: string;
+  query: string;
+  description?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SqlColumn {
+  name: string;
+  dataType: string;
+  isNullable: boolean;
+}
+
+export interface SqlTable {
+  name: string;
+  columns?: SqlColumn[];
+}
+
 export interface JiraConfig {
   endpoint: string;
   username: string;
@@ -305,30 +325,6 @@ export interface ReportGenerateResponse {
   result: ReportResult;
 }
 
-// ============================================================
-// SQL Query Types
-// ============================================================
-
-export interface SavedQuery {
-  id: string;
-  name: string;
-  query: string;
-  description?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface SqlColumn {
-  name: string;
-  dataType: string;
-  isNullable: boolean;
-}
-
-export interface SqlTable {
-  name: string;
-  columns?: SqlColumn[];
-}
-
 export interface SqlExecuteRequest {
   query: string;
   limit?: number;
@@ -336,7 +332,7 @@ export interface SqlExecuteRequest {
 
 export interface SqlExecuteResponse {
   columns: string[];
-  rows: Record<string, unknown>[];
+  rows: unknown[];
   rowCount: number;
   executionTimeMs: number;
 }
@@ -349,7 +345,8 @@ export interface SqlGetSchemaResponse {
   tables: SqlTable[];
 }
 
-export interface SqlQueryListRequest {}
+export interface SqlQueryListRequest {
+}
 
 export interface SqlQueryListResponse {
   queries: SavedQuery[];

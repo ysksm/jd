@@ -1,8 +1,8 @@
-import { Component, OnInit, signal, computed } from '@angular/core';
+import { Component, OnInit, signal, computed, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { ApiService } from '../../generated/api.service';
 import { SavedQuery, SqlTable, SqlColumn } from '../../generated/models';
+import { API_SERVICE, IApiService } from '../../api.provider';
 
 @Component({
   selector: 'app-query',
@@ -12,6 +12,8 @@ import { SavedQuery, SqlTable, SqlColumn } from '../../generated/models';
   styleUrl: './query.component.scss'
 })
 export class QueryComponent implements OnInit {
+  private api = inject<IApiService>(API_SERVICE);
+
   // Query editor state
   queryText = signal('SELECT * FROM issues LIMIT 10');
   queryName = signal('');
@@ -45,8 +47,6 @@ export class QueryComponent implements OnInit {
 
   // Computed
   hasResults = computed(() => this.columns().length > 0);
-
-  constructor(private api: ApiService) {}
 
   ngOnInit(): void {
     this.loadSchema();
@@ -89,7 +89,7 @@ export class QueryComponent implements OnInit {
   }
 
   loadSavedQueries(): void {
-    this.api.sqlQueryList({}).subscribe({
+    this.api.sqlListQueries({}).subscribe({
       next: (response) => {
         this.savedQueries.set(response.queries);
       },
@@ -107,7 +107,7 @@ export class QueryComponent implements OnInit {
     this.api.sqlExecute({ query: this.queryText(), limit: 100 }).subscribe({
       next: (response) => {
         this.columns.set(response.columns);
-        this.rows.set(response.rows);
+        this.rows.set(response.rows as Record<string, unknown>[]);
         this.rowCount.set(response.rowCount);
         this.executionTimeMs.set(response.executionTimeMs);
         this.loading.set(false);
@@ -141,7 +141,7 @@ export class QueryComponent implements OnInit {
       return;
     }
 
-    this.api.sqlQuerySave({
+    this.api.sqlSaveQuery({
       id: this.editingQueryId() || undefined,
       name: this.queryName(),
       query: this.queryText(),
@@ -169,7 +169,7 @@ export class QueryComponent implements OnInit {
   deleteQuery(query: SavedQuery, event: Event): void {
     event.stopPropagation();
     if (confirm(`Delete query "${query.name}"?`)) {
-      this.api.sqlQueryDelete({ id: query.id }).subscribe({
+      this.api.sqlDeleteQuery({ id: query.id }).subscribe({
         next: () => {
           this.loadSavedQueries();
           if (this.editingQueryId() === query.id) {

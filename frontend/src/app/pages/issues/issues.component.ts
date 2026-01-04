@@ -1,8 +1,8 @@
-import { Component, OnInit, signal } from '@angular/core';
+import { Component, OnInit, signal, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { ApiService } from '../../generated/api.service';
 import { Issue } from '../../generated/models';
+import { API_SERVICE, IApiService } from '../../api.provider';
 
 @Component({
   selector: 'app-issues',
@@ -12,6 +12,8 @@ import { Issue } from '../../generated/models';
   styleUrl: './issues.component.scss'
 })
 export class IssuesComponent implements OnInit {
+  private api = inject<IApiService>(API_SERVICE);
+
   issues = signal<Issue[]>([]);
   selectedIssue = signal<Issue | null>(null);
   loading = signal(false);
@@ -23,8 +25,6 @@ export class IssuesComponent implements OnInit {
   projectFilter = signal('');
   statusFilter = signal('');
   assigneeFilter = signal('');
-
-  constructor(private api: ApiService) {}
 
   ngOnInit(): void {
     this.search();

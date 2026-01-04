@@ -1,8 +1,8 @@
-import { Component, OnInit, signal, computed } from '@angular/core';
+import { Component, OnInit, signal, computed, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { ApiService } from '../../generated/api.service';
 import { Settings, JiraConfig, EmbeddingsConfig } from '../../generated/models';
+import { API_SERVICE, IApiService } from '../../api.provider';
 
 @Component({
   selector: 'app-settings',
@@ -12,6 +12,8 @@ import { Settings, JiraConfig, EmbeddingsConfig } from '../../generated/models';
   styleUrl: './settings.component.scss'
 })
 export class SettingsComponent implements OnInit {
+  private api = inject<IApiService>(API_SERVICE);
+
   settings = signal<Settings | null>(null);
   loading = signal(true);
   saving = signal(false);
@@ -28,8 +30,6 @@ export class SettingsComponent implements OnInit {
   embeddingsModel = signal('');
   embeddingsEndpoint = signal('');
   embeddingsAutoGenerate = signal(false);
-
-  constructor(private api: ApiService) {}
 
   ngOnInit(): void {
     this.loadSettings();

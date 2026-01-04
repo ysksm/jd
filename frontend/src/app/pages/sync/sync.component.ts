@@ -1,8 +1,8 @@
-import { Component, OnInit, signal } from '@angular/core';
+import { Component, OnInit, signal, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { ApiService } from '../../generated/api.service';
 import { Project, SyncResult } from '../../generated/models';
+import { API_SERVICE, IApiService } from '../../api.provider';
 
 @Component({
   selector: 'app-sync',
@@ -12,14 +12,14 @@ import { Project, SyncResult } from '../../generated/models';
   styleUrl: './sync.component.scss'
 })
 export class SyncComponent implements OnInit {
+  private api = inject<IApiService>(API_SERVICE);
+
   projects = signal<Project[]>([]);
   loading = signal(true);
   syncing = signal(false);
   selectedProject = signal<string | null>(null);
   syncResults = signal<SyncResult[]>([]);
   error = signal<string | null>(null);
-
-  constructor(private api: ApiService) {}
 
   ngOnInit(): void {
     this.loadProjects();

@@ -1,7 +1,7 @@
-import { Component, OnInit, signal } from '@angular/core';
+import { Component, OnInit, signal, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ApiService } from '../../generated/api.service';
 import { SyncStatusResponse, Project } from '../../generated/models';
+import { API_SERVICE, IApiService } from '../../api.provider';
 
 @Component({
   selector: 'app-dashboard',
@@ -11,11 +11,11 @@ import { SyncStatusResponse, Project } from '../../generated/models';
   styleUrl: './dashboard.component.scss'
 })
 export class DashboardComponent implements OnInit {
+  private api = inject<IApiService>(API_SERVICE);
+
   syncStatus = signal<SyncStatusResponse | null>(null);
   projects = signal<Project[]>([]);
   error = signal<string | null>(null);
-
-  constructor(private api: ApiService) {}
 
   ngOnInit(): void {
     this.loadData();
