@@ -11,30 +11,36 @@ use actix_web::{App, HttpServer, middleware, web};
 use clap::Parser;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+mod config;
 mod error;
 mod handlers;
 
+use config::Config;
 use jira_db_service::AppState;
 
 #[derive(Parser, Debug)]
 #[command(name = "jira-db-web")]
 #[command(about = "JiraDb Web Application Server")]
 struct Args {
-    /// Host to bind to
-    #[arg(long, default_value = "127.0.0.1")]
-    host: String,
+    /// Path to config file (TOML)
+    #[arg(short, long, default_value = "./config.toml")]
+    config: String,
 
-    /// Port to bind to
-    #[arg(short, long, default_value = "8080")]
-    port: u16,
+    /// Host to bind to (overrides config file)
+    #[arg(long)]
+    host: Option<String>,
 
-    /// Path to settings.json
-    #[arg(long, default_value = "./data/settings.json")]
-    settings: String,
+    /// Port to bind to (overrides config file)
+    #[arg(short, long)]
+    port: Option<u16>,
 
-    /// Path to static files (Angular build output)
-    #[arg(long, default_value = "./static/browser")]
-    static_dir: String,
+    /// Path to settings.json (overrides config file)
+    #[arg(long)]
+    settings: Option<String>,
+
+    /// Path to static files (overrides config file)
+    #[arg(long)]
+    static_dir: Option<String>,
 }
 
 #[actix_web::main]
@@ -50,31 +56,40 @@ async fn main() -> std::io::Result<()> {
 
     let args = Args::parse();
 
+    // Load config from file
+    let config = Config::load_or_default(&args.config);
+    tracing::info!("Loaded config from {}", args.config);
+
+    // Apply CLI overrides
+    let host = args.host.unwrap_or(config.server.host);
+    let port = args.port.unwrap_or(config.server.port);
+    let settings_path_str = args.settings.unwrap_or(config.app.settings_path);
+    let static_dir = args.static_dir.unwrap_or(config.app.static_dir);
+
     // Initialize application state
     let state = Arc::new(AppState::new());
 
     // Initialize with settings file if it exists
-    let settings_path = PathBuf::from(&args.settings);
+    let settings_path = PathBuf::from(&settings_path_str);
     if settings_path.exists() {
         if let Err(e) = state.initialize(settings_path.clone()) {
-            tracing::warn!("Failed to load settings from {}: {}", args.settings, e);
+            tracing::warn!("Failed to load settings from {}: {}", settings_path_str, e);
             tracing::info!(
                 "Server will start without initialized state. Use /api/config.initialize to configure."
             );
         } else {
-            tracing::info!("Loaded settings from {}", args.settings);
+            tracing::info!("Loaded settings from {}", settings_path_str);
         }
     } else {
         tracing::info!(
             "Settings file not found at {}. Use /api/config.initialize to configure.",
-            args.settings
+            settings_path_str
         );
         // Store the settings path for later use
         *state.settings_path.lock().unwrap() = Some(settings_path);
     }
 
-    let static_dir = args.static_dir.clone();
-    let bind_addr = format!("{}:{}", args.host, args.port);
+    let bind_addr = format!("{}:{}", host, port);
 
     tracing::info!("Starting JiraDb Web Server on http://{}", bind_addr);
     tracing::info!("Static files directory: {}", static_dir);

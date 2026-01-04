@@ -15,7 +15,9 @@ jira-db/
 │   ├── jira-db-cli/              # CLIバイナリ
 │   ├── jira-db-mcp/              # MCP Serverバイナリ
 │   ├── jira-db-tauri/            # Tauri GUIアプリ
-│   └── jira-db-api/              # REST API Server
+│   ├── jira-db-web/              # Webサーバー（ActixWeb + Angular）
+│   └── jira-db-service/          # Web/Tauri共有サービスレイヤー
+├── frontend/                     # Angular フロントエンド
 ├── docs/                         # ドキュメント
 ├── typespec/                     # API仕様定義
 └── .claude/                      # Claude Code設定

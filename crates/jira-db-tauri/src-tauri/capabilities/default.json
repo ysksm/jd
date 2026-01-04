@@ -1,0 +1,9 @@
+{
+  "$schema": "https://schema.tauri.app/config/2.0.0/capability",
+  "identifier": "default",
+  "description": "Default capabilities for JiraDb",
+  "windows": ["main"],
+  "permissions": [
+    "core:default"
+  ]
+}
