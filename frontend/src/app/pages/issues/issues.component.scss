@@ -48,6 +48,21 @@
         border-color: #4a4ae0;
       }
     }
+
+    select {
+      padding: 0.5rem 0.75rem;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 0.875rem;
+      min-width: 140px;
+      background-color: white;
+      cursor: pointer;
+
+      &:focus {
+        outline: none;
+        border-color: #4a4ae0;
+      }
+    }
   }
 }
 
@@ -89,9 +104,22 @@
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
+.issue-header {
+  display: grid;
+  grid-template-columns: 100px 80px 1fr 100px 80px 120px;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  background: #f3f4f6;
+  border-bottom: 2px solid #e5e7eb;
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  color: #6b7280;
+}
+
 .issue-row {
   display: grid;
-  grid-template-columns: 100px 1fr 100px 80px 120px;
+  grid-template-columns: 100px 80px 1fr 100px 80px 120px;
   gap: 1rem;
   padding: 0.75rem 1rem;
   border-bottom: 1px solid #e5e7eb;
@@ -111,6 +139,49 @@
     color: #4a4ae0;
   }
 
+  .issue-type {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    text-align: center;
+    background: #f3e8ff;
+    color: #7c3aed;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+
+    &[data-type="bug"] {
+      background: #fee2e2;
+      color: #dc2626;
+    }
+
+    &[data-type="task"] {
+      background: #dbeafe;
+      color: #2563eb;
+    }
+
+    &[data-type="story"] {
+      background: #dcfce7;
+      color: #16a34a;
+    }
+
+    &[data-type="epic"] {
+      background: #fae8ff;
+      color: #a855f7;
+    }
+
+    &[data-type="sub-task"],
+    &[data-type="subtask"] {
+      background: #e0e7ff;
+      color: #4f46e5;
+    }
+
+    &[data-type="improvement"] {
+      background: #ccfbf1;
+      color: #0d9488;
+    }
+  }
+
   .issue-summary {
     overflow: hidden;
     text-overflow: ellipsis;
@@ -126,19 +197,22 @@
 
     &[data-status="done"],
     &[data-status="closed"],
-    &[data-status="resolved"] {
+    &[data-status="resolved"],
+    &[data-status="完了"] {
       background: #dcfce7;
       color: #166534;
     }
 
     &[data-status="in progress"],
-    &[data-status="in review"] {
+    &[data-status="in review"],
+    &[data-status="進行中"] {
       background: #dbeafe;
       color: #1e40af;
     }
 
     &[data-status="to do"],
-    &[data-status="open"] {
+    &[data-status="open"],
+    &[data-status="オープン"] {
       background: #fef3c7;
       color: #92400e;
     }
