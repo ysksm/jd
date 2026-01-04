@@ -7,15 +7,16 @@ import { API_SERVICE, IApiService } from '../../api.provider';
 type ViewMode = 'list' | 'board';
 type GroupBy = 'none' | 'assignee' | 'epic';
 
-interface BoardGroup {
-  name: string;
+interface StatusColumn {
+  status: string;
+  category: string;
   issues: Issue[];
 }
 
-interface BoardColumn {
-  status: string;
-  category: string;
-  groups: BoardGroup[];
+interface Swimlane {
+  name: string;
+  issueCount: number;
+  columns: StatusColumn[];
 }
 
 @Component({
@@ -37,6 +38,9 @@ export class IssuesComponent implements OnInit {
   // View mode
   viewMode = signal<ViewMode>('list');
   groupBy = signal<GroupBy>('none');
+
+  // Collapsed swimlanes
+  collapsedSwimlanes = signal<Set<string>>(new Set());
 
   // Filter options
   projects = signal<Project[]>([]);
@@ -145,8 +149,17 @@ export class IssuesComponent implements OnInit {
     this.epics.set(Array.from(epicSet).sort());
   }
 
-  // Board view computed property
-  boardColumns = computed<BoardColumn[]>(() => {
+  // Get status names for board header
+  statusNames = computed<string[]>(() => {
+    const statusList = this.statuses();
+    const issues = this.issues();
+    return statusList.length > 0
+      ? statusList.map(s => s.name)
+      : [...new Set(issues.map(i => i.status))];
+  });
+
+  // Swimlane-based board view
+  swimlanes = computed<Swimlane[]>(() => {
     const statusList = this.statuses();
     const issues = this.issues();
     const groupByValue = this.groupBy();
@@ -155,59 +168,53 @@ export class IssuesComponent implements OnInit {
     const statusCategoryMap = new Map<string, string>();
     statusList.forEach(s => statusCategoryMap.set(s.name, s.category));
 
-    // Get unique statuses from issues if no metadata is loaded
-    const statusNames = statusList.length > 0
-      ? statusList.map(s => s.name)
-      : [...new Set(issues.map(i => i.status))];
+    // Get status names
+    const statusNames = this.statusNames();
 
-    return statusNames.map(status => {
-      const statusIssues = issues.filter(i => i.status === status);
-      const category = statusCategoryMap.get(status) || 'default';
+    // If no grouping, return single swimlane with all issues
+    if (groupByValue === 'none') {
+      const columns = statusNames.map(status => ({
+        status,
+        category: statusCategoryMap.get(status) || 'default',
+        issues: issues.filter(i => i.status === status)
+      }));
+      return [{ name: '', issueCount: issues.length, columns }];
+    }
 
-      let groups: BoardGroup[];
-      if (groupByValue === 'none') {
-        groups = [{ name: '', issues: statusIssues }];
-      } else if (groupByValue === 'assignee') {
-        const assigneeMap = new Map<string, Issue[]>();
-        assigneeMap.set('Unassigned', []);
-        statusIssues.forEach(issue => {
-          const key = issue.assignee || 'Unassigned';
-          if (!assigneeMap.has(key)) {
-            assigneeMap.set(key, []);
-          }
-          assigneeMap.get(key)!.push(issue);
-        });
-        groups = Array.from(assigneeMap.entries())
-          .filter(([, issues]) => issues.length > 0)
-          .sort((a, b) => {
-            if (a[0] === 'Unassigned') return 1;
-            if (b[0] === 'Unassigned') return -1;
-            return a[0].localeCompare(b[0]);
-          })
-          .map(([name, issues]) => ({ name, issues }));
+    // Group issues by assignee or epic
+    const groupMap = new Map<string, Issue[]>();
+    const defaultGroup = groupByValue === 'assignee' ? 'Unassigned' : 'No Epic';
+    groupMap.set(defaultGroup, []);
+
+    issues.forEach(issue => {
+      let key: string;
+      if (groupByValue === 'assignee') {
+        key = issue.assignee || 'Unassigned';
       } else {
-        // Group by epic (parentKey)
-        const epicMap = new Map<string, Issue[]>();
-        epicMap.set('No Epic', []);
-        statusIssues.forEach(issue => {
-          const key = issue.parentKey || 'No Epic';
-          if (!epicMap.has(key)) {
-            epicMap.set(key, []);
-          }
-          epicMap.get(key)!.push(issue);
-        });
-        groups = Array.from(epicMap.entries())
-          .filter(([, issues]) => issues.length > 0)
-          .sort((a, b) => {
-            if (a[0] === 'No Epic') return 1;
-            if (b[0] === 'No Epic') return -1;
-            return a[0].localeCompare(b[0]);
-          })
-          .map(([name, issues]) => ({ name, issues }));
+        key = issue.parentKey || 'No Epic';
       }
-
-      return { status, category, groups };
+      if (!groupMap.has(key)) {
+        groupMap.set(key, []);
+      }
+      groupMap.get(key)!.push(issue);
     });
+
+    // Convert to swimlanes
+    return Array.from(groupMap.entries())
+      .filter(([, groupIssues]) => groupIssues.length > 0)
+      .sort((a, b) => {
+        if (a[0] === defaultGroup) return 1;
+        if (b[0] === defaultGroup) return -1;
+        return a[0].localeCompare(b[0]);
+      })
+      .map(([name, groupIssues]) => {
+        const columns = statusNames.map(status => ({
+          status,
+          category: statusCategoryMap.get(status) || 'default',
+          issues: groupIssues.filter(i => i.status === status)
+        }));
+        return { name, issueCount: groupIssues.length, columns };
+      });
   });
 
   setViewMode(mode: ViewMode): void {
@@ -216,10 +223,23 @@ export class IssuesComponent implements OnInit {
 
   setGroupBy(group: GroupBy): void {
     this.groupBy.set(group);
+    // Reset collapsed state when grouping changes
+    this.collapsedSwimlanes.set(new Set());
   }
 
-  getColumnIssueCount(column: BoardColumn): number {
-    return column.groups.reduce((sum, g) => sum + g.issues.length, 0);
+  toggleSwimlane(name: string): void {
+    const collapsed = this.collapsedSwimlanes();
+    const newCollapsed = new Set(collapsed);
+    if (newCollapsed.has(name)) {
+      newCollapsed.delete(name);
+    } else {
+      newCollapsed.add(name);
+    }
+    this.collapsedSwimlanes.set(newCollapsed);
+  }
+
+  isSwimlaneCollapsed(name: string): boolean {
+    return this.collapsedSwimlanes().has(name);
   }
 
   search(): void {
