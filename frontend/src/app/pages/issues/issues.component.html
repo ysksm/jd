@@ -169,7 +169,7 @@
 
             <!-- Swimlane Content (columns) -->
             @if (!isSwimlaneCollapsed(swimlane.name)) {
-              <div class="swimlane-content">
+              <div class="swimlane-content" [class.with-header]="swimlane.name">
                 @for (column of swimlane.columns; track column.status) {
                   <div class="board-column" [attr.data-category]="column.category.toLowerCase()">
                     <!-- Show column header only when no grouping -->

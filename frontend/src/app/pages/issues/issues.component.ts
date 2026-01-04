@@ -158,6 +158,50 @@ export class IssuesComponent implements OnInit {
       : [...new Set(issues.map(i => i.status))];
   });
 
+  // Build a map of issue keys to their issue data for Epic resolution
+  private issueMap = computed<Map<string, Issue>>(() => {
+    const map = new Map<string, Issue>();
+    this.issues().forEach(issue => map.set(issue.key, issue));
+    return map;
+  });
+
+  // Build a set of Epic keys for quick lookup
+  private epicKeys = computed<Set<string>>(() => {
+    const epics = new Set<string>();
+    this.issues().forEach(issue => {
+      if (issue.issueType.toLowerCase() === 'epic') {
+        epics.add(issue.key);
+      }
+    });
+    return epics;
+  });
+
+  // Find the Epic key for an issue (traverses parent chain)
+  private findEpicForIssue(issue: Issue): string | null {
+    const issueMap = this.issueMap();
+    const epicKeys = this.epicKeys();
+
+    // If the issue itself is an Epic, return null (Epics don't belong to other Epics)
+    if (issue.issueType.toLowerCase() === 'epic') {
+      return null;
+    }
+
+    // Check if the direct parent is an Epic
+    if (issue.parentKey && epicKeys.has(issue.parentKey)) {
+      return issue.parentKey;
+    }
+
+    // If parent exists but is not an Epic, check parent's parent (for sub-tasks)
+    if (issue.parentKey) {
+      const parent = issueMap.get(issue.parentKey);
+      if (parent && parent.parentKey && epicKeys.has(parent.parentKey)) {
+        return parent.parentKey;
+      }
+    }
+
+    return null;
+  }
+
   // Swimlane-based board view
   swimlanes = computed<Swimlane[]>(() => {
     const statusList = this.statuses();
@@ -186,12 +230,30 @@ export class IssuesComponent implements OnInit {
     const defaultGroup = groupByValue === 'assignee' ? 'Unassigned' : 'No Epic';
     groupMap.set(defaultGroup, []);
 
+    const issueMap = this.issueMap();
+    const epicKeys = this.epicKeys();
+
     issues.forEach(issue => {
       let key: string;
       if (groupByValue === 'assignee') {
         key = issue.assignee || 'Unassigned';
       } else {
-        key = issue.parentKey || 'No Epic';
+        // Epic grouping - find the Epic this issue belongs to
+        if (issue.issueType.toLowerCase() === 'epic') {
+          // Epics themselves are group headers - use their key as the group name
+          // but we'll show their summary for better UX
+          const epicSummary = `${issue.key}: ${issue.summary}`;
+          key = epicSummary;
+        } else {
+          const epicKey = this.findEpicForIssue(issue);
+          if (epicKey) {
+            // Use Epic's key and summary for the group name
+            const epic = issueMap.get(epicKey);
+            key = epic ? `${epic.key}: ${epic.summary}` : epicKey;
+          } else {
+            key = 'No Epic';
+          }
+        }
       }
       if (!groupMap.has(key)) {
         groupMap.set(key, []);

@@ -572,6 +572,12 @@
   padding: 0.75rem;
   background: #fafafa;
   overflow-x: auto;
+
+  // When grouping is enabled, add left padding to align with header columns
+  // 200px placeholder + 0.5rem gap to match board-header layout
+  &.with-header {
+    padding-left: calc(200px + 0.5rem);
+  }
 }
 
 // Individual column in swimlane
