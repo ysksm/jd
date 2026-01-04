@@ -81,6 +81,9 @@
               "sourceMap": true
             },
             "web": {
+              "optimization": {
+                "fonts": false
+              },
               "budgets": [
                 {
                   "type": "initial",
@@ -114,6 +117,9 @@
               ]
             },
             "tauri": {
+              "optimization": {
+                "fonts": false
+              },
               "budgets": [
                 {
                   "type": "initial",
