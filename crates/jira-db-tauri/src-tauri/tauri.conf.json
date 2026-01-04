@@ -4,10 +4,10 @@
   "version": "0.1.0",
   "identifier": "com.jiradb.app",
   "build": {
-    "beforeDevCommand": "npm run start",
+    "beforeDevCommand": "cd ../../../frontend && npm run start -- --configuration tauri-dev",
     "devUrl": "http://localhost:4200",
-    "beforeBuildCommand": "npm run build",
-    "frontendDist": "../dist/jira-db-frontend/browser"
+    "beforeBuildCommand": "cd ../../../frontend && npm run build -- --configuration tauri",
+    "frontendDist": "../dist/browser"
   },
   "app": {
     "windows": [
