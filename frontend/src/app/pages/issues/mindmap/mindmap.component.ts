@@ -208,7 +208,8 @@ export class MindmapComponent implements OnChanges, OnDestroy, AfterViewInit {
           data: [rootData],
           orient: 'LR', // Left to Right
           layout: 'orthogonal',
-          symbol: 'rect',
+          // Custom rounded rectangle using SVG path (centered at origin, ~120x50 with 6px corner radius)
+          symbol: 'path://M-54,-23 L54,-23 Q60,-23 60,-17 L60,17 Q60,23 54,23 L-54,23 Q-60,23 -60,17 L-60,-17 Q-60,-23 -54,-23 Z',
           symbolSize: [120, 50],
           initialTreeDepth: this.expandAll() ? -1 : 2,
           roam: true, // Enable zoom and pan
