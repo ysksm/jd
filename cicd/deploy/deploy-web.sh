@@ -24,8 +24,6 @@ fi
 
 pgrep -f 'jira-db-web .*--config' | xargs kill || true
 ./scripts/deploy.sh "$DEPLOY_PATH"
-cp ./config.toml "$DEPLOY_PATH/"
-cp ./settings.json "$DEPLOY_PATH/data/"
 
 # Restore backed up config files
 if [ -n "$CONFIG_BACKUP" ]; then
