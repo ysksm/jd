@@ -25,6 +25,12 @@ pub trait EmbeddingProvider: Send + Sync {
 
     /// Get the embedding dimension
     fn dimension(&self) -> usize;
+
+    /// Get the provider name (e.g., "openai", "ollama", "cohere")
+    fn provider_name(&self) -> &str;
+
+    /// Get the model name (e.g., "text-embedding-3-small", "nomic-embed-text")
+    fn model_name(&self) -> &str;
 }
 
 /// Implement EmbeddingProvider for Box<dyn EmbeddingProvider> to support dynamic dispatch
@@ -40,6 +46,14 @@ impl EmbeddingProvider for Box<dyn EmbeddingProvider> {
 
     fn dimension(&self) -> usize {
         self.as_ref().dimension()
+    }
+
+    fn provider_name(&self) -> &str {
+        self.as_ref().provider_name()
+    }
+
+    fn model_name(&self) -> &str {
+        self.as_ref().model_name()
     }
 }
 

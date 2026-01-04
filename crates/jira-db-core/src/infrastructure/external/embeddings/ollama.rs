@@ -177,6 +177,14 @@ impl EmbeddingProvider for OllamaEmbeddingClient {
     fn dimension(&self) -> usize {
         self.config.dimension
     }
+
+    fn provider_name(&self) -> &str {
+        "ollama"
+    }
+
+    fn model_name(&self) -> &str {
+        &self.config.model
+    }
 }
 
 // Ollama API request/response types

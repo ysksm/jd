@@ -194,12 +194,16 @@ where
 
                     // Store embeddings
                     let store_start = Instant::now();
+                    let provider_name = self.embedding_provider.provider_name();
+                    let model_name = self.embedding_provider.model_name();
                     for (issue, embedding) in batch.iter().zip(embeddings.iter()) {
                         match self.embeddings_repository.upsert_embedding(
                             &issue.id,
                             &issue.key,
                             embedding,
                             &texts[batch.iter().position(|i| i.id == issue.id).unwrap()],
+                            provider_name,
+                            model_name,
                         ) {
                             Ok(_) => embeddings_generated += 1,
                             Err(e) => {

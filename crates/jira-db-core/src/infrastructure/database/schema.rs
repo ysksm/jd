@@ -71,8 +71,8 @@ impl Schema {
                 name VARCHAR NOT NULL,
                 description TEXT,
                 raw_data JSON,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
             )
             "#,
             [],
@@ -96,15 +96,15 @@ impl Schema {
                 reporter VARCHAR,
                 issue_type VARCHAR,
                 resolution VARCHAR,
-                labels VARCHAR,
-                components VARCHAR,
-                fix_versions VARCHAR,
+                labels JSON,
+                components JSON,
+                fix_versions JSON,
                 sprint VARCHAR,
                 parent_key VARCHAR,
-                created_date TIMESTAMP,
-                updated_date TIMESTAMP,
+                created_date TIMESTAMPTZ,
+                updated_date TIMESTAMPTZ,
                 raw_data JSON,
-                synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                synced_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
             )
             "#,
             [],
@@ -128,8 +128,8 @@ impl Schema {
                 id INTEGER PRIMARY KEY DEFAULT nextval('sync_history_id_seq'),
                 project_id VARCHAR NOT NULL,
                 sync_type VARCHAR NOT NULL,
-                started_at TIMESTAMP NOT NULL,
-                completed_at TIMESTAMP,
+                started_at TIMESTAMPTZ NOT NULL,
+                completed_at TIMESTAMPTZ,
                 status VARCHAR NOT NULL,
                 items_synced INTEGER,
                 error_message TEXT
@@ -151,8 +151,8 @@ impl Schema {
                 name VARCHAR NOT NULL,
                 description VARCHAR,
                 category VARCHAR,
-                created_at TIMESTAMP NOT NULL,
-                updated_at TIMESTAMP NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL,
+                updated_at TIMESTAMPTZ NOT NULL,
                 PRIMARY KEY (project_id, name)
             )
             "#,
@@ -167,8 +167,8 @@ impl Schema {
                 name VARCHAR NOT NULL,
                 description VARCHAR,
                 icon_url VARCHAR,
-                created_at TIMESTAMP NOT NULL,
-                updated_at TIMESTAMP NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL,
+                updated_at TIMESTAMPTZ NOT NULL,
                 PRIMARY KEY (project_id, name)
             )
             "#,
@@ -186,8 +186,8 @@ impl Schema {
                 description VARCHAR,
                 icon_url VARCHAR,
                 subtask BOOLEAN DEFAULT false,
-                created_at TIMESTAMP NOT NULL,
-                updated_at TIMESTAMP NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL,
+                updated_at TIMESTAMPTZ NOT NULL,
                 PRIMARY KEY (project_id, name)
             )
             "#,
@@ -202,8 +202,8 @@ impl Schema {
             CREATE TABLE IF NOT EXISTS labels (
                 project_id VARCHAR NOT NULL,
                 name VARCHAR NOT NULL,
-                created_at TIMESTAMP NOT NULL,
-                updated_at TIMESTAMP NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL,
+                updated_at TIMESTAMPTZ NOT NULL,
                 PRIMARY KEY (project_id, name)
             )
             "#,
@@ -218,8 +218,8 @@ impl Schema {
                 name VARCHAR NOT NULL,
                 description VARCHAR,
                 lead VARCHAR,
-                created_at TIMESTAMP NOT NULL,
-                updated_at TIMESTAMP NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL,
+                updated_at TIMESTAMPTZ NOT NULL,
                 PRIMARY KEY (project_id, name)
             )
             "#,
@@ -236,9 +236,9 @@ impl Schema {
                 name VARCHAR NOT NULL,
                 description VARCHAR,
                 released BOOLEAN DEFAULT false,
-                release_date TIMESTAMP,
-                created_at TIMESTAMP NOT NULL,
-                updated_at TIMESTAMP NOT NULL,
+                release_date TIMESTAMPTZ,
+                created_at TIMESTAMPTZ NOT NULL,
+                updated_at TIMESTAMPTZ NOT NULL,
                 PRIMARY KEY (project_id, name)
             )
             "#,
@@ -271,12 +271,12 @@ impl Schema {
                 author_display_name VARCHAR,
                 field VARCHAR NOT NULL,
                 field_type VARCHAR,
-                from_value VARCHAR,
-                from_string VARCHAR,
-                to_value VARCHAR,
-                to_string VARCHAR,
-                changed_at TIMESTAMP NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                from_value TEXT,
+                from_string TEXT,
+                to_value TEXT,
+                to_string TEXT,
+                changed_at TIMESTAMPTZ NOT NULL,
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
             )
             "#,
             [],
@@ -317,8 +317,8 @@ impl Schema {
                 issue_key VARCHAR NOT NULL,
                 project_id VARCHAR NOT NULL,
                 version INTEGER NOT NULL,
-                valid_from TIMESTAMP NOT NULL,
-                valid_to TIMESTAMP,
+                valid_from TIMESTAMPTZ NOT NULL,
+                valid_to TIMESTAMPTZ,
                 summary TEXT NOT NULL,
                 description TEXT,
                 status VARCHAR,
@@ -327,13 +327,13 @@ impl Schema {
                 reporter VARCHAR,
                 issue_type VARCHAR,
                 resolution VARCHAR,
-                labels VARCHAR,
-                components VARCHAR,
-                fix_versions VARCHAR,
+                labels JSON,
+                components JSON,
+                fix_versions JSON,
                 sprint VARCHAR,
                 parent_key VARCHAR,
                 raw_data JSON,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
                 PRIMARY KEY (issue_id, version)
             )
             "#,
@@ -383,8 +383,8 @@ impl Schema {
                 schema_system VARCHAR,
                 schema_custom VARCHAR,
                 schema_custom_id BIGINT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
             )
             "#,
             [],
@@ -405,7 +405,7 @@ impl Schema {
                 id VARCHAR PRIMARY KEY,
                 project_id VARCHAR NOT NULL,
                 issue_key VARCHAR NOT NULL,
-                summary TEXT,
+                summary TEXT NOT NULL,
                 description TEXT,
                 status VARCHAR,
                 priority VARCHAR,
@@ -418,9 +418,9 @@ impl Schema {
                 fix_versions JSON,
                 sprint VARCHAR,
                 parent_key VARCHAR,
-                created_date TIMESTAMP,
-                updated_date TIMESTAMP,
-                synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                created_date TIMESTAMPTZ,
+                updated_date TIMESTAMPTZ,
+                synced_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
             )
             "#,
             [],

@@ -13,7 +13,7 @@ use jira_db_core::ExecuteSqlUseCase;
 use crate::generated::*;
 use crate::state::AppState;
 
-const SAVED_QUERIES_FILE: &str = "./saved_queries.json";
+const SAVED_QUERIES_FILE: &str = "./data/saved_queries.json";
 
 /// Execute a SQL query (read-only)
 #[tauri::command]
@@ -138,9 +138,17 @@ fn load_saved_queries() -> Vec<SavedQuery> {
 
 /// Save queries to file
 fn save_queries_to_file(queries: &[SavedQuery]) -> Result<(), String> {
+    let path = PathBuf::from(SAVED_QUERIES_FILE);
+
+    // Ensure parent directory exists
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create data directory: {}", e))?;
+    }
+
     let json = serde_json::to_string_pretty(queries)
         .map_err(|e| format!("Failed to serialize queries: {}", e))?;
-    fs::write(SAVED_QUERIES_FILE, json).map_err(|e| format!("Failed to save queries: {}", e))?;
+    fs::write(&path, json).map_err(|e| format!("Failed to save queries: {}", e))?;
     Ok(())
 }
 

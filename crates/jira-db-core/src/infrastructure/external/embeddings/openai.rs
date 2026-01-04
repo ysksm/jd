@@ -282,6 +282,14 @@ impl EmbeddingProvider for OpenAIEmbeddingClient {
             .or_else(|| self.detected_dimension.read().ok().and_then(|d| *d))
             .unwrap_or(models::TEXT_EMBEDDING_3_SMALL_DIM)
     }
+
+    fn provider_name(&self) -> &str {
+        "openai"
+    }
+
+    fn model_name(&self) -> &str {
+        &self.config.model
+    }
 }
 
 // OpenAI API request/response types
