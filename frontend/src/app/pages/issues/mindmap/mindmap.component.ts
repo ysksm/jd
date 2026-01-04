@@ -208,7 +208,7 @@ export class MindmapComponent implements OnChanges, OnDestroy, AfterViewInit {
           data: [rootData],
           orient: 'LR', // Left to Right
           layout: 'orthogonal',
-          symbol: 'roundRect',
+          symbol: 'rect',
           symbolSize: [120, 50],
           initialTreeDepth: this.expandAll() ? -1 : 2,
           roam: true, // Enable zoom and pan
