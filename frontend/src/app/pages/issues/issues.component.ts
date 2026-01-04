@@ -257,6 +257,8 @@ export class IssuesComponent implements OnInit {
 
     issues.forEach(issue => {
       let key: string;
+      let shouldAddIssue = true;
+
       if (groupByValue === 'assignee') {
         key = issue.assignee || 'Unassigned';
       } else {
@@ -266,6 +268,8 @@ export class IssuesComponent implements OnInit {
           // but we'll show their summary for better UX
           const epicSummary = `${issue.key}: ${issue.summary}`;
           key = epicSummary;
+          // Don't add Epic itself to the issue list (it's already the swimlane header)
+          shouldAddIssue = false;
         } else {
           const epicKey = this.findEpicForIssue(issue);
           if (epicKey) {
@@ -280,7 +284,9 @@ export class IssuesComponent implements OnInit {
       if (!groupMap.has(key)) {
         groupMap.set(key, []);
       }
-      groupMap.get(key)!.push(issue);
+      if (shouldAddIssue) {
+        groupMap.get(key)!.push(issue);
+      }
     });
 
     // Convert to swimlanes
