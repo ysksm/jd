@@ -158,13 +158,15 @@ export class MindmapComponent implements OnChanges, OnDestroy, AfterViewInit {
       return;
     }
 
-    // Create a root node if there are multiple trees
+    // Use project nodes directly - each project is a root
+    // If single project, use it directly; if multiple, wrap in "Projects" node
     const rootData: TreeNodeData = treeData.length === 1
       ? treeData[0]
       : {
-          name: 'Issues',
+          name: 'Projects',
           children: treeData,
-          itemStyle: { color: '#F3F4F6', borderColor: '#9CA3AF' },
+          collapsed: false,
+          itemStyle: { color: '#DBEAFE', borderColor: '#3B82F6' },
         };
 
     const option: echarts.EChartsOption = {
@@ -252,12 +254,19 @@ export class MindmapComponent implements OnChanges, OnDestroy, AfterViewInit {
     this.echartsInstance.setOption(option, true);
   }
 
+  private isEpicType(issueType: string): boolean {
+    const normalized = issueType.toLowerCase();
+    return normalized === 'epic' || normalized === 'エピック';
+  }
+
   private buildTree(issues: Issue[]): TreeNodeData[] {
+    if (issues.length === 0) return [];
+
     // Build issue map
     this.issueMap.clear();
     issues.forEach(issue => this.issueMap.set(issue.key, issue));
 
-    // Build children map
+    // Build children map (parent -> children)
     const childrenMap = new Map<string, Issue[]>();
     issues.forEach(issue => {
       if (issue.parentKey) {
@@ -267,12 +276,15 @@ export class MindmapComponent implements OnChanges, OnDestroy, AfterViewInit {
       }
     });
 
-    // Find root nodes (no parent or parent not in dataset)
-    const roots = issues.filter(
-      issue => !issue.parentKey || !this.issueMap.has(issue.parentKey)
-    );
+    // Group issues by project
+    const projectMap = new Map<string, Issue[]>();
+    issues.forEach(issue => {
+      const projectIssues = projectMap.get(issue.projectKey) || [];
+      projectIssues.push(issue);
+      projectMap.set(issue.projectKey, projectIssues);
+    });
 
-    // Build tree recursively
+    // Build node recursively (for non-Epic issues)
     const buildNode = (issue: Issue): TreeNodeData => {
       const children = childrenMap.get(issue.key) || [];
       const colors = this.getNodeColors(issue);
@@ -289,7 +301,88 @@ export class MindmapComponent implements OnChanges, OnDestroy, AfterViewInit {
       };
     };
 
-    return roots.map(buildNode);
+    // Build project nodes
+    const projectNodes: TreeNodeData[] = [];
+
+    projectMap.forEach((projectIssues, projectKey) => {
+      // Find Epics in this project
+      const epics = projectIssues.filter(issue => this.isEpicType(issue.issueType));
+
+      // Find issues that are NOT Epics and have NO parent (or parent not in dataset)
+      // These are orphan issues that don't belong to any Epic
+      const orphanIssues = projectIssues.filter(issue => {
+        if (this.isEpicType(issue.issueType)) return false; // Skip Epics
+        // Check if this issue or its ancestors lead to an Epic
+        let current: Issue | undefined = issue;
+        while (current) {
+          if (!current.parentKey) {
+            // No parent - it's an orphan (not under an Epic)
+            return true;
+          }
+          const parent = this.issueMap.get(current.parentKey);
+          if (!parent) {
+            // Parent not in dataset - it's an orphan
+            return true;
+          }
+          if (this.isEpicType(parent.issueType)) {
+            // Parent is an Epic - not an orphan
+            return false;
+          }
+          current = parent;
+        }
+        return true;
+      });
+
+      // Build Epic nodes with their children
+      const epicNodes: TreeNodeData[] = epics.map(epic => {
+        const epicChildren = childrenMap.get(epic.key) || [];
+        const colors = this.getNodeColors(epic);
+
+        return {
+          name: epic.key,
+          issueData: epic,
+          children: epicChildren.map(buildNode),
+          collapsed: !this.expandAll(),
+          itemStyle: {
+            color: colors.bg,
+            borderColor: colors.border,
+          },
+        };
+      });
+
+      // Build "No Epic" node for orphan issues (only root-level orphans)
+      const rootOrphans = orphanIssues.filter(issue =>
+        !issue.parentKey || !this.issueMap.has(issue.parentKey)
+      );
+
+      if (rootOrphans.length > 0) {
+        const noEpicNode: TreeNodeData = {
+          name: 'No Epic',
+          children: rootOrphans.map(buildNode),
+          collapsed: !this.expandAll(),
+          itemStyle: {
+            color: '#F3F4F6',
+            borderColor: '#9CA3AF',
+          },
+        };
+        epicNodes.push(noEpicNode);
+      }
+
+      // Create project node
+      const projectNode: TreeNodeData = {
+        name: projectKey,
+        children: epicNodes,
+        collapsed: false,
+        itemStyle: {
+          color: '#E0E7FF',
+          borderColor: '#6366F1',
+        },
+      };
+
+      projectNodes.push(projectNode);
+    });
+
+    return projectNodes;
   }
 
   private getNodeColors(issue: Issue): { bg: string; border: string } {
