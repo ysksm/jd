@@ -340,6 +340,15 @@ export class IssuesComponent implements OnInit {
     return this.collapsedSwimlanes().has(name);
   }
 
+  expandAllSwimlanes(): void {
+    this.collapsedSwimlanes.set(new Set());
+  }
+
+  collapseAllSwimlanes(): void {
+    const allNames = this.swimlanes().map(s => s.name).filter(n => n);
+    this.collapsedSwimlanes.set(new Set(allNames));
+  }
+
   search(): void {
     this.loading.set(true);
     this.error.set(null);

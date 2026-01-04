@@ -90,6 +90,37 @@
   }
 }
 
+.swimlane-controls {
+  display: flex;
+  gap: 0.25rem;
+
+  .btn-sm {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+
+  .icon-expand,
+  .icon-collapse {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+  }
+
+  .icon-expand {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23374151' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='7 13 12 18 17 13'%3E%3C/polyline%3E%3Cpolyline points='7 6 12 11 17 6'%3E%3C/polyline%3E%3C/svg%3E");
+  }
+
+  .icon-collapse {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23374151' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='17 11 12 6 7 11'%3E%3C/polyline%3E%3Cpolyline points='17 18 12 13 7 18'%3E%3C/polyline%3E%3C/svg%3E");
+  }
+}
+
 .search-bar {
   background: white;
   border-radius: 8px;

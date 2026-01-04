@@ -32,6 +32,18 @@
             <option value="epic">Epic</option>
           </select>
         </div>
+        @if (groupBy() !== 'none') {
+          <div class="swimlane-controls">
+            <button class="btn btn-secondary btn-sm" (click)="expandAllSwimlanes()" title="すべて開く">
+              <span class="icon-expand"></span>
+              開く
+            </button>
+            <button class="btn btn-secondary btn-sm" (click)="collapseAllSwimlanes()" title="すべて閉じる">
+              <span class="icon-collapse"></span>
+              閉じる
+            </button>
+          </div>
+        }
       }
     </div>
   </div>
