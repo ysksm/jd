@@ -165,11 +165,17 @@ export class IssuesComponent implements OnInit {
     return map;
   });
 
+  // Helper to check if an issue type is Epic (supports multiple languages)
+  private isEpicType(issueType: string): boolean {
+    const normalized = issueType.toLowerCase();
+    return normalized === 'epic' || normalized === 'エピック';
+  }
+
   // Build a set of Epic keys for quick lookup
   private epicKeys = computed<Set<string>>(() => {
     const epics = new Set<string>();
     this.issues().forEach(issue => {
-      if (issue.issueType.toLowerCase() === 'epic') {
+      if (this.isEpicType(issue.issueType)) {
         epics.add(issue.key);
       }
     });
@@ -182,7 +188,7 @@ export class IssuesComponent implements OnInit {
     const epicKeys = this.epicKeys();
 
     // If the issue itself is an Epic, return null (Epics don't belong to other Epics)
-    if (issue.issueType.toLowerCase() === 'epic') {
+    if (this.isEpicType(issue.issueType)) {
       return null;
     }
 
@@ -253,7 +259,7 @@ export class IssuesComponent implements OnInit {
         key = issue.assignee || 'Unassigned';
       } else {
         // Epic grouping - find the Epic this issue belongs to
-        if (issue.issueType.toLowerCase() === 'epic') {
+        if (this.isEpicType(issue.issueType)) {
           // Epics themselves are group headers - use their key as the group name
           // but we'll show their summary for better UX
           const epicSummary = `${issue.key}: ${issue.summary}`;
