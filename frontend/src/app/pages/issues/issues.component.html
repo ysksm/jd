@@ -138,73 +138,78 @@
       </div>
     } @else {
       <!-- Board View with Swimlanes -->
-      <div class="board-view">
-        <!-- Status Header Row -->
+      <div class="board-view" [class.grouped]="groupBy() !== 'none'">
+        <!-- Status Header Row (shown when grouping is enabled) -->
         @if (groupBy() !== 'none') {
           <div class="board-header">
-            @for (status of statusNames(); track status) {
-              <div class="status-header">{{ status }}</div>
-            }
+            <div class="swimlane-label-header"></div>
+            <div class="status-columns-wrapper">
+              @for (status of statusNames(); track status) {
+                <div class="status-header">{{ status }}</div>
+              }
+            </div>
           </div>
         }
 
         <!-- Swimlanes -->
         @for (swimlane of swimlanes(); track swimlane.name) {
           <div class="swimlane" [class.collapsed]="isSwimlaneCollapsed(swimlane.name)">
-            <!-- Swimlane Header (only show if grouping is enabled) -->
-            @if (swimlane.name) {
-              <div class="swimlane-header" (click)="toggleSwimlane(swimlane.name)">
-                <span class="swimlane-toggle">
-                  @if (isSwimlaneCollapsed(swimlane.name)) {
-                    <span class="icon-chevron-right"></span>
-                  } @else {
-                    <span class="icon-chevron-down"></span>
-                  }
-                </span>
-                <span class="swimlane-title">{{ swimlane.name }}</span>
-                <span class="swimlane-count">{{ swimlane.issueCount }}</span>
-              </div>
-            }
-
-            <!-- Swimlane Content (columns) -->
-            @if (!isSwimlaneCollapsed(swimlane.name)) {
-              <div class="swimlane-content" [class.with-header]="swimlane.name">
-                @for (column of swimlane.columns; track column.status) {
-                  <div class="board-column" [attr.data-category]="column.category.toLowerCase()">
-                    <!-- Show column header only when no grouping -->
-                    @if (groupBy() === 'none') {
-                      <div class="column-header">
-                        <span class="column-title">{{ column.status }}</span>
-                        <span class="column-count">{{ column.issues.length }}</span>
-                      </div>
+            <div class="swimlane-row">
+              <!-- Swimlane Label (left side, only when grouping) -->
+              @if (swimlane.name) {
+                <div class="swimlane-label" (click)="toggleSwimlane(swimlane.name)">
+                  <span class="swimlane-toggle">
+                    @if (isSwimlaneCollapsed(swimlane.name)) {
+                      <span class="icon-chevron-right"></span>
+                    } @else {
+                      <span class="icon-chevron-down"></span>
                     }
-                    <div class="column-content">
-                      @for (issue of column.issues; track issue.key) {
-                        <div class="board-card" (click)="selectIssue(issue)">
-                          <div class="card-header">
-                            <span class="card-key">{{ issue.key }}</span>
-                            <span class="card-type" [attr.data-type]="issue.issueType.toLowerCase()">
-                              {{ issue.issueType }}
-                            </span>
-                          </div>
-                          <div class="card-summary">{{ issue.summary }}</div>
-                          <div class="card-footer">
-                            <span class="card-status" [attr.data-status]="issue.status.toLowerCase()">
-                              {{ issue.status }}
-                            </span>
-                            @if (issue.assignee) {
-                              <span class="card-assignee" title="{{ issue.assignee }}">
-                                {{ issue.assignee.charAt(0).toUpperCase() }}
-                              </span>
-                            }
-                          </div>
+                  </span>
+                  <span class="swimlane-title">{{ swimlane.name }}</span>
+                  <span class="swimlane-count">{{ swimlane.issueCount }}</span>
+                </div>
+              }
+
+              <!-- Status Columns -->
+              @if (!isSwimlaneCollapsed(swimlane.name)) {
+                <div class="status-columns-wrapper">
+                  @for (column of swimlane.columns; track column.status) {
+                    <div class="board-column" [attr.data-category]="column.category.toLowerCase()">
+                      <!-- Show column header only when no grouping -->
+                      @if (groupBy() === 'none') {
+                        <div class="column-header">
+                          <span class="column-title">{{ column.status }}</span>
+                          <span class="column-count">{{ column.issues.length }}</span>
                         </div>
                       }
+                      <div class="column-content">
+                        @for (issue of column.issues; track issue.key) {
+                          <div class="board-card" (click)="selectIssue(issue)">
+                            <div class="card-header">
+                              <span class="card-key">{{ issue.key }}</span>
+                              <span class="card-type" [attr.data-type]="issue.issueType.toLowerCase()">
+                                {{ issue.issueType }}
+                              </span>
+                            </div>
+                            <div class="card-summary">{{ issue.summary }}</div>
+                            <div class="card-footer">
+                              <span class="card-status" [attr.data-status]="issue.status.toLowerCase()">
+                                {{ issue.status }}
+                              </span>
+                              @if (issue.assignee) {
+                                <span class="card-assignee" title="{{ issue.assignee }}">
+                                  {{ issue.assignee.charAt(0).toUpperCase() }}
+                                </span>
+                              }
+                            </div>
+                          </div>
+                        }
+                      </div>
                     </div>
-                  </div>
-                }
-              </div>
-            }
+                  }
+                </div>
+              }
+            </div>
           </div>
         }
       </div>
