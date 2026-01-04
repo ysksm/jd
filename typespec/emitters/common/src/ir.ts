@@ -17,7 +17,8 @@ export type ScalarKind =
   | "int64"
   | "float32"
   | "float64"
-  | "utcDateTime";
+  | "utcDateTime"
+  | "unknown";
 
 /** Type reference - either a scalar or a named model */
 export interface TypeRef {

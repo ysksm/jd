@@ -195,6 +195,55 @@ pub async fn reports_generate(
 }
 
 // ============================================================
+// Sql Commands
+// ============================================================
+
+/// Execute SQL query (read-only)
+#[tauri::command]
+pub async fn sql_execute(
+    state: State<'_, AppState>,
+    request: SqlExecuteRequest,
+) -> Result<SqlExecuteResponse, String> {
+    todo!("Implement sql_execute")
+}
+
+/// Get database schema
+#[tauri::command]
+pub async fn sql_get_schema(
+    state: State<'_, AppState>,
+    request: SqlGetSchemaRequest,
+) -> Result<SqlGetSchemaResponse, String> {
+    todo!("Implement sql_get_schema")
+}
+
+/// List saved queries
+#[tauri::command]
+pub async fn sql_list_queries(
+    state: State<'_, AppState>,
+    request: SqlQueryListRequest,
+) -> Result<SqlQueryListResponse, String> {
+    todo!("Implement sql_list_queries")
+}
+
+/// Save a query
+#[tauri::command]
+pub async fn sql_save_query(
+    state: State<'_, AppState>,
+    request: SqlQuerySaveRequest,
+) -> Result<SqlQuerySaveResponse, String> {
+    todo!("Implement sql_save_query")
+}
+
+/// Delete a saved query
+#[tauri::command]
+pub async fn sql_delete_query(
+    state: State<'_, AppState>,
+    request: SqlQueryDeleteRequest,
+) -> Result<SqlQueryDeleteResponse, String> {
+    todo!("Implement sql_delete_query")
+}
+
+// ============================================================
 // Command Registration
 // ============================================================
 
@@ -219,6 +268,11 @@ macro_rules! register_commands {
             embeddings_generate,
             embeddings_search,
             reports_generate,
+            sql_execute,
+            sql_get_schema,
+            sql_list_queries,
+            sql_save_query,
+            sql_delete_query,
         ])
     };
 }

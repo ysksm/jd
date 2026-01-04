@@ -6,5 +6,8 @@ pub mod types;
 pub use types::*;
 
 // Note: commands.rs is a scaffold file for reference only.
-// It is NOT compiled to avoid duplicate #[tauri::command] macro conflicts.
-// Actual implementations are in src/commands/*.rs
+// Implement your commands in src/commands/*.rs using the types above.
+// The scaffold file shows the expected command names and signatures.
+#[path = "commands.rs"]
+#[allow(dead_code)]
+mod commands_scaffold;

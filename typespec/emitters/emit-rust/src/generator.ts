@@ -215,6 +215,7 @@ function scalarToRust(scalar: ScalarKind): string {
     float32: "f32",
     float64: "f64",
     utcDateTime: "DateTime<Utc>",
+    unknown: "serde_json::Value",
   };
   return map[scalar] || "String";
 }

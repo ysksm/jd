@@ -1,0 +1,29 @@
+[package]
+name = "jira-db-service"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+# Internal
+jira-db-core = { path = "../jira-db-core" }
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+
+# Async
+tokio.workspace = true
+async-trait.workspace = true
+
+# Date/Time
+chrono.workspace = true
+
+# Error handling
+anyhow.workspace = true
+thiserror.workspace = true
+
+# Logging
+tracing.workspace = true
+
+# Utilities
+uuid.workspace = true
