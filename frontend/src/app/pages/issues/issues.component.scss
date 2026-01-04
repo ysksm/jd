@@ -238,7 +238,7 @@
 
 .issue-header {
   display: grid;
-  grid-template-columns: 100px 80px 1fr 100px 80px 120px;
+  grid-template-columns: 120px 80px 1fr 100px 80px 120px;
   gap: 1rem;
   padding: 0.75rem 1rem;
   background: #f3f4f6;
@@ -251,7 +251,7 @@
 
 .issue-row {
   display: grid;
-  grid-template-columns: 100px 80px 1fr 100px 80px 120px;
+  grid-template-columns: 120px 80px 1fr 100px 80px 120px;
   gap: 1rem;
   padding: 0.75rem 1rem;
   border-bottom: 1px solid #e5e7eb;
@@ -269,6 +269,9 @@
   .issue-key {
     font-weight: 600;
     color: #4a4ae0;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
   }
 
   .issue-type {
@@ -869,4 +872,74 @@
     align-items: center;
     justify-content: center;
   }
+}
+
+// JIRA external link button styles
+.jira-link-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  flex-shrink: 0;
+
+  &:hover {
+    background: rgba(74, 74, 224, 0.1);
+  }
+
+  &:active {
+    background: rgba(74, 74, 224, 0.2);
+  }
+
+  .icon-external-link {
+    display: block;
+    width: 14px;
+    height: 14px;
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234a4ae0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6'%3E%3C/path%3E%3Cpolyline points='15 3 21 3 21 9'%3E%3C/polyline%3E%3Cline x1='10' y1='14' x2='21' y2='3'%3E%3C/line%3E%3C/svg%3E");
+  }
+
+  &.jira-link-btn-sm {
+    width: 16px;
+    height: 16px;
+
+    .icon-external-link {
+      width: 10px;
+      height: 10px;
+    }
+  }
+}
+
+// Modal header adjustment for JIRA link
+.modal-header {
+  h3 {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+
+    .jira-link-btn {
+      width: 24px;
+      height: 24px;
+
+      .icon-external-link {
+        width: 16px;
+        height: 16px;
+      }
+    }
+  }
+}
+
+// Board card key adjustment
+.card-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.125rem;
 }

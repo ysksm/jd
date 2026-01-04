@@ -4,6 +4,8 @@ import { FormsModule } from '@angular/forms';
 import { Issue, Project, Status, IssueType } from '../../generated/models';
 import { API_SERVICE, IApiService } from '../../api.provider';
 import { MindmapComponent } from './mindmap/mindmap.component';
+import { environment } from '../../../environments/environment';
+import { openUrl } from '@tauri-apps/plugin-opener';
 
 type ViewMode = 'list' | 'board' | 'mindmap';
 type GroupBy = 'none' | 'assignee' | 'epic';
@@ -57,9 +59,50 @@ export class IssuesComponent implements OnInit {
   issueTypeFilter = signal('');
   assigneeFilter = signal('');
 
+  // JIRA endpoint for external links
+  jiraEndpoint = signal('');
+
   ngOnInit(): void {
     this.loadProjects();
+    this.loadJiraEndpoint();
     this.search();
+  }
+
+  loadJiraEndpoint(): void {
+    this.api.configGet({}).subscribe({
+      next: (response) => {
+        this.jiraEndpoint.set(response.settings.jira.endpoint);
+      },
+      error: (err) => {
+        console.error('Failed to load JIRA endpoint:', err);
+      }
+    });
+  }
+
+  getJiraUrl(issueKey: string): string {
+    const endpoint = this.jiraEndpoint();
+    if (!endpoint) {
+      return '#';
+    }
+    // Remove trailing slash if present
+    const baseUrl = endpoint.replace(/\/$/, '');
+    return `${baseUrl}/browse/${issueKey}`;
+  }
+
+  openJiraLink(event: Event, issueKey: string): void {
+    event.stopPropagation();
+    const url = this.getJiraUrl(issueKey);
+    if (url !== '#') {
+      if (environment.apiMode === 'tauri') {
+        // Use Tauri opener plugin for desktop app
+        openUrl(url).catch(err => {
+          console.error('Failed to open URL:', err);
+        });
+      } else {
+        // Use window.open for web mode
+        window.open(url, '_blank', 'noopener,noreferrer');
+      }
+    }
   }
 
   loadProjects(): void {

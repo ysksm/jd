@@ -12,6 +12,7 @@ jira-db-core = { path = "../../jira-db-core" }
 
 # Tauri
 tauri.workspace = true
+tauri-plugin-opener.workspace = true
 
 # Serialization
 serde.workspace = true
