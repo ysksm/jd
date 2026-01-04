@@ -142,7 +142,6 @@
         <!-- Status Header Row -->
         @if (groupBy() !== 'none') {
           <div class="board-header">
-            <div class="swimlane-toggle-placeholder"></div>
             @for (status of statusNames(); track status) {
               <div class="status-header">{{ status }}</div>
             }

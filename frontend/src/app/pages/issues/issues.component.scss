@@ -473,16 +473,13 @@
 .board-header {
   display: flex;
   gap: 0.5rem;
-  padding: 0.75rem 0;
+  padding: 0.75rem;
+  padding-left: calc(200px + 0.5rem + 0.75rem); // placeholder + gap + base padding
   background: white;
   border-bottom: 2px solid #e5e7eb;
   position: sticky;
   top: 0;
   z-index: 10;
-
-  .swimlane-toggle-placeholder {
-    flex: 0 0 200px;
-  }
 
   .status-header {
     flex: 0 0 240px;
@@ -574,9 +571,9 @@
   overflow-x: auto;
 
   // When grouping is enabled, add left padding to align with header columns
-  // 200px placeholder + 0.5rem gap to match board-header layout
+  // Must match board-header padding-left exactly
   &.with-header {
-    padding-left: calc(200px + 0.5rem);
+    padding-left: calc(200px + 0.5rem + 0.75rem);
   }
 }
 
