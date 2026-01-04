@@ -1,0 +1,138 @@
+<div class="mindmap-container">
+  <!-- Controls -->
+  <div class="mindmap-controls">
+    <div class="control-group">
+      <label>色分け:</label>
+      <select [ngModel]="colorMode()" (ngModelChange)="setColorMode($event)">
+        <option value="status">ステータス</option>
+        <option value="issueType">課題タイプ</option>
+        <option value="priority">優先度</option>
+      </select>
+    </div>
+
+    <div class="control-group zoom-controls">
+      <button class="btn-icon" (click)="zoomOut()" title="縮小">
+        <span class="icon-minus"></span>
+      </button>
+      <span class="zoom-level">{{ zoomLevel() }}%</span>
+      <button class="btn-icon" (click)="zoomIn()" title="拡大">
+        <span class="icon-plus"></span>
+      </button>
+      <button class="btn-icon" (click)="resetZoom()" title="リセット">
+        <span class="icon-reset"></span>
+      </button>
+    </div>
+
+    <div class="control-group">
+      <button class="btn btn-secondary btn-sm" (click)="toggleExpand()">
+        @if (expandAll()) {
+          <span class="icon-collapse-tree"></span>
+          折りたたむ
+        } @else {
+          <span class="icon-expand-tree"></span>
+          すべて展開
+        }
+      </button>
+      <button class="btn btn-secondary btn-sm" (click)="fitToScreen()" title="画面にフィット">
+        <span class="icon-fit"></span>
+        フィット
+      </button>
+    </div>
+
+    <div class="stats">
+      <span class="stat-item" title="合計チケット数">
+        <span class="stat-icon">📋</span>
+        {{ stats().total }}
+      </span>
+      <span class="stat-item" title="ルートチケット数">
+        <span class="stat-icon">🌳</span>
+        {{ stats().roots }}
+      </span>
+      <span class="stat-item" title="最大深度">
+        <span class="stat-icon">📊</span>
+        深度 {{ stats().maxDepth }}
+      </span>
+    </div>
+  </div>
+
+  <!-- Legend -->
+  <div class="legend">
+    @if (colorMode() === 'status') {
+      <div class="legend-title">ステータス:</div>
+      <div class="legend-item">
+        <span class="legend-color" style="background: #FEF3C7; border-color: #F59E0B;"></span>
+        To Do
+      </div>
+      <div class="legend-item">
+        <span class="legend-color" style="background: #DBEAFE; border-color: #3B82F6;"></span>
+        In Progress
+      </div>
+      <div class="legend-item">
+        <span class="legend-color" style="background: #D1FAE5; border-color: #10B981;"></span>
+        Done
+      </div>
+    } @else if (colorMode() === 'priority') {
+      <div class="legend-title">優先度:</div>
+      <div class="legend-item">
+        <span class="legend-color" style="background: #FEE2E2; border-color: #DC2626;"></span>
+        Highest
+      </div>
+      <div class="legend-item">
+        <span class="legend-color" style="background: #FED7AA; border-color: #EA580C;"></span>
+        High
+      </div>
+      <div class="legend-item">
+        <span class="legend-color" style="background: #FEF3C7; border-color: #D97706;"></span>
+        Medium
+      </div>
+      <div class="legend-item">
+        <span class="legend-color" style="background: #DBEAFE; border-color: #2563EB;"></span>
+        Low
+      </div>
+      <div class="legend-item">
+        <span class="legend-color" style="background: #E0E7FF; border-color: #4F46E5;"></span>
+        Lowest
+      </div>
+    } @else {
+      <div class="legend-title">課題タイプ:</div>
+      <div class="legend-item">
+        <span class="legend-color" style="background: #FAE8FF; border-color: #A855F7;"></span>
+        Epic
+      </div>
+      <div class="legend-item">
+        <span class="legend-color" style="background: #DCFCE7; border-color: #22C55E;"></span>
+        Story
+      </div>
+      <div class="legend-item">
+        <span class="legend-color" style="background: #DBEAFE; border-color: #3B82F6;"></span>
+        Task
+      </div>
+      <div class="legend-item">
+        <span class="legend-color" style="background: #FEE2E2; border-color: #EF4444;"></span>
+        Bug
+      </div>
+      <div class="legend-item">
+        <span class="legend-color" style="background: #E0E7FF; border-color: #6366F1;"></span>
+        Sub-task
+      </div>
+    }
+  </div>
+
+  <!-- Chart Container -->
+  <div class="chart-wrapper">
+    @if (issues.length === 0) {
+      <div class="empty-state">
+        <div class="empty-icon">🗺️</div>
+        <p>表示するチケットがありません</p>
+        <p class="empty-hint">フィルターを調整してチケットを選択してください</p>
+      </div>
+    } @else {
+      <div #chartContainer class="chart-container"></div>
+    }
+  </div>
+
+  <!-- Help -->
+  <div class="help-text">
+    <span>💡 ヒント: マウスでドラッグして移動、スクロールでズーム、ノードクリックで展開/折りたたみ、ダブルクリックで詳細表示</span>
+  </div>
+</div>

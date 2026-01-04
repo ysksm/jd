@@ -195,7 +195,7 @@ impl IssueRepository for DuckDbIssueRepository {
                    i.created_date, i.updated_date
             FROM issues i
             LEFT JOIN projects p ON i.project_id = p.id
-            WHERE 1=1
+            WHERE (i.is_deleted IS NULL OR i.is_deleted = false)
             "#,
         );
 
@@ -307,5 +307,94 @@ impl IssueRepository for DuckDbIssueRepository {
         }
 
         Ok(issues)
+    }
+
+    fn mark_deleted_not_in_keys(&self, project_id: &str, keys: &[String]) -> DomainResult<usize> {
+        let conn = self.conn.lock().unwrap();
+
+        if keys.is_empty() {
+            // If no keys provided, mark all issues for this project as deleted
+            let count: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM issues WHERE project_id = ? AND (is_deleted IS NULL OR is_deleted = false)",
+                    duckdb::params![project_id],
+                    |row| row.get(0),
+                )
+                .map_err(|e| DomainError::Repository(format!("Failed to count issues: {}", e)))?;
+
+            conn.execute(
+                "UPDATE issues SET is_deleted = true WHERE project_id = ?",
+                duckdb::params![project_id],
+            )
+            .map_err(|e| {
+                DomainError::Repository(format!("Failed to mark issues as deleted: {}", e))
+            })?;
+
+            return Ok(count as usize);
+        }
+
+        // Build a list of placeholders for the IN clause
+        let placeholders: Vec<String> = keys.iter().map(|_| "?".to_string()).collect();
+        let in_clause = placeholders.join(", ");
+
+        // First, restore any previously deleted issues that are now in the keys list
+        let restore_sql = format!(
+            "UPDATE issues SET is_deleted = false WHERE project_id = ? AND key IN ({}) AND is_deleted = true",
+            in_clause
+        );
+
+        let mut restore_params: Vec<Box<dyn duckdb::ToSql>> = Vec::new();
+        restore_params.push(Box::new(project_id.to_string()));
+        for key in keys {
+            restore_params.push(Box::new(key.clone()));
+        }
+
+        let restore_refs: Vec<&dyn duckdb::ToSql> =
+            restore_params.iter().map(|p| p.as_ref()).collect();
+
+        conn.execute(&restore_sql, restore_refs.as_slice())
+            .map_err(|e| DomainError::Repository(format!("Failed to restore issues: {}", e)))?;
+
+        // Count issues to be marked as deleted
+        let count_sql = format!(
+            "SELECT COUNT(*) FROM issues WHERE project_id = ? AND key NOT IN ({}) AND (is_deleted IS NULL OR is_deleted = false)",
+            in_clause
+        );
+
+        let mut count_params: Vec<Box<dyn duckdb::ToSql>> = Vec::new();
+        count_params.push(Box::new(project_id.to_string()));
+        for key in keys {
+            count_params.push(Box::new(key.clone()));
+        }
+
+        let count_refs: Vec<&dyn duckdb::ToSql> = count_params.iter().map(|p| p.as_ref()).collect();
+
+        let count: i64 = conn
+            .query_row(&count_sql, count_refs.as_slice(), |row| row.get(0))
+            .map_err(|e| DomainError::Repository(format!("Failed to count issues: {}", e)))?;
+
+        if count > 0 {
+            // Mark issues not in the list as deleted
+            let update_sql = format!(
+                "UPDATE issues SET is_deleted = true WHERE project_id = ? AND key NOT IN ({})",
+                in_clause
+            );
+
+            let mut update_params: Vec<Box<dyn duckdb::ToSql>> = Vec::new();
+            update_params.push(Box::new(project_id.to_string()));
+            for key in keys {
+                update_params.push(Box::new(key.clone()));
+            }
+
+            let update_refs: Vec<&dyn duckdb::ToSql> =
+                update_params.iter().map(|p| p.as_ref()).collect();
+
+            conn.execute(&update_sql, update_refs.as_slice())
+                .map_err(|e| {
+                    DomainError::Repository(format!("Failed to mark issues as deleted: {}", e))
+                })?;
+        }
+
+        Ok(count as usize)
     }
 }
