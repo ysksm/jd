@@ -8,6 +8,8 @@ pub struct SearchParams {
     pub project_key: Option<String>,
     pub status: Option<String>,
     pub assignee: Option<String>,
+    pub issue_type: Option<String>,
+    pub priority: Option<String>,
     pub limit: Option<usize>,
     pub offset: Option<usize>,
 }

@@ -225,6 +225,16 @@ impl IssueRepository for DuckDbIssueRepository {
             sql_params.push(Box::new(assignee_pattern));
         }
 
+        if let Some(issue_type) = &params.issue_type {
+            conditions.push("i.issue_type = ?");
+            sql_params.push(Box::new(issue_type.clone()));
+        }
+
+        if let Some(priority) = &params.priority {
+            conditions.push("i.priority = ?");
+            sql_params.push(Box::new(priority.clone()));
+        }
+
         for condition in conditions {
             sql.push_str(" AND ");
             sql.push_str(condition);

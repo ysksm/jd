@@ -18,9 +18,11 @@ pub async fn search(
 
     let params = SearchParams {
         query: request.query,
-        project: request.project,
+        project_key: request.project,
         status: request.status,
         assignee: request.assignee,
+        issue_type: request.issue_type,
+        priority: request.priority,
         limit: request.limit.map(|l| l as usize),
         offset: request.offset.map(|o| o as usize),
     };

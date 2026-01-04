@@ -395,6 +395,8 @@ where
             project_key: project,
             status,
             assignee,
+            issue_type: None,
+            priority: None,
             limit: Some(limit),
             offset: Some(offset),
         };

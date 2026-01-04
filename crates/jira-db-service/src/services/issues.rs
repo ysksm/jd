@@ -44,6 +44,8 @@ pub fn search(state: &AppState, request: IssueSearchRequest) -> ServiceResult<Is
         project_key: request.project,
         status: request.status,
         assignee: request.assignee,
+        issue_type: request.issue_type,
+        priority: request.priority,
         limit: request.limit.map(|l| l as usize),
         offset: request.offset.map(|o| o as usize),
     };
@@ -69,6 +71,8 @@ pub fn get(state: &AppState, request: IssueGetRequest) -> ServiceResult<IssueGet
         project_key: None,
         status: None,
         assignee: None,
+        issue_type: None,
+        priority: None,
         limit: Some(1),
         offset: None,
     };
