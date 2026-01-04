@@ -6,6 +6,7 @@
       <select [ngModel]="colorMode()" (ngModelChange)="setColorMode($event)">
         <option value="status">ステータス</option>
         <option value="issueType">課題タイプ</option>
+        <option value="priority">優先度</option>
       </select>
     </div>
 
@@ -69,6 +70,28 @@
       <div class="legend-item">
         <span class="legend-color" style="background: #D1FAE5; border-color: #10B981;"></span>
         Done
+      </div>
+    } @else if (colorMode() === 'priority') {
+      <div class="legend-title">優先度:</div>
+      <div class="legend-item">
+        <span class="legend-color" style="background: #FEE2E2; border-color: #DC2626;"></span>
+        Highest
+      </div>
+      <div class="legend-item">
+        <span class="legend-color" style="background: #FED7AA; border-color: #EA580C;"></span>
+        High
+      </div>
+      <div class="legend-item">
+        <span class="legend-color" style="background: #FEF3C7; border-color: #D97706;"></span>
+        Medium
+      </div>
+      <div class="legend-item">
+        <span class="legend-color" style="background: #DBEAFE; border-color: #2563EB;"></span>
+        Low
+      </div>
+      <div class="legend-item">
+        <span class="legend-color" style="background: #E0E7FF; border-color: #4F46E5;"></span>
+        Lowest
       </div>
     } @else {
       <div class="legend-title">課題タイプ:</div>

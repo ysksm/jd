@@ -62,7 +62,21 @@ const ISSUE_TYPE_COLORS: Record<string, { bg: string; border: string }> = {
   'サブタスク': { bg: '#E0E7FF', border: '#6366F1' },
 };
 
-type ColorMode = 'status' | 'issueType';
+// Priority color mapping
+const PRIORITY_COLORS: Record<string, { bg: string; border: string }> = {
+  'highest': { bg: '#FEE2E2', border: '#DC2626' },
+  '最高': { bg: '#FEE2E2', border: '#DC2626' },
+  'high': { bg: '#FED7AA', border: '#EA580C' },
+  '高': { bg: '#FED7AA', border: '#EA580C' },
+  'medium': { bg: '#FEF3C7', border: '#D97706' },
+  '中': { bg: '#FEF3C7', border: '#D97706' },
+  'low': { bg: '#DBEAFE', border: '#2563EB' },
+  '低': { bg: '#DBEAFE', border: '#2563EB' },
+  'lowest': { bg: '#E0E7FF', border: '#4F46E5' },
+  '最低': { bg: '#E0E7FF', border: '#4F46E5' },
+};
+
+type ColorMode = 'status' | 'issueType' | 'priority';
 
 @Component({
   selector: 'app-mindmap',
@@ -386,9 +400,13 @@ export class MindmapComponent implements OnChanges, OnDestroy, AfterViewInit {
   }
 
   private getNodeColors(issue: Issue): { bg: string; border: string } {
-    if (this.colorMode() === 'status') {
+    const mode = this.colorMode();
+    if (mode === 'status') {
       const statusKey = issue.status.toLowerCase();
       return STATUS_COLORS[statusKey] || { bg: '#F3F4F6', border: '#9CA3AF' };
+    } else if (mode === 'priority') {
+      const priorityKey = issue.priority.toLowerCase();
+      return PRIORITY_COLORS[priorityKey] || { bg: '#F3F4F6', border: '#9CA3AF' };
     } else {
       const typeKey = issue.issueType.toLowerCase();
       return ISSUE_TYPE_COLORS[typeKey] || { bg: '#F3F4F6', border: '#9CA3AF' };

@@ -112,6 +112,18 @@ where
             self.issue_repository.batch_insert(chunk)?;
         }
 
+        // Mark issues that no longer exist in JIRA as deleted (soft delete)
+        let issue_keys: Vec<String> = issues.iter().map(|i| i.key.clone()).collect();
+        let deleted_count = self
+            .issue_repository
+            .mark_deleted_not_in_keys(project_id, &issue_keys)?;
+        if deleted_count > 0 {
+            info!(
+                "Marked {} issues as deleted (no longer in JIRA)",
+                deleted_count
+            );
+        }
+
         // Extract and save change history
         info!("Extracting and saving change history...");
         let mut total_history_items = 0;

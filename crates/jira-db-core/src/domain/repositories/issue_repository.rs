@@ -22,4 +22,8 @@ pub trait IssueRepository: Send + Sync {
     fn find_by_project(&self, project_id: &str) -> DomainResult<Vec<Issue>>;
     fn count_by_project(&self, project_id: &str) -> DomainResult<usize>;
     fn search(&self, params: &SearchParams) -> DomainResult<Vec<Issue>>;
+    /// Mark issues as deleted if they are not in the given list of keys (soft delete)
+    /// Also unmarks previously deleted issues if they appear in the keys list (restore)
+    /// Returns the number of issues marked as deleted
+    fn mark_deleted_not_in_keys(&self, project_id: &str, keys: &[String]) -> DomainResult<usize>;
 }

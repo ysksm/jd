@@ -24,6 +24,8 @@ impl Schema {
         Self::add_column_if_not_exists(conn, "issues", "sprint", "VARCHAR")?;
         // Migration: issue_snapshotsテーブルにraw_dataカラムを追加
         Self::add_column_if_not_exists(conn, "issue_snapshots", "raw_data", "JSON")?;
+        // Migration: issuesテーブルにis_deletedカラムを追加（JIRA上で削除されたissueを論理削除するため）
+        Self::add_column_if_not_exists(conn, "issues", "is_deleted", "BOOLEAN DEFAULT false")?;
         Ok(())
     }
 
