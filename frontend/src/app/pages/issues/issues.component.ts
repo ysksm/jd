@@ -7,7 +7,7 @@ import { MindmapComponent } from './mindmap/mindmap.component';
 import { environment } from '../../../environments/environment';
 import { openUrl } from '@tauri-apps/plugin-opener';
 
-type ViewMode = 'list' | 'board' | 'mindmap' | 'calendar';
+type ViewMode = 'list' | 'board' | 'mindmap';
 type GroupBy = 'none' | 'assignee' | 'epic';
 
 interface StatusColumn {
@@ -474,100 +474,5 @@ export class IssuesComponent implements OnInit, OnChanges {
     if (event.key === 'Enter') {
       this.search();
     }
-  }
-
-  // Due date helper methods
-  isOverdue(issue: Issue): boolean {
-    if (!issue.dueDate) return false;
-    const dueDate = new Date(issue.dueDate);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return dueDate < today;
-  }
-
-  isDueSoon(issue: Issue): boolean {
-    if (!issue.dueDate) return false;
-    const dueDate = new Date(issue.dueDate);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const threeDaysFromNow = new Date(today);
-    threeDaysFromNow.setDate(threeDaysFromNow.getDate() + 3);
-    return dueDate >= today && dueDate <= threeDaysFromNow;
-  }
-
-  formatDueDate(dueDate: string): string {
-    const date = new Date(dueDate);
-    const month = date.getMonth() + 1;
-    const day = date.getDate();
-    return `${month}/${day}`;
-  }
-
-  // Calendar view computed properties
-  calendarMonth = signal(new Date());
-
-  calendarDays = computed(() => {
-    const month = this.calendarMonth();
-    const year = month.getFullYear();
-    const monthIndex = month.getMonth();
-
-    // Get first and last day of month
-    const firstDay = new Date(year, monthIndex, 1);
-    const lastDay = new Date(year, monthIndex + 1, 0);
-
-    // Get the start of the calendar (previous month days to fill the week)
-    const startDate = new Date(firstDay);
-    startDate.setDate(startDate.getDate() - firstDay.getDay());
-
-    // Get the end of the calendar (next month days to fill the week)
-    const endDate = new Date(lastDay);
-    endDate.setDate(endDate.getDate() + (6 - lastDay.getDay()));
-
-    const days: { date: Date; isCurrentMonth: boolean; issues: Issue[] }[] = [];
-    const current = new Date(startDate);
-
-    while (current <= endDate) {
-      const dateStr = this.formatDateToISO(current);
-      const dayIssues = this.issues().filter(issue =>
-        issue.dueDate === dateStr
-      );
-
-      days.push({
-        date: new Date(current),
-        isCurrentMonth: current.getMonth() === monthIndex,
-        issues: dayIssues
-      });
-
-      current.setDate(current.getDate() + 1);
-    }
-
-    return days;
-  });
-
-  formatDateToISO(date: Date): string {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  }
-
-  previousMonth(): void {
-    const current = this.calendarMonth();
-    this.calendarMonth.set(new Date(current.getFullYear(), current.getMonth() - 1, 1));
-  }
-
-  nextMonth(): void {
-    const current = this.calendarMonth();
-    this.calendarMonth.set(new Date(current.getFullYear(), current.getMonth() + 1, 1));
-  }
-
-  goToToday(): void {
-    this.calendarMonth.set(new Date());
-  }
-
-  isToday(date: Date): boolean {
-    const today = new Date();
-    return date.getFullYear() === today.getFullYear() &&
-           date.getMonth() === today.getMonth() &&
-           date.getDate() === today.getDate();
   }
 }

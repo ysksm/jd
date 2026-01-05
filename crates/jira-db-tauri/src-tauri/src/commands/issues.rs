@@ -36,7 +36,6 @@ fn convert_issue(i: jira_db_core::Issue) -> Issue {
         fix_versions: i.fix_versions.unwrap_or_default(),
         created_at: i.created_date.unwrap_or_else(chrono::Utc::now),
         updated_at: i.updated_date.unwrap_or_else(chrono::Utc::now),
-        due_date: i.due_date,
     }
 }
 

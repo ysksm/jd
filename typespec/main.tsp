@@ -37,7 +37,6 @@ model Issue {
   fixVersions: string[];
   createdAt: utcDateTime;
   updatedAt: utcDateTime;
-  dueDate?: plainDate;
 }
 
 model ChangeHistoryItem {
