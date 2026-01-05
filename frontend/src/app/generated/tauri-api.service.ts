@@ -15,6 +15,8 @@ import {
   DebugBulkTransitionResponse,
   DebugCreateIssuesRequest,
   DebugCreateIssuesResponse,
+  DebugGetIssueTypesRequest,
+  DebugGetIssueTypesResponse,
   DebugListTransitionsRequest,
   DebugListTransitionsResponse,
   DebugStatusRequest,
@@ -225,6 +227,11 @@ export class TauriApiService {
   /** Bulk transition multiple issues */
   debugBulkTransition(request: DebugBulkTransitionRequest): Observable<DebugBulkTransitionResponse> {
     return from(invoke<DebugBulkTransitionResponse>('debug_bulk_transition', { request }));
+  }
+
+  /** Get available issue types for a project */
+  debugGetIssueTypes(request: DebugGetIssueTypesRequest): Observable<DebugGetIssueTypesResponse> {
+    return from(invoke<DebugGetIssueTypesResponse>('debug_get_issue_types', { request }));
   }
 
 }

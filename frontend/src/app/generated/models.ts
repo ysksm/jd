@@ -447,3 +447,18 @@ export interface DebugBulkTransitionResponse {
   failureCount: number;
 }
 
+export interface DebugGetIssueTypesRequest {
+  project: string;
+}
+
+export interface IssueTypeInfo {
+  name: string;
+  description?: string;
+  iconUrl?: string;
+  subtask: boolean;
+}
+
+export interface DebugGetIssueTypesResponse {
+  issueTypes: IssueTypeInfo[];
+}
+

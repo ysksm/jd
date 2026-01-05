@@ -138,6 +138,29 @@ pub struct DebugBulkTransitionResponse {
     pub failure_count: i32,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DebugGetIssueTypesRequest {
+    pub project: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IssueTypeInfo {
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub icon_url: Option<String>,
+    pub subtask: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DebugGetIssueTypesResponse {
+    pub issue_types: Vec<IssueTypeInfo>,
+}
+
 // ============================================================
 // Command Handlers
 // ============================================================
@@ -376,5 +399,49 @@ pub async fn debug_bulk_transition(
         results,
         success_count,
         failure_count,
+    })
+}
+
+/// Get available issue types for a project
+#[tauri::command]
+pub async fn debug_get_issue_types(
+    state: State<'_, AppState>,
+    request: DebugGetIssueTypesRequest,
+) -> Result<DebugGetIssueTypesResponse, String> {
+    let settings = state.get_settings().ok_or("Not initialized")?;
+
+    // Check debug mode
+    if !settings.debug_mode {
+        return Err(
+            "Debug mode is not enabled. Set debug_mode: true in settings.json to enable."
+                .to_string(),
+        );
+    }
+
+    // Create JIRA client
+    let jira_config = JiraConfig {
+        endpoint: settings.jira.endpoint.clone(),
+        username: settings.jira.username.clone(),
+        api_key: settings.jira.api_key.clone(),
+    };
+    let jira_client = JiraApiClient::new(&jira_config).map_err(|e| e.to_string())?;
+
+    // Fetch issue types
+    use jira_db_core::application::services::JiraService;
+    let issue_types = jira_client
+        .fetch_issue_types_by_project_key(&request.project)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(DebugGetIssueTypesResponse {
+        issue_types: issue_types
+            .into_iter()
+            .map(|t| IssueTypeInfo {
+                name: t.name,
+                description: t.description,
+                icon_url: t.icon_url,
+                subtask: t.subtask,
+            })
+            .collect(),
     })
 }

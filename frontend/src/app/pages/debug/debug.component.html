@@ -42,7 +42,7 @@
           <select
             id="project"
             [ngModel]="selectedProject()"
-            (ngModelChange)="selectedProject.set($event)"
+            (ngModelChange)="onProjectChange($event)"
           >
             @for (project of projects(); track project.key) {
               <option [value]="project.key">{{ project.key }} - {{ project.name }}</option>
@@ -56,11 +56,15 @@
             id="issueType"
             [ngModel]="issueType()"
             (ngModelChange)="issueType.set($event)"
+            [disabled]="loadingIssueTypes()"
           >
-            <option value="Task">Task</option>
-            <option value="Bug">Bug</option>
-            <option value="Story">Story</option>
-            <option value="Epic">Epic</option>
+            @if (loadingIssueTypes()) {
+              <option value="">Loading...</option>
+            } @else {
+              @for (type of issueTypes(); track type.name) {
+                <option [value]="type.name">{{ type.name }}</option>
+              }
+            }
           </select>
         </div>
 

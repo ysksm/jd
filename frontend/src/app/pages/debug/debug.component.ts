@@ -1,4 +1,4 @@
-import { Component, OnInit, signal, inject } from '@angular/core';
+import { Component, OnInit, signal, inject, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import {
@@ -6,6 +6,7 @@ import {
   CreatedIssue,
   Transition,
   BulkTransitionResult,
+  IssueTypeInfo,
 } from '../../generated/models';
 import { API_SERVICE, IApiService } from '../../api.provider';
 
@@ -31,8 +32,10 @@ export class DebugComponent implements OnInit {
 
   // Create Issues
   selectedProject = signal('');
+  issueTypes = signal<IssueTypeInfo[]>([]);
+  loadingIssueTypes = signal(false);
   issueCount = signal(1);
-  issueType = signal('Task');
+  issueType = signal('');
   summary = signal('[Debug] Test Issue');
   description = signal('');
   creatingIssues = signal(false);
@@ -77,10 +80,47 @@ export class DebugComponent implements OnInit {
         this.projects.set(response.projects);
         if (response.projects.length > 0) {
           this.selectedProject.set(response.projects[0].key);
+          this.loadIssueTypes(response.projects[0].key);
         }
       },
       error: () => {
         // Ignore - projects may not be initialized
+      },
+    });
+  }
+
+  onProjectChange(projectKey: string): void {
+    this.selectedProject.set(projectKey);
+    this.loadIssueTypes(projectKey);
+  }
+
+  loadIssueTypes(projectKey: string): void {
+    if (!projectKey) {
+      this.issueTypes.set([]);
+      return;
+    }
+
+    this.loadingIssueTypes.set(true);
+    this.api.debugGetIssueTypes({ project: projectKey }).subscribe({
+      next: (response) => {
+        this.loadingIssueTypes.set(false);
+        // Filter out subtasks for main issue creation
+        const mainTypes = response.issueTypes.filter(t => !t.subtask);
+        this.issueTypes.set(mainTypes);
+        if (mainTypes.length > 0) {
+          this.issueType.set(mainTypes[0].name);
+        }
+      },
+      error: (err) => {
+        this.loadingIssueTypes.set(false);
+        // Fallback to common types if API fails
+        console.warn('Failed to load issue types:', err);
+        this.issueTypes.set([
+          { name: 'Task', subtask: false },
+          { name: 'Bug', subtask: false },
+          { name: 'Story', subtask: false },
+        ]);
+        this.issueType.set('Task');
       },
     });
   }

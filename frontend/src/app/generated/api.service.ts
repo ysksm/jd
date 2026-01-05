@@ -15,6 +15,8 @@ import {
   DebugBulkTransitionResponse,
   DebugCreateIssuesRequest,
   DebugCreateIssuesResponse,
+  DebugGetIssueTypesRequest,
+  DebugGetIssueTypesResponse,
   DebugListTransitionsRequest,
   DebugListTransitionsResponse,
   DebugStatusRequest,
@@ -229,6 +231,11 @@ export class ApiService {
   /** Bulk transition multiple issues */
   debugBulkTransition(request: DebugBulkTransitionRequest): Observable<DebugBulkTransitionResponse> {
     return this.http.post<DebugBulkTransitionResponse>(`${this.baseUrl}/debug.bulk-transition`, request);
+  }
+
+  /** Get available issue types for a project */
+  debugGetIssueTypes(request: DebugGetIssueTypesRequest): Observable<DebugGetIssueTypesResponse> {
+    return this.http.post<DebugGetIssueTypesResponse>(`${this.baseUrl}/debug.get-issue-types`, request);
   }
 
 }

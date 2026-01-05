@@ -517,6 +517,84 @@ impl JiraService for JiraApiClient {
         Ok(issue_types)
     }
 
+    async fn fetch_issue_types_by_project_key(
+        &self,
+        project_key: &str,
+    ) -> DomainResult<Vec<IssueType>> {
+        // Use createmeta endpoint which accepts project key
+        let url = format!(
+            "{}/rest/api/3/issue/createmeta/{}/issuetypes",
+            self.base_url, project_key
+        );
+
+        debug!(
+            "[JIRA API] GET {} (fetching issue types for {})",
+            url, project_key
+        );
+
+        let response = self
+            .http_client
+            .get(&url)
+            .header("Authorization", &self.auth_header)
+            .header("Accept", "application/json")
+            .send()
+            .await
+            .map_err(|e| {
+                DomainError::ExternalService(format!("Failed to fetch issue types: {}", e))
+            })?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Could not read error response".to_string());
+            return Err(DomainError::ExternalService(format!(
+                "Failed to fetch issue types: {} - {}",
+                status, error_text
+            )));
+        }
+
+        let json: serde_json::Value = response.json().await.map_err(|e| {
+            DomainError::ExternalService(format!("Failed to parse issue types: {}", e))
+        })?;
+
+        let mut issue_types = Vec::new();
+
+        // The response has { "issueTypes": [...] } structure
+        let types_array = json
+            .get("issueTypes")
+            .or_else(|| json.get("values"))
+            .and_then(|v| v.as_array());
+
+        if let Some(type_array) = types_array {
+            for type_obj in type_array {
+                if let Some(name) = type_obj["name"].as_str() {
+                    issue_types.push(IssueType {
+                        name: name.to_string(),
+                        description: type_obj["description"].as_str().map(|s| s.to_string()),
+                        icon_url: type_obj["iconUrl"].as_str().map(|s| s.to_string()),
+                        subtask: type_obj["subtask"].as_bool().unwrap_or(false),
+                    });
+                }
+            }
+        } else if let Some(type_array) = json.as_array() {
+            // Fallback: direct array response
+            for type_obj in type_array {
+                if let Some(name) = type_obj["name"].as_str() {
+                    issue_types.push(IssueType {
+                        name: name.to_string(),
+                        description: type_obj["description"].as_str().map(|s| s.to_string()),
+                        icon_url: type_obj["iconUrl"].as_str().map(|s| s.to_string()),
+                        subtask: type_obj["subtask"].as_bool().unwrap_or(false),
+                    });
+                }
+            }
+        }
+
+        Ok(issue_types)
+    }
+
     async fn fetch_project_labels(&self, project_key: &str) -> DomainResult<Vec<Label>> {
         let jql = format!("project = {} AND labels is not EMPTY", project_key);
 
