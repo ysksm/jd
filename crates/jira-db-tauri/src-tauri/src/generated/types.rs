@@ -52,6 +52,9 @@ pub struct Issue {
     pub created_at: DateTime<Utc>,
     #[serde(rename = "updatedAt")]
     pub updated_at: DateTime<Utc>,
+    #[serde(rename = "dueDate")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub due_date: Option<chrono::NaiveDate>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

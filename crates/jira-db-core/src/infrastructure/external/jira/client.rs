@@ -212,6 +212,11 @@ impl JiraApiClient {
             .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
             .map(|dt| dt.with_timezone(&chrono::Utc));
 
+        // Parse due date (JIRA returns it as "YYYY-MM-DD" string)
+        let due_date = fields["duedate"]
+            .as_str()
+            .and_then(|s| chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d").ok());
+
         let raw_json = serde_json::to_string(&issue_json).ok();
 
         Some(Issue::new(
@@ -233,6 +238,7 @@ impl JiraApiClient {
             parent_key,
             created_date,
             updated_date,
+            due_date,
             raw_json,
         ))
     }

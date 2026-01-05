@@ -27,6 +27,14 @@
         >
           <span class="icon-mindmap"></span>
         </button>
+        <button
+          class="view-btn"
+          [class.active]="viewMode() === 'calendar'"
+          (click)="setViewMode('calendar')"
+          title="Calendar View"
+        >
+          <span class="icon-calendar"></span>
+        </button>
       </div>
     </div>
   </div>
@@ -136,6 +144,57 @@
         <p>No issues found.</p>
         <p>Try adjusting your search filters.</p>
       </div>
+    } @else if (viewMode() === 'calendar') {
+      <!-- Calendar View -->
+      <div class="calendar-view">
+        <div class="calendar-header">
+          <button class="btn btn-secondary btn-sm" (click)="previousMonth()">
+            <span class="icon-chevron-left"></span>
+          </button>
+          <h3>{{ calendarMonth() | date:'yyyy年 M月' }}</h3>
+          <button class="btn btn-secondary btn-sm" (click)="nextMonth()">
+            <span class="icon-chevron-right"></span>
+          </button>
+          <button class="btn btn-secondary btn-sm" (click)="goToToday()">今日</button>
+        </div>
+        <div class="calendar-weekdays">
+          <div class="weekday">日</div>
+          <div class="weekday">月</div>
+          <div class="weekday">火</div>
+          <div class="weekday">水</div>
+          <div class="weekday">木</div>
+          <div class="weekday">金</div>
+          <div class="weekday">土</div>
+        </div>
+        <div class="calendar-grid">
+          @for (day of calendarDays(); track day.date.getTime()) {
+            <div
+              class="calendar-day"
+              [class.other-month]="!day.isCurrentMonth"
+              [class.today]="isToday(day.date)"
+              [class.has-issues]="day.issues.length > 0"
+            >
+              <div class="day-number">{{ day.date.getDate() }}</div>
+              <div class="day-issues">
+                @for (issue of day.issues.slice(0, 3); track issue.key) {
+                  <div
+                    class="calendar-issue"
+                    [class.overdue]="isOverdue(issue)"
+                    [attr.data-status]="issue.status.toLowerCase()"
+                    (click)="selectIssue(issue)"
+                    title="{{ issue.key }}: {{ issue.summary }}"
+                  >
+                    <span class="issue-key">{{ issue.key }}</span>
+                  </div>
+                }
+                @if (day.issues.length > 3) {
+                  <div class="more-issues">+{{ day.issues.length - 3 }} more</div>
+                }
+              </div>
+            </div>
+          }
+        </div>
+      </div>
     } @else if (viewMode() === 'mindmap') {
       <!-- Mindmap View -->
       <app-mindmap
@@ -152,6 +211,7 @@
           <div class="header-status">Status</div>
           <div class="header-priority">Priority</div>
           <div class="header-assignee">Assignee</div>
+          <div class="header-duedate">Due Date</div>
         </div>
         @for (issue of issues(); track issue.key) {
           <div class="issue-row" (click)="selectIssue(issue)">
@@ -174,6 +234,9 @@
             </div>
             <div class="issue-priority">{{ issue.priority }}</div>
             <div class="issue-assignee">{{ issue.assignee || '-' }}</div>
+            <div class="issue-duedate" [class.overdue]="isOverdue(issue)" [class.due-soon]="isDueSoon(issue)">
+              {{ issue.dueDate || '-' }}
+            </div>
           </div>
         }
       </div>
@@ -246,6 +309,12 @@
                               <span class="card-status" [attr.data-status]="issue.status.toLowerCase()">
                                 {{ issue.status }}
                               </span>
+                              @if (issue.dueDate) {
+                                <span class="card-duedate" [class.overdue]="isOverdue(issue)" [class.due-soon]="isDueSoon(issue)" title="期限: {{ issue.dueDate }}">
+                                  <span class="icon-calendar"></span>
+                                  {{ formatDueDate(issue.dueDate) }}
+                                </span>
+                              }
                               @if (issue.assignee) {
                                 <span class="card-assignee" title="{{ issue.assignee }}">
                                   {{ issue.assignee.charAt(0).toUpperCase() }}
@@ -315,6 +384,14 @@
               <span class="label">Updated:</span>
               <span class="value">{{ selectedIssue()!.updatedAt }}</span>
             </div>
+            @if (selectedIssue()!.dueDate) {
+              <div class="detail-row">
+                <span class="label">Due Date:</span>
+                <span class="value" [class.overdue]="isOverdue(selectedIssue()!)" [class.due-soon]="isDueSoon(selectedIssue()!)">
+                  {{ selectedIssue()!.dueDate }}
+                </span>
+              </div>
+            }
           </div>
 
           @if (selectedIssue()!.description) {
