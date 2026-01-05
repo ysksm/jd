@@ -1,0 +1,149 @@
+<div class="project-detail">
+  <!-- Header -->
+  <div class="page-header">
+    <div class="header-left">
+      <button class="btn btn-ghost" (click)="goBack()">
+        <span class="icon">←</span>
+        Projects
+      </button>
+      <div class="project-title">
+        @if (project()) {
+          <span class="project-key">{{ project()!.key }}</span>
+          <span class="separator">:</span>
+          <span class="project-name">{{ project()!.name }}</span>
+        }
+      </div>
+    </div>
+    @if (project()?.lastSyncedAt) {
+      <div class="header-right">
+        <span class="last-synced">Last synced: {{ formatDate(project()!.lastSyncedAt) }}</span>
+      </div>
+    }
+  </div>
+
+  @if (error()) {
+    <div class="alert alert-error">{{ error() }}</div>
+  }
+
+  @if (loading()) {
+    <div class="loading">Loading project...</div>
+  } @else if (project()) {
+    <!-- Tab Navigation -->
+    <div class="tab-navigation">
+      @for (tab of tabs; track tab.id) {
+        <button
+          class="tab-button"
+          [class.active]="activeTab() === tab.id"
+          (click)="setActiveTab(tab.id)"
+        >
+          {{ tab.label }}
+        </button>
+      }
+    </div>
+
+    <!-- Tab Content -->
+    <div class="tab-content">
+      @switch (activeTab()) {
+        @case ('overview') {
+          <div class="overview-tab">
+            <div class="project-info-card">
+              <h3>Project Information</h3>
+              <div class="info-grid">
+                <div class="info-item">
+                  <span class="label">Key</span>
+                  <span class="value">{{ project()!.key }}</span>
+                </div>
+                <div class="info-item">
+                  <span class="label">Name</span>
+                  <span class="value">{{ project()!.name }}</span>
+                </div>
+                <div class="info-item">
+                  <span class="label">Sync Status</span>
+                  <span class="value" [class.enabled]="project()!.enabled" [class.disabled]="!project()!.enabled">
+                    {{ project()!.enabled ? 'Enabled' : 'Disabled' }}
+                  </span>
+                </div>
+                <div class="info-item">
+                  <span class="label">Last Synced</span>
+                  <span class="value">{{ formatDate(project()!.lastSyncedAt) }}</span>
+                </div>
+              </div>
+            </div>
+
+            @if (issueStats()) {
+              <div class="metadata-card">
+                <h3>Metadata Summary</h3>
+                <div class="stats-grid">
+                  <div class="stat-item">
+                    <span class="stat-value">{{ issueStats()!.statusCount }}</span>
+                    <span class="stat-label">Statuses</span>
+                  </div>
+                  <div class="stat-item">
+                    <span class="stat-value">{{ issueStats()!.priorityCount }}</span>
+                    <span class="stat-label">Priorities</span>
+                  </div>
+                  <div class="stat-item">
+                    <span class="stat-value">{{ issueStats()!.issueTypeCount }}</span>
+                    <span class="stat-label">Issue Types</span>
+                  </div>
+                  <div class="stat-item">
+                    <span class="stat-value">{{ issueStats()!.labelCount }}</span>
+                    <span class="stat-label">Labels</span>
+                  </div>
+                  <div class="stat-item">
+                    <span class="stat-value">{{ issueStats()!.componentCount }}</span>
+                    <span class="stat-label">Components</span>
+                  </div>
+                  <div class="stat-item">
+                    <span class="stat-value">{{ issueStats()!.versionCount }}</span>
+                    <span class="stat-label">Versions</span>
+                  </div>
+                </div>
+              </div>
+            }
+
+            @if (metadata()) {
+              <div class="metadata-details">
+                <div class="metadata-section">
+                  <h4>Statuses</h4>
+                  <div class="tag-list">
+                    @for (status of metadata()!.statuses; track status.name) {
+                      <span class="tag" [attr.data-category]="status.category">{{ status.name }}</span>
+                    }
+                  </div>
+                </div>
+
+                <div class="metadata-section">
+                  <h4>Issue Types</h4>
+                  <div class="tag-list">
+                    @for (type of metadata()!.issueTypes; track type.name) {
+                      <span class="tag">{{ type.name }}</span>
+                    }
+                  </div>
+                </div>
+
+                <div class="metadata-section">
+                  <h4>Priorities</h4>
+                  <div class="tag-list">
+                    @for (priority of metadata()!.priorities; track priority.name) {
+                      <span class="tag">{{ priority.name }}</span>
+                    }
+                  </div>
+                </div>
+              </div>
+            }
+          </div>
+        }
+        @case ('issues') {
+          <app-issues [projectKey]="projectKey()"></app-issues>
+        }
+        @case ('query') {
+          <app-query [projectKey]="projectKey()"></app-query>
+        }
+        @case ('charts') {
+          <app-visualization [projectKey]="projectKey()"></app-visualization>
+        }
+      }
+    </div>
+  }
+</div>

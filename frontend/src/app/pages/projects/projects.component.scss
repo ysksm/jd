@@ -75,10 +75,19 @@
   padding: 1rem 1.5rem;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   border-left: 4px solid #e5e7eb;
-  transition: border-color 0.2s;
+  transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
 
   &.enabled {
     border-left-color: #22c55e;
+  }
+
+  &.clickable {
+    cursor: pointer;
+
+    &:hover {
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+      transform: translateY(-2px);
+    }
   }
 
   .project-info {
@@ -98,6 +107,11 @@
       color: #666;
       margin-top: 0.5rem;
     }
+  }
+
+  .project-actions {
+    display: flex;
+    gap: 0.5rem;
   }
 }
 

@@ -47,15 +47,17 @@
     </div>
 
     <div class="filters">
-      <select
-        [ngModel]="projectFilter()"
-        (ngModelChange)="projectFilter.set($event); onProjectChange()"
-      >
-        <option value="">All Projects</option>
-        @for (project of projects(); track project.key) {
-          <option [value]="project.key">{{ project.key }} - {{ project.name }}</option>
-        }
-      </select>
+      @if (!hasFixedProject) {
+        <select
+          [ngModel]="projectFilter()"
+          (ngModelChange)="projectFilter.set($event); onProjectChange()"
+        >
+          <option value="">All Projects</option>
+          @for (project of projects(); track project.key) {
+            <option [value]="project.key">{{ project.key }} - {{ project.name }}</option>
+          }
+        </select>
+      }
 
       <select
         [ngModel]="statusFilter()"

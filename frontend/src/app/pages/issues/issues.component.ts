@@ -1,4 +1,4 @@
-import { Component, OnInit, signal, inject, computed } from '@angular/core';
+import { Component, OnInit, OnChanges, SimpleChanges, Input, signal, inject, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Issue, Project, Status, IssueType } from '../../generated/models';
@@ -29,8 +29,11 @@ interface Swimlane {
   templateUrl: './issues.component.html',
   styleUrl: './issues.component.scss'
 })
-export class IssuesComponent implements OnInit {
+export class IssuesComponent implements OnInit, OnChanges {
   private api = inject<IApiService>(API_SERVICE);
+
+  // Input for project context (when used inside project detail)
+  @Input() projectKey: string = '';
 
   issues = signal<Issue[]>([]);
   selectedIssue = signal<Issue | null>(null);
@@ -62,8 +65,30 @@ export class IssuesComponent implements OnInit {
   // JIRA endpoint for external links
   jiraEndpoint = signal('');
 
+  // Check if project is fixed from parent
+  get hasFixedProject(): boolean {
+    return !!this.projectKey;
+  }
+
   ngOnInit(): void {
-    this.loadProjects();
+    this.initializeComponent();
+  }
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['projectKey'] && !changes['projectKey'].firstChange) {
+      this.initializeComponent();
+    }
+  }
+
+  private initializeComponent(): void {
+    if (this.projectKey) {
+      // Fixed project context - load only this project's data
+      this.projectFilter.set(this.projectKey);
+      this.loadProjectMetadata(this.projectKey);
+    } else {
+      // Global context - load all projects
+      this.loadProjects();
+    }
     this.loadJiraEndpoint();
     this.search();
   }
