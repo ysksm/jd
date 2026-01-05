@@ -12,7 +12,9 @@ use jira_db_core::{
 use serde::{Deserialize, Serialize};
 
 use crate::generated::*;
+use crate::logging::Logger;
 use crate::state::AppState;
+use crate::{log_debug, log_info, log_warn};
 
 // ============================================================
 // Extended Response Types with Fields Expansion Stats
@@ -57,6 +59,8 @@ pub async fn sync_execute(
     state: State<'_, AppState>,
     request: SyncExecuteRequest,
 ) -> Result<SyncExecuteResponseExtended, String> {
+    let log = Logger::new("sync");
+
     let settings = state.get_settings().ok_or("Not initialized")?;
     let db_factory = state
         .get_db_factory()
@@ -89,12 +93,19 @@ pub async fn sync_execute(
         return Err("No projects to sync".to_string());
     }
 
+    log_info!(
+        log,
+        "Starting sync for {} project(s)",
+        projects_to_sync.len()
+    );
+
     // Execute sync for each project with separate database
     let mut results = Vec::new();
     let mut total_fields_synced = 0i32;
 
     for project in &projects_to_sync {
         let start_time = std::time::Instant::now();
+        log_info!(log, "[{}] Starting sync...", project.key);
 
         // Get database connection for this project
         let db = db_factory
@@ -133,64 +144,60 @@ pub async fn sync_execute(
             SyncFieldsUseCase::new(jira_client.clone(), field_repo, expanded_repo);
 
         // Step 1: Sync fields from JIRA
-        tracing::info!("Syncing fields from JIRA for project {}...", project.key);
+        log_info!(log, "[{}] Fetching JIRA fields...", project.key);
         let fields_synced = fields_use_case
             .sync_fields()
             .await
             .map_err(|e| e.to_string())? as i32;
-        tracing::info!(
-            "Synced {} fields for project {}",
-            fields_synced,
-            project.key
-        );
+        log_info!(log, "[{}] Synced {} fields", project.key, fields_synced);
         total_fields_synced = fields_synced;
 
         // Step 2: Add columns based on fields
-        tracing::info!("Adding columns for project {}...", project.key);
+        log_info!(log, "[{}] Adding database columns...", project.key);
         let added_columns = fields_use_case.add_columns().map_err(|e| e.to_string())?;
         let total_columns_added = added_columns.len() as i32;
         if total_columns_added > 0 {
-            tracing::info!(
-                "Added {} new columns for {}: {:?}",
-                total_columns_added,
+            log_info!(
+                log,
+                "[{}] Added {} new columns: {:?}",
                 project.key,
+                total_columns_added,
                 added_columns
             );
         }
 
         // Step 3: Execute sync
+        log_info!(log, "[{}] Fetching issues from JIRA...", project.key);
         let result = sync_use_case.execute(&project.key, &project.id).await;
 
         // Step 4: Expand issues for this project
+        log_info!(log, "[{}] Expanding issues...", project.key);
         let (issues_expanded, expand_error) = match fields_use_case.expand_issues(Some(&project.id))
         {
             Ok(count) => {
-                tracing::info!(
-                    "Expanded {} issues for project {} (id: {})",
-                    count,
-                    project.key,
-                    project.id
-                );
+                log_info!(log, "[{}] Expanded {} issues", project.key, count);
                 (count as i32, None)
             }
             Err(e) => {
-                tracing::warn!(
-                    "Failed to expand issues for project {} (id: {}): {}",
-                    project.key,
-                    project.id,
-                    e
-                );
+                log_warn!(log, "[{}] Failed to expand issues: {}", project.key, e);
                 (0, Some(e.to_string()))
             }
         };
 
         // Step 5: Create readable views
+        log_info!(log, "[{}] Creating readable views...", project.key);
         if let Err(e) = fields_use_case.create_readable_view() {
-            tracing::warn!("Failed to create readable view for {}: {}", project.key, e);
+            log_warn!(
+                log,
+                "[{}] Failed to create readable view: {}",
+                project.key,
+                e
+            );
         }
         if let Err(e) = fields_use_case.create_snapshots_readable_view() {
-            tracing::warn!(
-                "Failed to create snapshot readable views for {}: {}",
+            log_warn!(
+                log,
+                "[{}] Failed to create snapshot readable views: {}",
                 project.key,
                 e
             );
@@ -201,6 +208,13 @@ pub async fn sync_execute(
         match result {
             Ok(sync_result) => {
                 let error = sync_result.error_message.or(expand_error);
+                log_info!(
+                    log,
+                    "[{}] Sync completed: {} issues in {:.1}s",
+                    project.key,
+                    sync_result.issues_synced,
+                    duration
+                );
                 results.push(SyncResultExtended {
                     project_key: sync_result.project_key,
                     issue_count: sync_result.issues_synced as i32,
@@ -214,6 +228,7 @@ pub async fn sync_execute(
                 });
             }
             Err(e) => {
+                log_warn!(log, "[{}] Sync failed: {}", project.key, e);
                 results.push(SyncResultExtended {
                     project_key: project.key.clone(),
                     issue_count: 0,
@@ -242,7 +257,8 @@ pub async fn sync_execute(
         })
         .map_err(|e| e.to_string())?;
 
-    tracing::info!(
+    log_info!(
+        log,
         "Sync complete: {} projects, {} fields synced",
         results.len(),
         total_fields_synced
@@ -251,10 +267,11 @@ pub async fn sync_execute(
     // Close database connections after sync to free resources
     for project in &projects_to_sync {
         if let Err(e) = state.close_db(&project.key) {
-            tracing::warn!("Failed to close database for {}: {}", project.key, e);
+            log_warn!(log, "Failed to close database for {}: {}", project.key, e);
         }
     }
-    tracing::debug!(
+    log_debug!(
+        log,
         "Closed database connections after sync, {} connections remaining",
         state.open_db_count()
     );

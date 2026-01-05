@@ -4,6 +4,7 @@
 
 mod commands;
 mod generated;
+pub mod logging;
 mod state;
 
 use state::AppState;
@@ -70,6 +71,9 @@ pub fn run() {
 
     // Bridge log crate to tracing (for jira-db-core logs)
     tracing_log::LogTracer::init().ok();
+
+    // Initialize logging wrapper
+    logging::init(logging::LogOutput::Console);
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
