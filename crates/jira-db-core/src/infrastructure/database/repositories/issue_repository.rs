@@ -1,7 +1,7 @@
 use crate::domain::entities::Issue;
 use crate::domain::error::{DomainError, DomainResult};
 use crate::domain::repositories::{IssueRepository, SearchParams};
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use duckdb::Connection;
 use log::debug;
 use std::sync::{Arc, Mutex};
@@ -53,9 +53,9 @@ impl IssueRepository for DuckDbIssueRepository {
                     id, project_id, key, summary, description,
                     status, priority, assignee, reporter,
                     issue_type, resolution, labels, components, fix_versions, sprint, parent_key,
-                    created_date, updated_date, raw_data, synced_at
+                    created_date, updated_date, due_date, raw_data, synced_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (id) DO UPDATE SET
                     project_id = excluded.project_id,
                     key = excluded.key,
@@ -74,6 +74,7 @@ impl IssueRepository for DuckDbIssueRepository {
                     parent_key = excluded.parent_key,
                     created_date = excluded.created_date,
                     updated_date = excluded.updated_date,
+                    due_date = excluded.due_date,
                     raw_data = excluded.raw_data,
                     synced_at = ?
                 "#,
@@ -96,6 +97,7 @@ impl IssueRepository for DuckDbIssueRepository {
                     &issue.parent_key,
                     &issue.created_date.map(|d| d.to_rfc3339()),
                     &issue.updated_date.map(|d| d.to_rfc3339()),
+                    &issue.due_date.map(|d| d.to_string()),
                     &raw_data,
                     &now,
                     &now,
@@ -115,7 +117,7 @@ impl IssueRepository for DuckDbIssueRepository {
             SELECT id, project_id, key, summary, description,
                    status, priority, assignee, reporter,
                    issue_type, resolution, labels, components, fix_versions, sprint, parent_key,
-                   created_date, updated_date, raw_data
+                   created_date, updated_date, due_date, raw_data
             FROM issues
             WHERE project_id = ?
             "#,
@@ -161,7 +163,10 @@ impl IssueRepository for DuckDbIssueRepository {
                             .ok()
                             .map(|dt| dt.with_timezone(&Utc))
                     }),
-                    raw_json: row.get(18)?,
+                    due_date: row
+                        .get::<_, Option<String>>(18)?
+                        .and_then(|s| NaiveDate::parse_from_str(&s, "%Y-%m-%d").ok()),
+                    raw_json: row.get(19)?,
                 })
             })
             .map_err(|e| DomainError::Repository(format!("Failed to execute query: {}", e)))?;
@@ -195,7 +200,7 @@ impl IssueRepository for DuckDbIssueRepository {
             SELECT i.id, i.project_id, i.key, i.summary, i.description,
                    i.status, i.priority, i.assignee, i.reporter,
                    i.issue_type, i.resolution, i.labels, i.components, i.fix_versions, i.sprint, i.parent_key,
-                   i.created_date, i.updated_date
+                   i.created_date, i.updated_date, i.due_date
             FROM issues i
             LEFT JOIN projects p ON i.project_id = p.id
             WHERE (i.is_deleted IS NULL OR i.is_deleted = false)
@@ -299,6 +304,9 @@ impl IssueRepository for DuckDbIssueRepository {
                             .ok()
                             .map(|dt| dt.with_timezone(&Utc))
                     }),
+                    due_date: row
+                        .get::<_, Option<String>>(18)?
+                        .and_then(|s| NaiveDate::parse_from_str(&s, "%Y-%m-%d").ok()),
                     raw_json: None,
                 })
             })

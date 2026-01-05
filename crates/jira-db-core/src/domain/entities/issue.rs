@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -21,6 +21,7 @@ pub struct Issue {
     pub parent_key: Option<String>,
     pub created_date: Option<DateTime<Utc>>,
     pub updated_date: Option<DateTime<Utc>>,
+    pub due_date: Option<NaiveDate>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub raw_json: Option<String>,
 }
@@ -46,6 +47,7 @@ impl Issue {
         parent_key: Option<String>,
         created_date: Option<DateTime<Utc>>,
         updated_date: Option<DateTime<Utc>>,
+        due_date: Option<NaiveDate>,
         raw_json: Option<String>,
     ) -> Self {
         Self {
@@ -67,6 +69,7 @@ impl Issue {
             parent_key,
             created_date,
             updated_date,
+            due_date,
             raw_json,
         }
     }

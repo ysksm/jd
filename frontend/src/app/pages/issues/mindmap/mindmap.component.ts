@@ -191,13 +191,17 @@ export class MindmapComponent implements OnChanges, OnDestroy, AfterViewInit {
           const data = (params as { data: TreeNodeData }).data;
           if (!data.issueData) return String(data.name);
           const issue = data.issueData;
+          const dueDateInfo = issue.dueDate
+            ? `<small style="color: ${this.getDueDateColor(issue.dueDate)};">期限: ${issue.dueDate}</small><br/>`
+            : '';
           return `
             <div style="max-width: 300px;">
               <strong>${issue.key}</strong><br/>
               <span style="color: #666;">${issue.issueType}</span> ·
               <span style="color: #666;">${issue.status}</span><br/>
               ${issue.summary}<br/>
-              ${issue.assignee ? `<small>Assignee: ${issue.assignee}</small>` : ''}
+              ${issue.assignee ? `<small>Assignee: ${issue.assignee}</small><br/>` : ''}
+              ${dueDateInfo}
             </div>
           `;
         },
@@ -470,5 +474,20 @@ export class MindmapComponent implements OnChanges, OnDestroy, AfterViewInit {
       this.echartsInstance.resize();
       this.resetZoom();
     }
+  }
+
+  private getDueDateColor(dueDate: string): string {
+    const due = new Date(dueDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const threeDaysFromNow = new Date(today);
+    threeDaysFromNow.setDate(threeDaysFromNow.getDate() + 3);
+
+    if (due < today) {
+      return '#DC2626'; // Overdue - red
+    } else if (due <= threeDaysFromNow) {
+      return '#F59E0B'; // Due soon - amber
+    }
+    return '#666'; // Normal
   }
 }
