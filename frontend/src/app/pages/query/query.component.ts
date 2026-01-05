@@ -51,6 +51,55 @@ export class QueryComponent implements OnInit, OnChanges {
   // Computed
   hasResults = computed(() => this.columns().length > 0);
 
+  // バーンダウンチャート用SQLテンプレート（バグの件数）
+  burndownSqlTemplate = `-- バグ件数のバーンダウンチャート用SQL
+-- issue_snapshots_expanded_readable テーブルを使用
+-- 日付ごとの残バグ件数を計算
+
+WITH daily_snapshots AS (
+  SELECT
+    DATE_TRUNC('day', valid_from) AS date,
+    issue_key,
+    status,
+    issue_type,
+    -- 各日付で最新のスナップショットを取得
+    ROW_NUMBER() OVER (
+      PARTITION BY issue_key, DATE_TRUNC('day', valid_from)
+      ORDER BY valid_from DESC
+    ) AS rn
+  FROM issue_snapshots_expanded_readable
+  WHERE valid_from IS NOT NULL
+    AND issue_type = 'Bug'  -- バグのみを対象
+),
+daily_status AS (
+  SELECT
+    date,
+    COUNT(*) AS total_bugs,
+    SUM(CASE
+      WHEN status IN ('Done', 'Closed', '完了', 'Resolved')
+      THEN 1 ELSE 0
+    END) AS closed_bugs
+  FROM daily_snapshots
+  WHERE rn = 1
+  GROUP BY date
+),
+burndown AS (
+  SELECT
+    date,
+    total_bugs,
+    closed_bugs,
+    SUM(closed_bugs) OVER (ORDER BY date) AS cumulative_closed,
+    total_bugs - SUM(closed_bugs) OVER (ORDER BY date) AS remaining_bugs
+  FROM daily_status
+)
+SELECT
+  date AS "日付",
+  total_bugs AS "総バグ数",
+  cumulative_closed AS "累計クローズ数",
+  remaining_bugs AS "残バグ数"
+FROM burndown
+ORDER BY date`;
+
   ngOnInit(): void {
     this.initializeComponent();
   }
@@ -254,5 +303,13 @@ export class QueryComponent implements OnInit, OnChanges {
 
   toggleSchemaPanel(): void {
     this.showSchemaPanel.set(!this.showSchemaPanel());
+  }
+
+  // バーンダウンチャート用SQLをエディタに挿入
+  insertBurndownSql(): void {
+    this.queryText.set(this.burndownSqlTemplate);
+    this.editingQueryId.set(null);
+    this.queryName.set('');
+    this.queryDescription.set('');
   }
 }

@@ -107,7 +107,16 @@
               New Query
             }
           </span>
-          <span class="editor-hint">Ctrl+Enter to execute</span>
+          <div class="editor-actions-right">
+            <button
+              class="btn btn-secondary btn-sm"
+              (click)="insertBurndownSql()"
+              title="バグ件数のバーンダウンチャート用SQLを挿入"
+            >
+              バーンダウンSQL
+            </button>
+            <span class="editor-hint">Ctrl+Enter to execute</span>
+          </div>
         </div>
         <textarea
           class="sql-input"
