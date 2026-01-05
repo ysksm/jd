@@ -7,8 +7,8 @@ use async_trait::async_trait;
 use jira_db_core::{
     DatabaseFactory, DuckDbChangeHistoryRepository, DuckDbIssueRepository,
     DuckDbMetadataRepository, DuckDbProjectRepository, GetChangeHistoryUseCase,
-    GetProjectMetadataUseCase, IssueRepository, ProjectRepository, SearchIssuesUseCase,
-    SearchParams,
+    GetProjectMetadataUseCase, IssueRepository, ProjectRepository, RawDataRepository,
+    SearchIssuesUseCase, SearchParams,
 };
 use serde_json::Value;
 
@@ -679,5 +679,64 @@ impl ToolHandler for SemanticSearchTool {
 
         let json = serde_json::to_string_pretty(&result)?;
         Ok(CallToolResult::text(json))
+    }
+}
+
+//=============================================================================
+// GetRawIssueDataTool
+//=============================================================================
+
+pub struct GetRawIssueDataTool {
+    db_factory: Arc<DatabaseFactory>,
+}
+
+impl GetRawIssueDataTool {
+    pub fn new(db_factory: Arc<DatabaseFactory>) -> Self {
+        Self { db_factory }
+    }
+}
+
+#[async_trait]
+impl ToolHandler for GetRawIssueDataTool {
+    fn definition(&self) -> Tool {
+        build_tool_definition::<GetRawIssueDataParams>(
+            "get_raw_issue_data",
+            "Get the raw JSON data from JIRA API for a specific issue. This data is stored separately from processed issue data.",
+        )
+    }
+
+    async fn execute(&self, arguments: Value) -> Result<CallToolResult> {
+        let params: GetRawIssueDataParams = serde_json::from_value(arguments)?;
+
+        // Extract project key from issue key
+        let project_key = extract_project_key(&params.issue_key)
+            .ok_or_else(|| anyhow::anyhow!("Invalid issue key format: {}", params.issue_key))?;
+
+        // Get raw connection for this project
+        let raw_conn = match self.db_factory.get_raw_connection(project_key) {
+            Ok(conn) => conn,
+            Err(_) => {
+                return Ok(CallToolResult::error(format!(
+                    "Raw data database not found for project {}. Run sync with raw data enabled.",
+                    project_key
+                )));
+            }
+        };
+
+        let raw_repo = RawDataRepository::new(raw_conn);
+
+        match raw_repo.get_issue_raw_data(&params.issue_key)? {
+            Some(raw_data) => {
+                // Parse and re-format the JSON for pretty output
+                let parsed: serde_json::Value = serde_json::from_str(&raw_data)
+                    .unwrap_or_else(|_| serde_json::Value::String(raw_data));
+                let json = serde_json::to_string_pretty(&parsed)?;
+                Ok(CallToolResult::text(json))
+            }
+            None => Ok(CallToolResult::error(format!(
+                "Raw data not found for issue {}. It may not have been synced with raw data enabled.",
+                params.issue_key
+            ))),
+        }
     }
 }

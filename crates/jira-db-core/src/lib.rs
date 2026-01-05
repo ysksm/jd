@@ -39,7 +39,8 @@ pub use infrastructure::database::{
     Database, DatabaseFactory, DbConnection, DuckDbChangeHistoryRepository, DuckDbFieldRepository,
     DuckDbIssueRepository, DuckDbIssueSnapshotRepository, DuckDbIssuesExpandedRepository,
     DuckDbMetadataRepository, DuckDbProjectRepository, DuckDbSyncHistoryRepository,
-    EmbeddingsRepository, SemanticSearchResult, checkpoint_connection,
+    EmbeddingsRepository, RawDataRepository, SemanticSearchResult, SharedRawDataRepository,
+    checkpoint_connection,
 };
 pub use infrastructure::external::embeddings::{
     CohereConfig, CohereEmbeddingClient, EmbeddingConfig, EmbeddingProvider, EmbeddingProviderType,

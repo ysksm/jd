@@ -128,6 +128,14 @@ pub struct SemanticSearchParams {
     pub limit: Option<usize>,
 }
 
+/// Parameters for getting raw issue data
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct GetRawIssueDataParams {
+    /// Issue key (e.g., "PROJ-123")
+    #[schemars(description = "The issue key (e.g., 'PROJ-123')")]
+    pub issue_key: String,
+}
+
 /// Issue response for JSON output
 #[derive(Debug, Serialize)]
 pub struct IssueResponse {

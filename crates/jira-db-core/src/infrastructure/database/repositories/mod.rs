@@ -6,6 +6,7 @@ mod issue_snapshot_repository;
 mod issues_expanded_repository;
 mod metadata_repository;
 mod project_repository;
+mod raw_data_repository;
 mod sync_history_repository;
 
 pub use change_history_repository::DuckDbChangeHistoryRepository;
@@ -16,4 +17,5 @@ pub use issue_snapshot_repository::DuckDbIssueSnapshotRepository;
 pub use issues_expanded_repository::DuckDbIssuesExpandedRepository;
 pub use metadata_repository::DuckDbMetadataRepository;
 pub use project_repository::DuckDbProjectRepository;
+pub use raw_data_repository::{RawDataRepository, SharedRawDataRepository};
 pub use sync_history_repository::DuckDbSyncHistoryRepository;

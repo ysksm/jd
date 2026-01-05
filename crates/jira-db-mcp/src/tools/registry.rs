@@ -56,6 +56,9 @@ impl ToolRegistry {
         let semantic_search = Arc::new(SemanticSearchTool::new(db_factory.clone()));
         tools.insert("semantic_search".to_string(), semantic_search);
 
+        let get_raw_issue_data = Arc::new(GetRawIssueDataTool::new(db_factory.clone()));
+        tools.insert("get_raw_issue_data".to_string(), get_raw_issue_data);
+
         Self { tools }
     }
 

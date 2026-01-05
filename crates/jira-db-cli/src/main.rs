@@ -20,7 +20,7 @@ use jira_db_core::infrastructure::config::{ProjectConfig, Settings};
 use jira_db_core::infrastructure::database::{
     DatabaseFactory, DuckDbChangeHistoryRepository, DuckDbIssueRepository,
     DuckDbIssueSnapshotRepository, DuckDbMetadataRepository, DuckDbProjectRepository,
-    DuckDbSyncHistoryRepository,
+    DuckDbSyncHistoryRepository, RawDataRepository,
 };
 use jira_db_core::infrastructure::external::jira::JiraApiClient;
 use jira_db_core::report::{generate_interactive_report, generate_static_report};
@@ -408,12 +408,14 @@ async fn handle_sync(
 
         // Get connection for this specific project
         let conn = db_factory.get_connection(&key)?;
+        let raw_conn = db_factory.get_raw_connection(&key)?;
 
         let issue_repository = Arc::new(DuckDbIssueRepository::new(conn.clone()));
         let change_history_repository = Arc::new(DuckDbChangeHistoryRepository::new(conn.clone()));
         let metadata_repository = Arc::new(DuckDbMetadataRepository::new(conn.clone()));
         let sync_history_repository = Arc::new(DuckDbSyncHistoryRepository::new(conn.clone()));
         let snapshot_repository = Arc::new(DuckDbIssueSnapshotRepository::new(conn));
+        let raw_repository = Arc::new(RawDataRepository::new(raw_conn));
 
         let use_case = SyncProjectUseCase::new(
             issue_repository,
@@ -422,7 +424,8 @@ async fn handle_sync(
             sync_history_repository,
             snapshot_repository,
             jira_service.clone(),
-        );
+        )
+        .with_raw_repository(raw_repository);
 
         // Show resuming message if we have a checkpoint
         if let Some(ref cp) = checkpoint {
@@ -506,6 +509,7 @@ async fn handle_sync(
         for (key, id, checkpoint) in enabled_projects {
             // Get connection for this specific project
             let conn = db_factory.get_connection(&key)?;
+            let raw_conn = db_factory.get_raw_connection(&key)?;
 
             let issue_repository = Arc::new(DuckDbIssueRepository::new(conn.clone()));
             let change_history_repository =
@@ -513,6 +517,7 @@ async fn handle_sync(
             let metadata_repository = Arc::new(DuckDbMetadataRepository::new(conn.clone()));
             let sync_history_repository = Arc::new(DuckDbSyncHistoryRepository::new(conn.clone()));
             let snapshot_repository = Arc::new(DuckDbIssueSnapshotRepository::new(conn));
+            let raw_repository = Arc::new(RawDataRepository::new(raw_conn));
 
             let use_case = SyncProjectUseCase::new(
                 issue_repository,
@@ -521,7 +526,8 @@ async fn handle_sync(
                 sync_history_repository,
                 snapshot_repository,
                 jira_service.clone(),
-            );
+            )
+            .with_raw_repository(raw_repository);
 
             // Show resuming message if we have a checkpoint
             if let Some(ref cp) = checkpoint {

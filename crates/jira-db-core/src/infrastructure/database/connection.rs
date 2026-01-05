@@ -16,6 +16,11 @@ pub struct Database {
 
 impl Database {
     pub fn new<P: AsRef<Path>>(path: P) -> DomainResult<Self> {
+        Self::new_with_schema(path, true)
+    }
+
+    /// Create a new database with optional schema initialization
+    pub fn new_with_schema<P: AsRef<Path>>(path: P, init_main_schema: bool) -> DomainResult<Self> {
         // Create parent directory if it doesn't exist
         if let Some(parent) = path.as_ref().parent() {
             std::fs::create_dir_all(parent).map_err(|e| {
@@ -27,7 +32,29 @@ impl Database {
             .map_err(|e| DomainError::Repository(format!("Failed to open database: {}", e)))?;
 
         // Initialize schema
-        Schema::init(&conn)?;
+        if init_main_schema {
+            Schema::init(&conn)?;
+        }
+
+        Ok(Self {
+            conn: Arc::new(Mutex::new(conn)),
+        })
+    }
+
+    /// Create a raw data database
+    pub fn new_raw<P: AsRef<Path>>(path: P) -> DomainResult<Self> {
+        // Create parent directory if it doesn't exist
+        if let Some(parent) = path.as_ref().parent() {
+            std::fs::create_dir_all(parent).map_err(|e| {
+                DomainError::Repository(format!("Failed to create database directory: {}", e))
+            })?;
+        }
+
+        let conn = Connection::open(path)
+            .map_err(|e| DomainError::Repository(format!("Failed to open database: {}", e)))?;
+
+        // Initialize raw data schema
+        Schema::init_raw(&conn)?;
 
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
@@ -67,12 +94,21 @@ pub fn checkpoint_connection(conn: &DbConnection) -> DomainResult<()> {
     Ok(())
 }
 
+/// Connection key for the connection cache
+#[derive(Clone, Hash, PartialEq, Eq)]
+struct ConnectionKey {
+    project_key: String,
+    is_raw: bool,
+}
+
 /// Factory for managing per-project database connections
 ///
-/// Each project has its own database file at {database_dir}/{project_key}.duckdb
+/// Each project has its own subdirectory with separate database files:
+/// - {database_dir}/{project_key}/data.duckdb - processed data
+/// - {database_dir}/{project_key}/raw.duckdb - raw JSON data
 pub struct DatabaseFactory {
     database_dir: PathBuf,
-    connections: Arc<Mutex<HashMap<String, DbConnection>>>,
+    connections: Arc<Mutex<HashMap<ConnectionKey, DbConnection>>>,
 }
 
 impl DatabaseFactory {
@@ -92,28 +128,67 @@ impl DatabaseFactory {
         }
     }
 
-    /// Get or create a database connection for a specific project
+    /// Get the project directory path
+    fn get_project_dir(&self, project_key: &str) -> PathBuf {
+        self.database_dir.join(project_key)
+    }
+
+    /// Get or create a database connection for a specific project (main data)
     pub fn get_connection(&self, project_key: &str) -> DomainResult<DbConnection> {
+        let key = ConnectionKey {
+            project_key: project_key.to_string(),
+            is_raw: false,
+        };
+
         let mut connections = self.connections.lock().map_err(|e| {
             DomainError::Repository(format!("Failed to acquire connections lock: {}", e))
         })?;
 
-        if let Some(conn) = connections.get(project_key) {
+        if let Some(conn) = connections.get(&key) {
             return Ok(conn.clone());
         }
 
         // Create new connection for this project
-        let db_path = self.database_dir.join(format!("{}.duckdb", project_key));
+        let db_path = self.get_project_dir(project_key).join("data.duckdb");
         let db = Database::new(&db_path)?;
         let conn = db.connection();
-        connections.insert(project_key.to_string(), conn.clone());
+        connections.insert(key, conn.clone());
 
         Ok(conn)
     }
 
-    /// Get the database path for a specific project
+    /// Get or create a raw data database connection for a specific project
+    pub fn get_raw_connection(&self, project_key: &str) -> DomainResult<DbConnection> {
+        let key = ConnectionKey {
+            project_key: project_key.to_string(),
+            is_raw: true,
+        };
+
+        let mut connections = self.connections.lock().map_err(|e| {
+            DomainError::Repository(format!("Failed to acquire connections lock: {}", e))
+        })?;
+
+        if let Some(conn) = connections.get(&key) {
+            return Ok(conn.clone());
+        }
+
+        // Create new connection for raw data
+        let db_path = self.get_project_dir(project_key).join("raw.duckdb");
+        let db = Database::new_raw(&db_path)?;
+        let conn = db.connection();
+        connections.insert(key, conn.clone());
+
+        Ok(conn)
+    }
+
+    /// Get the main database path for a specific project
     pub fn get_database_path(&self, project_key: &str) -> PathBuf {
-        self.database_dir.join(format!("{}.duckdb", project_key))
+        self.get_project_dir(project_key).join("data.duckdb")
+    }
+
+    /// Get the raw database path for a specific project
+    pub fn get_raw_database_path(&self, project_key: &str) -> PathBuf {
+        self.get_project_dir(project_key).join("raw.duckdb")
     }
 
     /// Get the database directory
@@ -139,9 +214,24 @@ impl DatabaseFactory {
             })?;
 
             let path = entry.path();
-            if path.extension().is_some_and(|ext| ext == "duckdb") {
+
+            // Check for subdirectory with data.duckdb
+            if path.is_dir() {
+                let data_db = path.join("data.duckdb");
+                if data_db.exists() {
+                    if let Some(name) = path.file_name() {
+                        projects.push(name.to_string_lossy().to_string());
+                    }
+                }
+            }
+            // Also check for legacy flat .duckdb files
+            else if path.extension().is_some_and(|ext| ext == "duckdb") {
                 if let Some(stem) = path.file_stem() {
-                    projects.push(stem.to_string_lossy().to_string());
+                    let stem_str = stem.to_string_lossy().to_string();
+                    // Skip if there's already a subdirectory with the same name
+                    if !self.database_dir.join(&stem_str).is_dir() {
+                        projects.push(stem_str);
+                    }
                 }
             }
         }
@@ -155,11 +245,11 @@ impl DatabaseFactory {
             DomainError::Repository(format!("Failed to acquire connections lock: {}", e))
         })?;
 
-        for (project_key, conn) in connections.iter() {
+        for (key, conn) in connections.iter() {
             checkpoint_connection(conn).map_err(|e| {
                 DomainError::Repository(format!(
-                    "Failed to checkpoint database for project {}: {}",
-                    project_key, e
+                    "Failed to checkpoint database for project {} (raw={}): {}",
+                    key.project_key, key.is_raw, e
                 ))
             })?;
         }

@@ -8,6 +8,7 @@ use crate::domain::repositories::{
     SyncHistoryRepository,
 };
 use crate::infrastructure::config::SyncCheckpoint;
+use crate::infrastructure::database::SharedRawDataRepository;
 use chrono::Utc;
 use log::{info, warn};
 use std::sync::Arc;
@@ -35,6 +36,8 @@ where
     sync_history_repository: Arc<S>,
     snapshot_repository: Arc<N>,
     jira_service: Arc<J>,
+    /// Optional repository for storing raw JIRA API JSON data in a separate database
+    raw_repository: Option<SharedRawDataRepository>,
 }
 
 impl<I, C, M, S, N, J> SyncProjectUseCase<I, C, M, S, N, J>
@@ -61,7 +64,14 @@ where
             sync_history_repository,
             snapshot_repository,
             jira_service,
+            raw_repository: None,
         }
+    }
+
+    /// Set the raw data repository for storing JIRA API JSON in a separate database
+    pub fn with_raw_repository(mut self, raw_repository: SharedRawDataRepository) -> Self {
+        self.raw_repository = Some(raw_repository);
+        self
     }
 
     pub async fn execute(&self, project_key: &str, project_id: &str) -> DomainResult<SyncResult> {
@@ -228,6 +238,29 @@ where
                 self.issue_repository
                     .batch_insert(&issues_to_process)
                     .map_err(|e| (e, last_checkpoint.clone()))?;
+
+                // Save raw data to separate database if configured
+                if let Some(ref raw_repo) = self.raw_repository {
+                    let raw_data_items: Vec<(String, String, String, String)> = issues_to_process
+                        .iter()
+                        .filter_map(|issue| {
+                            issue.raw_json.as_ref().map(|raw| {
+                                (
+                                    issue.id.clone(),
+                                    issue.key.clone(),
+                                    project_id.to_string(),
+                                    raw.clone(),
+                                )
+                            })
+                        })
+                        .collect();
+
+                    if !raw_data_items.is_empty() {
+                        raw_repo
+                            .batch_upsert_issue_raw_data(&raw_data_items)
+                            .map_err(|e| (e, last_checkpoint.clone()))?;
+                    }
+                }
 
                 // Extract and save change history for this batch
                 for issue in &issues_to_process {
