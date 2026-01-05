@@ -11,6 +11,9 @@ pub struct Settings {
     pub database: DatabaseConfig,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub embeddings: Option<EmbeddingsConfig>,
+    /// Debug mode enables JIRA test data creation features and verbose logging
+    #[serde(default)]
+    pub debug_mode: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -185,6 +188,7 @@ impl Settings {
                 database_dir: PathBuf::from("./data"),
             },
             embeddings: None,
+            debug_mode: false,
         };
 
         settings.save(&path)?;
@@ -273,6 +277,7 @@ mod tests {
                 database_dir: PathBuf::from("./data"),
             },
             embeddings: None,
+            debug_mode: false,
         };
 
         let json = serde_json::to_string(&settings).unwrap();
@@ -295,6 +300,7 @@ mod tests {
                 database_dir: PathBuf::from("./data"),
             },
             embeddings: None,
+            debug_mode: false,
         };
 
         assert!(settings.validate().is_ok());
@@ -317,6 +323,7 @@ mod tests {
                 database_dir: PathBuf::from("./data"),
             },
             embeddings: None,
+            debug_mode: false,
         };
 
         let path = settings.get_database_path_for_project("MYPROJ");

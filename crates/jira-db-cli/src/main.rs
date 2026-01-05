@@ -25,7 +25,7 @@ use jira_db_core::infrastructure::database::{
 use jira_db_core::infrastructure::external::jira::JiraApiClient;
 use jira_db_core::report::{generate_interactive_report, generate_static_report};
 
-use cli::{Cli, Commands, ConfigAction, FieldsAction, ProjectAction, SnapshotsAction};
+use cli::{Cli, Commands, ConfigAction, DebugAction, FieldsAction, ProjectAction, SnapshotsAction};
 
 #[tokio::main]
 async fn main() {
@@ -156,6 +156,9 @@ async fn run() -> DomainResult<()> {
         Commands::Fields { action } => {
             handle_fields_command(&settings_path, db_factory, jira_service, action).await?;
         }
+        Commands::Debug { action } => {
+            handle_debug_command(&settings, jira_service, action).await?;
+        }
     }
 
     Ok(())
@@ -212,6 +215,7 @@ async fn handle_init_command(
                 database_dir: std::path::PathBuf::from(db_dir),
             },
             embeddings: None,
+            debug_mode: false,
         };
 
         println!("\nTesting JIRA connection...");
@@ -879,6 +883,14 @@ fn handle_config_show(settings_path: &std::path::Path) -> DomainResult<()> {
     println!("  Directory: {}", settings.database.database_dir.display());
     println!("  (Each project has its own database file: <project_key>.duckdb)");
     println!("\nProjects: {}", settings.projects.len());
+    println!(
+        "\nDebug Mode: {}",
+        if settings.debug_mode {
+            "enabled"
+        } else {
+            "disabled"
+        }
+    );
 
     Ok(())
 }
@@ -891,6 +903,9 @@ fn handle_config_set(settings_path: &std::path::Path, key: &str, value: &str) ->
         "jira.username" => settings.jira.username = value.to_string(),
         "jira.api_key" => settings.jira.api_key = value.to_string(),
         "database.database_dir" => settings.database.database_dir = PathBuf::from(value),
+        "debug_mode" => {
+            settings.debug_mode = value.to_lowercase() == "true" || value == "1";
+        }
         _ => {
             return Err(DomainError::Validation(format!(
                 "Unknown configuration key: {}",
@@ -1436,6 +1451,181 @@ async fn handle_fields_command(
             println!("  Fields synced:    {}", result.fields_synced);
             println!("  Columns added:    {}", result.columns_added);
             println!("  Issues expanded:  {}", result.issues_expanded);
+        }
+    }
+
+    Ok(())
+}
+
+async fn handle_debug_command(
+    settings: &Settings,
+    jira_service: Arc<JiraApiClient>,
+    action: DebugAction,
+) -> DomainResult<()> {
+    use comfy_table::{Cell, Table, presets::UTF8_FULL};
+    use jira_db_core::application::use_cases::{CreateTestTicketUseCase, TransitionIssueUseCase};
+
+    // Check if debug mode is enabled
+    if !settings.debug_mode {
+        match action {
+            DebugAction::Status => {
+                println!("Debug mode: disabled");
+                println!("\nTo enable debug mode, set debug_mode: true in settings.json");
+                return Ok(());
+            }
+            _ => {
+                return Err(DomainError::Validation(
+                    "Debug mode is not enabled. Set debug_mode: true in settings.json".into(),
+                ));
+            }
+        }
+    }
+
+    settings.validate()?;
+
+    match action {
+        DebugAction::Status => {
+            println!("Debug mode: enabled");
+            println!("\nAvailable debug commands:");
+            println!("  create-issues     Create test issues in JIRA");
+            println!("  list-transitions  List available transitions for an issue");
+            println!("  transition-issue  Transition a single issue");
+            println!("  bulk-transition   Transition multiple issues");
+        }
+
+        DebugAction::CreateIssues {
+            project,
+            count,
+            issue_type,
+            summary,
+            description,
+        } => {
+            let count = count.min(100).max(1);
+
+            println!(
+                "Creating {} {} issue(s) in project {}...",
+                count, issue_type, project
+            );
+
+            let use_case = CreateTestTicketUseCase::new(jira_service);
+
+            for i in 1..=count {
+                let ticket_summary = if count > 1 {
+                    format!("{} #{}", summary, i)
+                } else {
+                    summary.clone()
+                };
+
+                let result = use_case
+                    .execute(
+                        &project,
+                        &ticket_summary,
+                        description.as_deref(),
+                        &issue_type,
+                    )
+                    .await?;
+
+                let browse_url = format!(
+                    "{}/browse/{}",
+                    settings.jira.endpoint.trim_end_matches('/'),
+                    result.key
+                );
+
+                println!("[{}/{}] Created: {} - {}", i, count, result.key, browse_url);
+            }
+
+            println!("\nSuccessfully created {} issue(s)", count);
+        }
+
+        DebugAction::ListTransitions { issue_key } => {
+            println!("Fetching available transitions for {}...\n", issue_key);
+
+            let use_case = TransitionIssueUseCase::new(jira_service);
+            let transitions = use_case.get_transitions(&issue_key).await?;
+
+            if transitions.is_empty() {
+                println!("No transitions available for this issue.");
+                return Ok(());
+            }
+
+            let mut table = Table::new();
+            table.load_preset(UTF8_FULL);
+            table.set_header(vec!["ID", "Name", "To Status", "Category"]);
+
+            for t in &transitions {
+                table.add_row(vec![
+                    Cell::new(&t.id),
+                    Cell::new(&t.name),
+                    Cell::new(&t.to_status),
+                    Cell::new(t.to_status_category.as_deref().unwrap_or("-")),
+                ]);
+            }
+
+            println!("{table}");
+            println!("\nUse the ID with 'transition-issue' or 'bulk-transition' command");
+        }
+
+        DebugAction::TransitionIssue {
+            issue_key,
+            transition_id,
+        } => {
+            println!(
+                "Transitioning {} with transition ID {}...",
+                issue_key, transition_id
+            );
+
+            let use_case = TransitionIssueUseCase::new(jira_service);
+            use_case.transition(&issue_key, &transition_id).await?;
+
+            println!("Successfully transitioned {}", issue_key);
+        }
+
+        DebugAction::BulkTransition {
+            issues,
+            transition_id,
+        } => {
+            let issue_keys: Vec<String> = issues
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
+
+            if issue_keys.is_empty() {
+                return Err(DomainError::Validation("No issue keys provided".into()));
+            }
+
+            println!(
+                "Transitioning {} issue(s) with transition ID {}...\n",
+                issue_keys.len(),
+                transition_id
+            );
+
+            let use_case = TransitionIssueUseCase::new(jira_service);
+            let results = use_case
+                .transition_multiple(&issue_keys, &transition_id)
+                .await;
+
+            let mut success_count = 0;
+            let mut error_count = 0;
+
+            for result in &results {
+                if result.success {
+                    println!("  [OK] {}", result.issue_key);
+                    success_count += 1;
+                } else {
+                    println!(
+                        "  [FAILED] {} - {}",
+                        result.issue_key,
+                        result.error.as_deref().unwrap_or("Unknown error")
+                    );
+                    error_count += 1;
+                }
+            }
+
+            println!(
+                "\nCompleted: {} success, {} failed",
+                success_count, error_count
+            );
         }
     }
 

@@ -9,6 +9,7 @@ mod search_issues;
 mod sync_fields;
 mod sync_project;
 mod sync_project_list;
+mod transition_issue;
 
 pub use create_test_ticket::CreateTestTicketUseCase;
 pub use execute_sql::{ExecuteSqlUseCase, SqlResult};
@@ -24,3 +25,4 @@ pub use search_issues::SearchIssuesUseCase;
 pub use sync_fields::{SyncFieldsResult, SyncFieldsUseCase};
 pub use sync_project::{ResumableSyncResult, SyncProjectUseCase};
 pub use sync_project_list::SyncProjectListUseCase;
+pub use transition_issue::{TransitionIssueUseCase, TransitionResult};

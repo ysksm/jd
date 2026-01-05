@@ -3,6 +3,7 @@ use crate::domain::error::{DomainError, DomainResult};
 use crate::domain::repositories::MetadataRepository;
 use chrono::{DateTime, Utc};
 use duckdb::Connection;
+use log::debug;
 use std::sync::{Arc, Mutex};
 
 pub struct DuckDbMetadataRepository {
@@ -19,6 +20,12 @@ impl MetadataRepository for DuckDbMetadataRepository {
     fn upsert_statuses(&self, project_id: &str, statuses: &[Status]) -> DomainResult<()> {
         let conn = self.conn.lock().unwrap();
         let now = Utc::now().to_rfc3339();
+
+        debug!(
+            "[SQL] Upserting {} statuses for project {}",
+            statuses.len(),
+            project_id
+        );
 
         for status in statuses {
             conn.execute(

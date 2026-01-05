@@ -3,6 +3,7 @@ use crate::domain::error::{DomainError, DomainResult};
 use crate::domain::repositories::ChangeHistoryRepository;
 use chrono::{DateTime, Utc};
 use duckdb::Connection;
+use log::debug;
 use std::sync::{Arc, Mutex};
 
 pub struct DuckDbChangeHistoryRepository {
@@ -19,6 +20,11 @@ impl ChangeHistoryRepository for DuckDbChangeHistoryRepository {
     fn batch_insert(&self, items: &[ChangeHistoryItem]) -> DomainResult<()> {
         let conn = self.conn.lock().unwrap();
         let now = Utc::now().to_rfc3339();
+
+        debug!(
+            "[SQL] Inserting {} items into issue_change_history table",
+            items.len()
+        );
 
         for item in items {
             conn.execute(
