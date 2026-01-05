@@ -1,6 +1,7 @@
 //! Tauri command handlers
 
 pub mod config;
+pub mod database;
 pub mod embeddings;
 pub mod fields;
 pub mod issues;

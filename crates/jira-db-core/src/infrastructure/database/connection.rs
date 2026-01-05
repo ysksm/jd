@@ -256,4 +256,59 @@ impl DatabaseFactory {
 
         Ok(())
     }
+
+    /// Close and remove a specific project's database connections
+    /// This checkpoints the connections before closing them
+    pub fn close_project(&self, project_key: &str) -> DomainResult<()> {
+        let mut connections = self.connections.lock().map_err(|e| {
+            DomainError::Repository(format!("Failed to acquire connections lock: {}", e))
+        })?;
+
+        // Close main data connection
+        let main_key = ConnectionKey {
+            project_key: project_key.to_string(),
+            is_raw: false,
+        };
+        if let Some(conn) = connections.get(&main_key) {
+            checkpoint_connection(conn)?;
+        }
+        connections.remove(&main_key);
+
+        // Close raw data connection
+        let raw_key = ConnectionKey {
+            project_key: project_key.to_string(),
+            is_raw: true,
+        };
+        if let Some(conn) = connections.get(&raw_key) {
+            checkpoint_connection(conn)?;
+        }
+        connections.remove(&raw_key);
+
+        Ok(())
+    }
+
+    /// Close all database connections
+    /// This checkpoints all connections before closing them
+    pub fn close_all(&self) -> DomainResult<()> {
+        let mut connections = self.connections.lock().map_err(|e| {
+            DomainError::Repository(format!("Failed to acquire connections lock: {}", e))
+        })?;
+
+        for (key, conn) in connections.iter() {
+            checkpoint_connection(conn).map_err(|e| {
+                DomainError::Repository(format!(
+                    "Failed to checkpoint database for project {} (raw={}): {}",
+                    key.project_key, key.is_raw, e
+                ))
+            })?;
+        }
+
+        connections.clear();
+        Ok(())
+    }
+
+    /// Get the number of open connections
+    pub fn open_connection_count(&self) -> usize {
+        self.connections.lock().map(|c| c.len()).unwrap_or(0)
+    }
 }

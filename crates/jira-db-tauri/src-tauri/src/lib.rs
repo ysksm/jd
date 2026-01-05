@@ -142,6 +142,9 @@ pub fn run() {
             commands::sql::sql_query_list,
             commands::sql::sql_query_save,
             commands::sql::sql_query_delete,
+            // Database management
+            commands::database::database_close,
+            commands::database::database_status,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

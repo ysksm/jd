@@ -158,4 +158,34 @@ impl AppState {
             }
         }
     }
+
+    /// Close database connections for a specific project
+    /// This checkpoints and releases the connections
+    pub fn close_db(&self, project_key: &str) -> Result<(), String> {
+        if let Some(ref factory) = *self.db_factory.lock().unwrap() {
+            factory
+                .close_project(project_key)
+                .map_err(|e| e.to_string())?;
+            tracing::debug!("Closed database connections for project {}", project_key);
+        }
+        Ok(())
+    }
+
+    /// Close all database connections
+    pub fn close_all_dbs(&self) -> Result<(), String> {
+        if let Some(ref factory) = *self.db_factory.lock().unwrap() {
+            factory.close_all().map_err(|e| e.to_string())?;
+            tracing::debug!("Closed all database connections");
+        }
+        Ok(())
+    }
+
+    /// Get the number of open database connections
+    pub fn open_db_count(&self) -> usize {
+        self.db_factory
+            .lock()
+            .ok()
+            .and_then(|f| f.as_ref().map(|factory| factory.open_connection_count()))
+            .unwrap_or(0)
+    }
 }

@@ -248,6 +248,17 @@ pub async fn sync_execute(
         total_fields_synced
     );
 
+    // Close database connections after sync to free resources
+    for project in &projects_to_sync {
+        if let Err(e) = state.close_db(&project.key) {
+            tracing::warn!("Failed to close database for {}: {}", project.key, e);
+        }
+    }
+    tracing::debug!(
+        "Closed database connections after sync, {} connections remaining",
+        state.open_db_count()
+    );
+
     Ok(SyncExecuteResponseExtended {
         results,
         total_fields_synced,
