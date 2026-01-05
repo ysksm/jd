@@ -19,7 +19,11 @@ use crate::state::AppState;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct FieldsSyncRequest {}
+pub struct FieldsSyncRequest {
+    /// Project key (required for per-project database)
+    #[serde(rename = "projectKey")]
+    pub project_key: String,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -30,9 +34,13 @@ pub struct FieldsSyncResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FieldsExpandRequest {
+    /// Project key (required for per-project database)
     #[serde(rename = "projectKey")]
+    pub project_key: String,
+    /// Project ID for filtering issues (optional)
+    #[serde(rename = "projectId")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub project_key: Option<String>,
+    pub project_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -45,9 +53,13 @@ pub struct FieldsExpandResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FieldsFullRequest {
+    /// Project key (required for per-project database)
     #[serde(rename = "projectKey")]
+    pub project_key: String,
+    /// Project ID for filtering issues (optional)
+    #[serde(rename = "projectId")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub project_key: Option<String>,
+    pub project_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -60,7 +72,11 @@ pub struct FieldsFullResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct FieldsListRequest {}
+pub struct FieldsListRequest {
+    /// Project key (required for per-project database)
+    #[serde(rename = "projectKey")]
+    pub project_key: String,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -89,10 +105,15 @@ pub struct FieldsListResponse {
 #[tauri::command]
 pub async fn fields_sync(
     state: State<'_, AppState>,
-    _request: FieldsSyncRequest,
+    request: FieldsSyncRequest,
 ) -> Result<FieldsSyncResponse, String> {
     let settings = state.get_settings().ok_or("Not initialized")?;
-    let db = state.get_db().ok_or("Database not initialized")?;
+    let db = state.get_db(&request.project_key).ok_or_else(|| {
+        format!(
+            "Database not initialized for project {}",
+            request.project_key
+        )
+    })?;
 
     // Create JIRA config and client
     let jira_config = JiraConfig {
@@ -112,7 +133,11 @@ pub async fn fields_sync(
     // Execute sync
     let fields_synced = use_case.sync_fields().await.map_err(|e| e.to_string())?;
 
-    tracing::info!("Synced {} fields from JIRA", fields_synced);
+    tracing::info!(
+        "Synced {} fields from JIRA for project {}",
+        fields_synced,
+        request.project_key
+    );
 
     Ok(FieldsSyncResponse {
         fields_synced: fields_synced as i32,
@@ -126,7 +151,12 @@ pub async fn fields_expand(
     request: FieldsExpandRequest,
 ) -> Result<FieldsExpandResponse, String> {
     let settings = state.get_settings().ok_or("Not initialized")?;
-    let db = state.get_db().ok_or("Database not initialized")?;
+    let db = state.get_db(&request.project_key).ok_or_else(|| {
+        format!(
+            "Database not initialized for project {}",
+            request.project_key
+        )
+    })?;
 
     // Create JIRA config and client
     let jira_config = JiraConfig {
@@ -147,15 +177,16 @@ pub async fn fields_expand(
     let added_columns = use_case.add_columns().map_err(|e| e.to_string())?;
     let columns_added = added_columns.len();
 
-    // Expand issues
+    // Expand issues (use project_id if provided)
     let issues_expanded = use_case
-        .expand_issues(request.project_key.as_deref())
+        .expand_issues(request.project_id.as_deref())
         .map_err(|e| e.to_string())?;
 
     tracing::info!(
-        "Added {} columns, expanded {} issues",
+        "Added {} columns, expanded {} issues for project {}",
         columns_added,
-        issues_expanded
+        issues_expanded,
+        request.project_key
     );
 
     Ok(FieldsExpandResponse {
@@ -171,7 +202,12 @@ pub async fn fields_full(
     request: FieldsFullRequest,
 ) -> Result<FieldsFullResponse, String> {
     let settings = state.get_settings().ok_or("Not initialized")?;
-    let db = state.get_db().ok_or("Database not initialized")?;
+    let db = state.get_db(&request.project_key).ok_or_else(|| {
+        format!(
+            "Database not initialized for project {}",
+            request.project_key
+        )
+    })?;
 
     // Create JIRA config and client
     let jira_config = JiraConfig {
@@ -188,14 +224,15 @@ pub async fn fields_full(
     // Create use case
     let use_case = SyncFieldsUseCase::new(jira_client, field_repo, expanded_repo);
 
-    // Execute full sync
+    // Execute full sync (use project_id if provided)
     let result = use_case
-        .execute(request.project_key.as_deref())
+        .execute(request.project_id.as_deref())
         .await
         .map_err(|e| e.to_string())?;
 
     tracing::info!(
-        "Fields full sync: {} fields synced, {} columns added, {} issues expanded",
+        "Fields full sync for {}: {} fields synced, {} columns added, {} issues expanded",
+        request.project_key,
         result.fields_synced,
         result.columns_added,
         result.issues_expanded
@@ -212,9 +249,14 @@ pub async fn fields_full(
 #[tauri::command]
 pub async fn fields_list(
     state: State<'_, AppState>,
-    _request: FieldsListRequest,
+    request: FieldsListRequest,
 ) -> Result<FieldsListResponse, String> {
-    let db = state.get_db().ok_or("Database not initialized")?;
+    let db = state.get_db(&request.project_key).ok_or_else(|| {
+        format!(
+            "Database not initialized for project {}",
+            request.project_key
+        )
+    })?;
 
     // Create repository
     let field_repo = DuckDbFieldRepository::new(db);

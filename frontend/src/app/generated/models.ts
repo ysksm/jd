@@ -327,6 +327,7 @@ export interface ReportGenerateResponse {
 }
 
 export interface SqlExecuteRequest {
+  projectKey?: string;
   query: string;
   limit?: number;
 }
@@ -339,6 +340,7 @@ export interface SqlExecuteResponse {
 }
 
 export interface SqlGetSchemaRequest {
+  projectKey?: string;
   table?: string;
 }
 

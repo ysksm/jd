@@ -1,9 +1,8 @@
 //! Project command handlers
 
-use std::sync::Arc;
 use tauri::State;
 
-use jira_db_core::{DuckDbProjectRepository, JiraApiClient, JiraConfig, SyncProjectListUseCase};
+use jira_db_core::{JiraApiClient, JiraConfig, JiraService};
 
 use crate::generated::*;
 use crate::state::AppState;
@@ -39,7 +38,6 @@ pub async fn projects_initialize(
     _request: ProjectInitRequest,
 ) -> Result<ProjectInitResponse, String> {
     let settings = state.get_settings().ok_or("Not initialized")?;
-    let db = state.get_db().ok_or("Database not initialized")?;
 
     // Create JIRA config and client
     let jira_config = JiraConfig {
@@ -47,14 +45,13 @@ pub async fn projects_initialize(
         username: settings.jira.username.clone(),
         api_key: settings.jira.api_key.clone(),
     };
-    let jira_client = Arc::new(JiraApiClient::new(&jira_config).map_err(|e| e.to_string())?);
+    let jira_client = JiraApiClient::new(&jira_config).map_err(|e| e.to_string())?;
 
-    // Create project repository
-    let project_repo = Arc::new(DuckDbProjectRepository::new(db));
-
-    // Execute use case
-    let use_case = SyncProjectListUseCase::new(project_repo, jira_client);
-    let fetched_projects = use_case.execute().await.map_err(|e| e.to_string())?;
+    // Fetch projects from JIRA (no database needed - projects are stored in settings.json)
+    let fetched_projects = jira_client
+        .fetch_projects()
+        .await
+        .map_err(|e| e.to_string())?;
 
     let new_count = fetched_projects.len() as i32;
 

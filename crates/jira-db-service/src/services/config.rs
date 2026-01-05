@@ -29,7 +29,7 @@ pub fn update(
             }
 
             if let Some(database) = request.database {
-                settings.database.path = PathBuf::from(database.path);
+                settings.database.database_dir = PathBuf::from(database.path);
             }
 
             if let Some(embeddings) = request.embeddings {
@@ -60,24 +60,22 @@ pub fn initialize(
         .get_settings_path()
         .ok_or_else(|| ServiceError::Config("Settings path not configured".to_string()))?;
 
-    // Determine database path
-    let database_path = if let Some(db_path) = request.database_path {
+    // Determine database directory
+    let database_dir = if let Some(db_path) = request.database_path {
         PathBuf::from(db_path)
     } else {
         if let Some(parent) = settings_path.parent() {
-            parent.join("jira.duckdb")
+            parent.join("data")
         } else {
             std::env::current_dir()
-                .map(|cwd| cwd.join("data").join("jira.duckdb"))
-                .unwrap_or_else(|_| PathBuf::from("./data/jira.duckdb"))
+                .map(|cwd| cwd.join("data"))
+                .unwrap_or_else(|_| PathBuf::from("./data"))
         }
     };
 
     // Ensure the database directory exists
-    if let Some(parent) = database_path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| ServiceError::Io(format!("Failed to create database directory: {}", e)))?;
-    }
+    std::fs::create_dir_all(&database_dir)
+        .map_err(|e| ServiceError::Io(format!("Failed to create database directory: {}", e)))?;
 
     let settings = jira_db_core::Settings {
         jira: jira_db_core::JiraConfig {
@@ -87,7 +85,8 @@ pub fn initialize(
         },
         projects: Vec::new(),
         database: jira_db_core::DatabaseConfig {
-            path: database_path,
+            path: None,
+            database_dir,
         },
         embeddings: None,
     };
@@ -111,7 +110,7 @@ fn convert_settings(s: jira_db_core::Settings) -> Settings {
             api_key: s.jira.api_key,
         },
         database: DatabaseConfig {
-            path: s.database.path.to_string_lossy().to_string(),
+            path: s.database.database_dir.to_string_lossy().to_string(),
         },
         projects: s
             .projects

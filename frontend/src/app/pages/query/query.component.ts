@@ -1,4 +1,4 @@
-import { Component, OnInit, signal, computed, inject } from '@angular/core';
+import { Component, OnInit, OnChanges, SimpleChanges, Input, signal, computed, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { SavedQuery, SqlTable, SqlColumn } from '../../generated/models';
@@ -11,8 +11,11 @@ import { API_SERVICE, IApiService } from '../../api.provider';
   templateUrl: './query.component.html',
   styleUrl: './query.component.scss'
 })
-export class QueryComponent implements OnInit {
+export class QueryComponent implements OnInit, OnChanges {
   private api = inject<IApiService>(API_SERVICE);
+
+  // Input for project context (when used inside project detail)
+  @Input() projectKey: string = '';
 
   // Query editor state
   queryText = signal('SELECT * FROM issues LIMIT 10');
@@ -49,13 +52,23 @@ export class QueryComponent implements OnInit {
   hasResults = computed(() => this.columns().length > 0);
 
   ngOnInit(): void {
+    this.initializeComponent();
+  }
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['projectKey'] && !changes['projectKey'].firstChange) {
+      this.initializeComponent();
+    }
+  }
+
+  private initializeComponent(): void {
     this.loadSchema();
     this.loadSavedQueries();
   }
 
   loadSchema(): void {
     this.schemaLoading.set(true);
-    this.api.sqlGetSchema({}).subscribe({
+    this.api.sqlGetSchema({ projectKey: this.projectKey || undefined }).subscribe({
       next: (response) => {
         this.tables.set(response.tables);
         this.schemaLoading.set(false);
@@ -74,7 +87,7 @@ export class QueryComponent implements OnInit {
       return;
     }
 
-    this.api.sqlGetSchema({ table: table.name }).subscribe({
+    this.api.sqlGetSchema({ projectKey: this.projectKey || undefined, table: table.name }).subscribe({
       next: (response) => {
         if (response.tables.length > 0 && response.tables[0].columns) {
           const updatedTable = { ...table, columns: response.tables[0].columns };
@@ -104,7 +117,7 @@ export class QueryComponent implements OnInit {
     this.error.set(null);
     this.successMessage.set(null);
 
-    this.api.sqlExecute({ query: this.queryText(), limit: 100 }).subscribe({
+    this.api.sqlExecute({ projectKey: this.projectKey || undefined, query: this.queryText(), limit: 100 }).subscribe({
       next: (response) => {
         this.columns.set(response.columns);
         this.rows.set(response.rows as Record<string, unknown>[]);

@@ -19,26 +19,23 @@ pub async fn reports_generate(
     request: ReportGenerateRequest,
 ) -> Result<ReportGenerateResponse, String> {
     let settings = state.get_settings().ok_or("Not initialized")?;
-    let db = state.get_db().ok_or("Database not initialized")?;
 
-    // Get projects to include in report
-    let projects_to_report: Vec<_> = if let Some(ref project_key) = request.project_key {
-        settings
-            .projects
-            .iter()
-            .filter(|p| &p.key == project_key)
-            .collect()
-    } else {
-        settings
-            .projects
-            .iter()
-            .filter(|p| p.sync_enabled)
-            .collect()
-    };
+    // Project key is required for per-project database
+    let project_key = request
+        .project_key
+        .as_ref()
+        .ok_or("project_key is required for report generation (per-project database)")?;
 
-    if projects_to_report.is_empty() {
-        return Err("No projects to include in report".to_string());
-    }
+    let db = state
+        .get_db(project_key)
+        .ok_or_else(|| format!("Database not initialized for project {}", project_key))?;
+
+    // Get the project to include in report
+    let project = settings
+        .projects
+        .iter()
+        .find(|p| &p.key == project_key)
+        .ok_or_else(|| format!("Project {} not found", project_key))?;
 
     // Create repositories
     let issue_repo = Arc::new(DuckDbIssueRepository::new(db.clone()));
@@ -47,11 +44,12 @@ pub async fn reports_generate(
     // Create use case
     let use_case = GenerateReportUseCase::new(issue_repo, change_history_repo);
 
-    // Build project keys
-    let project_keys: Vec<(&str, &str, &str)> = projects_to_report
-        .iter()
-        .map(|p| (p.id.as_str(), p.key.as_str(), p.name.as_str()))
-        .collect();
+    // Build project keys (single project)
+    let project_keys: Vec<(&str, &str, &str)> = vec![(
+        project.id.as_str(),
+        project.key.as_str(),
+        project.name.as_str(),
+    )];
 
     // Generate report data
     let report_data = use_case.execute(&project_keys).map_err(|e| e.to_string())?;

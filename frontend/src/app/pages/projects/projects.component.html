@@ -31,7 +31,7 @@
     } @else {
       <div class="project-list">
         @for (project of projects(); track project.key) {
-          <div class="project-card" [class.enabled]="project.enabled">
+          <div class="project-card" [class.enabled]="project.enabled" [class.clickable]="project.enabled" (click)="project.enabled && goToProject(project.key)">
             <div class="project-info">
               <div class="project-key">{{ project.key }}</div>
               <div class="project-name">{{ project.name }}</div>
@@ -41,11 +41,14 @@
             </div>
             <div class="project-actions">
               @if (project.enabled) {
-                <button class="btn btn-secondary" (click)="disableProject(project.key)">
+                <button class="btn btn-secondary" (click)="disableProject(project.key); $event.stopPropagation()">
                   Disable
                 </button>
+                <button class="btn btn-primary" (click)="goToProject(project.key); $event.stopPropagation()">
+                  Open
+                </button>
               } @else {
-                <button class="btn btn-primary" (click)="enableProject(project.key)">
+                <button class="btn btn-primary" (click)="enableProject(project.key); $event.stopPropagation()">
                   Enable
                 </button>
               }

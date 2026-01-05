@@ -4,6 +4,7 @@ use duckdb::Connection;
 pub struct Schema;
 
 impl Schema {
+    /// Initialize the main database schema (processed data)
     pub fn init(conn: &Connection) -> DomainResult<()> {
         Self::create_projects_table(conn)?;
         Self::create_issues_table(conn)?;
@@ -15,6 +16,64 @@ impl Schema {
         Self::create_issues_expanded_table(conn)?;
         Self::create_indexes(conn)?;
         Self::run_migrations(conn)?;
+        Ok(())
+    }
+
+    /// Initialize the raw data database schema
+    pub fn init_raw(conn: &Connection) -> DomainResult<()> {
+        Self::create_raw_issues_table(conn)?;
+        Self::create_raw_projects_table(conn)?;
+        Ok(())
+    }
+
+    fn create_raw_issues_table(conn: &Connection) -> DomainResult<()> {
+        conn.execute(
+            r#"
+            CREATE TABLE IF NOT EXISTS issue_raw_data (
+                id VARCHAR PRIMARY KEY,
+                issue_key VARCHAR NOT NULL,
+                project_id VARCHAR NOT NULL,
+                raw_data JSON NOT NULL,
+                synced_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            )
+            "#,
+            [],
+        )
+        .map_err(|e| {
+            DomainError::Repository(format!("Failed to create issue_raw_data table: {}", e))
+        })?;
+
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_raw_issues_key ON issue_raw_data(issue_key)",
+            [],
+        )
+        .map_err(|e| DomainError::Repository(format!("Failed to create index: {}", e)))?;
+
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_raw_issues_project ON issue_raw_data(project_id)",
+            [],
+        )
+        .map_err(|e| DomainError::Repository(format!("Failed to create index: {}", e)))?;
+
+        Ok(())
+    }
+
+    fn create_raw_projects_table(conn: &Connection) -> DomainResult<()> {
+        conn.execute(
+            r#"
+            CREATE TABLE IF NOT EXISTS project_raw_data (
+                id VARCHAR PRIMARY KEY,
+                project_key VARCHAR NOT NULL,
+                raw_data JSON NOT NULL,
+                synced_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            )
+            "#,
+            [],
+        )
+        .map_err(|e| {
+            DomainError::Repository(format!("Failed to create project_raw_data table: {}", e))
+        })?;
+
         Ok(())
     }
 

@@ -7,10 +7,8 @@ use std::sync::Arc;
 
 use actix_web::{App, HttpServer, web};
 use anyhow::Result;
-use duckdb::Connection;
-use std::sync::Mutex;
 
-use jira_db_core::Database;
+use jira_db_core::DatabaseFactory;
 
 use crate::config::McpConfig;
 use crate::handlers::RequestHandler;
@@ -22,8 +20,9 @@ use crate::transport::{StdioTransport, Transport};
 /// MCP Server for JIRA Database
 ///
 /// Handles MCP protocol communication over various transports.
+/// Uses DatabaseFactory to manage per-project database connections.
 pub struct McpServer {
-    db_conn: Arc<Mutex<Connection>>,
+    db_factory: Arc<DatabaseFactory>,
     #[allow(dead_code)]
     config: McpConfig,
 }
@@ -31,10 +30,10 @@ pub struct McpServer {
 impl McpServer {
     /// Create a new MCP server instance
     pub fn new(config: McpConfig) -> Result<Self> {
-        let db = Database::new(&config.database_path)?;
+        let db_factory = DatabaseFactory::with_dir(&config.database_dir);
 
         Ok(Self {
-            db_conn: db.connection(),
+            db_factory: Arc::new(db_factory),
             config,
         })
     }
@@ -43,7 +42,7 @@ impl McpServer {
     pub async fn run_http(self, host: &str, port: u16) -> Result<()> {
         tracing::info!("Starting MCP HTTP server on {}:{}", host, port);
 
-        let tool_registry = ToolRegistry::new(self.db_conn.clone());
+        let tool_registry = ToolRegistry::new(self.db_factory.clone());
         let state = Arc::new(HttpState::new(tool_registry));
 
         HttpServer::new(move || {
@@ -63,7 +62,7 @@ impl McpServer {
         tracing::info!("Starting MCP server over stdio");
 
         let mut transport = StdioTransport::new();
-        let tool_registry = ToolRegistry::new(self.db_conn.clone());
+        let tool_registry = ToolRegistry::new(self.db_factory.clone());
         let mut handler = RequestHandler::new(tool_registry);
 
         loop {
@@ -124,13 +123,16 @@ mod tests {
     use std::path::PathBuf;
 
     #[test]
-    fn test_server_creation_fails_without_db() {
+    fn test_server_creation_with_nonexistent_dir() {
+        // DatabaseFactory doesn't fail on creation, only when getting connections
         let config = McpConfig {
-            database_path: PathBuf::from("/nonexistent/path/to/db"),
+            database_dir: PathBuf::from("/nonexistent/path/to/data"),
+            database_path: None,
             ..McpConfig::default_config()
         };
 
         let result = McpServer::new(config);
-        assert!(result.is_err());
+        // Server creation should succeed, only connection attempts fail
+        assert!(result.is_ok());
     }
 }

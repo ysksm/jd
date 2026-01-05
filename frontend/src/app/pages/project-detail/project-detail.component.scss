@@ -1,0 +1,267 @@
+.project-detail {
+  h3 {
+    margin: 0 0 1rem 0;
+    color: #333;
+  }
+
+  h4 {
+    margin: 0 0 0.75rem 0;
+    color: #555;
+    font-size: 0.875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #e5e7eb;
+
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .header-right {
+    .last-synced {
+      font-size: 0.875rem;
+      color: #666;
+    }
+  }
+
+  .project-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 1.25rem;
+
+    .project-key {
+      font-weight: 600;
+      color: #4a4ae0;
+    }
+
+    .separator {
+      color: #9ca3af;
+    }
+
+    .project-name {
+      color: #333;
+    }
+  }
+}
+
+.btn {
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: background-color 0.2s, opacity 0.2s;
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  &.btn-ghost {
+    background: transparent;
+    color: #4a4ae0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+
+    &:hover {
+      background-color: #f3f4f6;
+    }
+
+    .icon {
+      font-size: 1.125rem;
+    }
+  }
+
+  &.btn-primary {
+    background-color: #4a4ae0;
+    color: white;
+
+    &:hover:not(:disabled) {
+      background-color: #3a3ad0;
+    }
+  }
+}
+
+.alert {
+  padding: 1rem;
+  border-radius: 6px;
+  margin-bottom: 1rem;
+
+  &.alert-error {
+    background-color: #fef2f2;
+    color: #dc2626;
+    border: 1px solid #fecaca;
+  }
+}
+
+.loading {
+  color: #666;
+  font-style: italic;
+  text-align: center;
+  padding: 2rem;
+}
+
+// Tab Navigation
+.tab-navigation {
+  display: flex;
+  gap: 0.25rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: -1px;
+
+  .tab-button {
+    padding: 0.75rem 1.25rem;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: #6b7280;
+    font-size: 0.9375rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+
+    &:hover {
+      color: #4a4ae0;
+      background-color: #f3f4f6;
+    }
+
+    &.active {
+      color: #4a4ae0;
+      border-bottom-color: #4a4ae0;
+    }
+  }
+}
+
+// Tab Content
+.tab-content {
+  min-height: 400px;
+}
+
+// Overview Tab
+.overview-tab {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.project-info-card,
+.metadata-card {
+  background: white;
+  border-radius: 8px;
+  padding: 1.5rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 1.5rem;
+
+  .info-item {
+    .label {
+      display: block;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #6b7280;
+      margin-bottom: 0.25rem;
+    }
+
+    .value {
+      font-size: 1rem;
+      color: #111827;
+      font-weight: 500;
+
+      &.enabled {
+        color: #16a34a;
+      }
+
+      &.disabled {
+        color: #9ca3af;
+      }
+    }
+  }
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 1rem;
+
+  .stat-item {
+    text-align: center;
+    padding: 1rem;
+    background: #f9fafb;
+    border-radius: 6px;
+
+    .stat-value {
+      display: block;
+      font-size: 1.5rem;
+      font-weight: 600;
+      color: #4a4ae0;
+    }
+
+    .stat-label {
+      display: block;
+      font-size: 0.75rem;
+      color: #6b7280;
+      margin-top: 0.25rem;
+    }
+  }
+}
+
+.metadata-details {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.metadata-section {
+  background: white;
+  border-radius: 8px;
+  padding: 1.5rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+
+  .tag {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    background: #f3f4f6;
+    border-radius: 9999px;
+    font-size: 0.875rem;
+    color: #374151;
+
+    &[data-category="To Do"],
+    &[data-category="new"] {
+      background: #dbeafe;
+      color: #1e40af;
+    }
+
+    &[data-category="In Progress"],
+    &[data-category="indeterminate"] {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    &[data-category="Done"] {
+      background: #d1fae5;
+      color: #065f46;
+    }
+  }
+}

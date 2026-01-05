@@ -1,5 +1,6 @@
 import { Component, OnInit, signal, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { Router } from '@angular/router';
 import { Project } from '../../generated/models';
 import { API_SERVICE, IApiService } from '../../api.provider';
 
@@ -12,6 +13,7 @@ import { API_SERVICE, IApiService } from '../../api.provider';
 })
 export class ProjectsComponent implements OnInit {
   private api = inject<IApiService>(API_SERVICE);
+  private router = inject(Router);
 
   projects = signal<Project[]>([]);
   loading = signal(true);
@@ -93,5 +95,9 @@ export class ProjectsComponent implements OnInit {
 
   get totalCount(): number {
     return this.projects().length;
+  }
+
+  goToProject(projectKey: string): void {
+    this.router.navigate(['/projects', projectKey]);
   }
 }

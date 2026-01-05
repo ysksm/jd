@@ -21,7 +21,12 @@ pub async fn sql_execute(
     state: State<'_, AppState>,
     request: SqlExecuteRequest,
 ) -> Result<SqlExecuteResponse, String> {
-    let db = state.get_db().ok_or("Database not initialized")?;
+    let db = state.get_db(&request.project_key).ok_or_else(|| {
+        format!(
+            "Database not initialized for project {}",
+            request.project_key
+        )
+    })?;
 
     let start = Instant::now();
 
@@ -65,7 +70,12 @@ pub async fn sql_get_schema(
     state: State<'_, AppState>,
     request: SqlGetSchemaRequest,
 ) -> Result<SqlGetSchemaResponse, String> {
-    let db = state.get_db().ok_or("Database not initialized")?;
+    let db = state.get_db(&request.project_key).ok_or_else(|| {
+        format!(
+            "Database not initialized for project {}",
+            request.project_key
+        )
+    })?;
 
     let conn = db
         .lock()

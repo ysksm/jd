@@ -7,8 +7,14 @@ use std::path::{Path, PathBuf};
 /// MCP server configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct McpConfig {
-    /// Path to the DuckDB database file
-    pub database_path: PathBuf,
+    /// Directory containing per-project database files
+    /// Each project will have its own database at {database_dir}/{project_key}.duckdb
+    pub database_dir: PathBuf,
+
+    /// Legacy: Path to a single DuckDB database file (deprecated)
+    /// Kept for backward compatibility, but database_dir is preferred
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub database_path: Option<PathBuf>,
 
     /// HTTP server configuration
     #[serde(default)]
@@ -122,7 +128,8 @@ impl McpConfig {
     /// Create a default configuration
     pub fn default_config() -> Self {
         Self {
-            database_path: PathBuf::from("./data/jira.duckdb"),
+            database_dir: PathBuf::from("./data"),
+            database_path: None,
             http: HttpConfig::default(),
             embedding: EmbeddingConfig::default(),
         }

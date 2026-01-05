@@ -4,31 +4,34 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use async_trait::async_trait;
-use duckdb::Connection;
-use serde_json::Value;
-use std::sync::Mutex;
-
 use jira_db_core::{
-    DuckDbChangeHistoryRepository, DuckDbIssueRepository, DuckDbMetadataRepository,
-    DuckDbProjectRepository, GetChangeHistoryUseCase, GetProjectMetadataUseCase, IssueRepository,
-    ProjectRepository, SearchIssuesUseCase, SearchParams,
+    DatabaseFactory, DuckDbChangeHistoryRepository, DuckDbIssueRepository,
+    DuckDbMetadataRepository, DuckDbProjectRepository, GetChangeHistoryUseCase,
+    GetProjectMetadataUseCase, IssueRepository, ProjectRepository, RawDataRepository,
+    SearchIssuesUseCase, SearchParams,
 };
+use serde_json::Value;
 
 use super::params::*;
 use super::registry::{ToolHandler, build_tool_definition};
 use crate::protocol::{CallToolResult, Tool};
+
+/// Helper function to extract project key from issue key (e.g., "PROJ-123" -> "PROJ")
+fn extract_project_key(issue_key: &str) -> Option<&str> {
+    issue_key.split('-').next()
+}
 
 //=============================================================================
 // SearchIssuesTool
 //=============================================================================
 
 pub struct SearchIssuesTool {
-    db_conn: Arc<Mutex<Connection>>,
+    db_factory: Arc<DatabaseFactory>,
 }
 
 impl SearchIssuesTool {
-    pub fn new(db_conn: Arc<Mutex<Connection>>) -> Self {
-        Self { db_conn }
+    pub fn new(db_factory: Arc<DatabaseFactory>) -> Self {
+        Self { db_factory }
     }
 }
 
@@ -37,19 +40,61 @@ impl ToolHandler for SearchIssuesTool {
     fn definition(&self) -> Tool {
         build_tool_definition::<SearchIssuesParams>(
             "search_issues",
-            "Search for JIRA issues by text query, project, status, or assignee",
+            "Search for JIRA issues by text query, project, status, or assignee. Project key is required to specify which database to search.",
         )
     }
 
     async fn execute(&self, arguments: Value) -> Result<CallToolResult> {
         let params: SearchIssuesParams = serde_json::from_value(arguments)?;
 
-        let repo = DuckDbIssueRepository::new(self.db_conn.clone());
+        // Project key is required for per-project databases
+        let project_key = match &params.project {
+            Some(key) => key.clone(),
+            None => {
+                // If no project specified, search across all available databases
+                let projects = self.db_factory.list_project_databases()?;
+                if projects.is_empty() {
+                    return Ok(CallToolResult::error(
+                        "No project databases found. Run 'jira-db sync' first.",
+                    ));
+                }
+
+                let mut all_issues = Vec::new();
+                for project in &projects {
+                    if let Ok(conn) = self.db_factory.get_connection(project) {
+                        let repo = DuckDbIssueRepository::new(conn);
+                        let use_case = SearchIssuesUseCase::new(Arc::new(repo));
+
+                        let search_params = SearchParams {
+                            query: params.query.clone(),
+                            project_key: Some(project.clone()),
+                            status: params.status.clone(),
+                            assignee: params.assignee.clone(),
+                            issue_type: None,
+                            priority: None,
+                            limit: Some(params.limit.unwrap_or(20)),
+                            offset: params.offset,
+                        };
+
+                        if let Ok(issues) = use_case.execute(search_params) {
+                            all_issues.extend(issues);
+                        }
+                    }
+                }
+
+                let response: Vec<IssueResponse> = all_issues.into_iter().map(Into::into).collect();
+                let json = serde_json::to_string_pretty(&response)?;
+                return Ok(CallToolResult::text(json));
+            }
+        };
+
+        let conn = self.db_factory.get_connection(&project_key)?;
+        let repo = DuckDbIssueRepository::new(conn);
         let use_case = SearchIssuesUseCase::new(Arc::new(repo));
 
         let search_params = SearchParams {
             query: params.query,
-            project_key: params.project,
+            project_key: Some(project_key),
             status: params.status,
             assignee: params.assignee,
             issue_type: None,
@@ -71,12 +116,12 @@ impl ToolHandler for SearchIssuesTool {
 //=============================================================================
 
 pub struct GetIssueTool {
-    db_conn: Arc<Mutex<Connection>>,
+    db_factory: Arc<DatabaseFactory>,
 }
 
 impl GetIssueTool {
-    pub fn new(db_conn: Arc<Mutex<Connection>>) -> Self {
-        Self { db_conn }
+    pub fn new(db_factory: Arc<DatabaseFactory>) -> Self {
+        Self { db_factory }
     }
 }
 
@@ -92,7 +137,12 @@ impl ToolHandler for GetIssueTool {
     async fn execute(&self, arguments: Value) -> Result<CallToolResult> {
         let params: GetIssueParams = serde_json::from_value(arguments)?;
 
-        let repo = DuckDbIssueRepository::new(self.db_conn.clone());
+        // Extract project key from issue key
+        let project_key = extract_project_key(&params.issue_key)
+            .ok_or_else(|| anyhow::anyhow!("Invalid issue key format: {}", params.issue_key))?;
+
+        let conn = self.db_factory.get_connection(project_key)?;
+        let repo = DuckDbIssueRepository::new(conn);
 
         let search_params = SearchParams {
             query: Some(params.issue_key.clone()),
@@ -123,12 +173,12 @@ impl ToolHandler for GetIssueTool {
 //=============================================================================
 
 pub struct GetIssueHistoryTool {
-    db_conn: Arc<Mutex<Connection>>,
+    db_factory: Arc<DatabaseFactory>,
 }
 
 impl GetIssueHistoryTool {
-    pub fn new(db_conn: Arc<Mutex<Connection>>) -> Self {
-        Self { db_conn }
+    pub fn new(db_factory: Arc<DatabaseFactory>) -> Self {
+        Self { db_factory }
     }
 }
 
@@ -144,7 +194,12 @@ impl ToolHandler for GetIssueHistoryTool {
     async fn execute(&self, arguments: Value) -> Result<CallToolResult> {
         let params: GetIssueHistoryParams = serde_json::from_value(arguments)?;
 
-        let repo = DuckDbChangeHistoryRepository::new(self.db_conn.clone());
+        // Extract project key from issue key
+        let project_key = extract_project_key(&params.issue_key)
+            .ok_or_else(|| anyhow::anyhow!("Invalid issue key format: {}", params.issue_key))?;
+
+        let conn = self.db_factory.get_connection(project_key)?;
+        let repo = DuckDbChangeHistoryRepository::new(conn);
         let use_case = GetChangeHistoryUseCase::new(Arc::new(repo));
 
         let history = use_case.execute(&params.issue_key, params.field.as_deref())?;
@@ -165,12 +220,12 @@ impl ToolHandler for GetIssueHistoryTool {
 //=============================================================================
 
 pub struct ListProjectsTool {
-    db_conn: Arc<Mutex<Connection>>,
+    db_factory: Arc<DatabaseFactory>,
 }
 
 impl ListProjectsTool {
-    pub fn new(db_conn: Arc<Mutex<Connection>>) -> Self {
-        Self { db_conn }
+    pub fn new(db_factory: Arc<DatabaseFactory>) -> Self {
+        Self { db_factory }
     }
 }
 
@@ -179,17 +234,37 @@ impl ToolHandler for ListProjectsTool {
     fn definition(&self) -> Tool {
         build_tool_definition::<ListProjectsParams>(
             "list_projects",
-            "List all JIRA projects in the database",
+            "List all JIRA projects with databases available",
         )
     }
 
     async fn execute(&self, _arguments: Value) -> Result<CallToolResult> {
-        let repo = DuckDbProjectRepository::new(self.db_conn.clone());
-        let projects = repo.find_all()?;
+        // List all project databases
+        let project_keys = self.db_factory.list_project_databases()?;
 
-        let response: Vec<ProjectResponse> = projects.into_iter().map(Into::into).collect();
-        let json = serde_json::to_string_pretty(&response)?;
+        let mut all_projects = Vec::new();
+        for key in &project_keys {
+            if let Ok(conn) = self.db_factory.get_connection(key) {
+                let repo = DuckDbProjectRepository::new(conn);
+                if let Ok(projects) = repo.find_all() {
+                    for project in projects {
+                        all_projects.push(ProjectResponse::from(project));
+                    }
+                }
+            }
+        }
 
+        // If no projects found in databases, at least return the database keys
+        if all_projects.is_empty() && !project_keys.is_empty() {
+            let response = serde_json::json!({
+                "available_databases": project_keys,
+                "message": "Project databases found but no project metadata. Run 'jira-db sync' to populate."
+            });
+            let json = serde_json::to_string_pretty(&response)?;
+            return Ok(CallToolResult::text(json));
+        }
+
+        let json = serde_json::to_string_pretty(&all_projects)?;
         Ok(CallToolResult::text(json))
     }
 }
@@ -199,12 +274,12 @@ impl ToolHandler for ListProjectsTool {
 //=============================================================================
 
 pub struct GetProjectMetadataTool {
-    db_conn: Arc<Mutex<Connection>>,
+    db_factory: Arc<DatabaseFactory>,
 }
 
 impl GetProjectMetadataTool {
-    pub fn new(db_conn: Arc<Mutex<Connection>>) -> Self {
-        Self { db_conn }
+    pub fn new(db_factory: Arc<DatabaseFactory>) -> Self {
+        Self { db_factory }
     }
 }
 
@@ -220,12 +295,14 @@ impl ToolHandler for GetProjectMetadataTool {
     async fn execute(&self, arguments: Value) -> Result<CallToolResult> {
         let params: GetProjectMetadataParams = serde_json::from_value(arguments)?;
 
-        let project_repo = DuckDbProjectRepository::new(self.db_conn.clone());
+        let conn = self.db_factory.get_connection(&params.project_key)?;
+
+        let project_repo = DuckDbProjectRepository::new(conn.clone());
         let project = project_repo
             .find_by_key(&params.project_key)?
             .ok_or_else(|| anyhow::anyhow!("Project {} not found", params.project_key))?;
 
-        let metadata_repo = DuckDbMetadataRepository::new(self.db_conn.clone());
+        let metadata_repo = DuckDbMetadataRepository::new(conn);
         let use_case = GetProjectMetadataUseCase::new(Arc::new(metadata_repo));
 
         let metadata = match &params.metadata_type {
@@ -253,12 +330,12 @@ impl ToolHandler for GetProjectMetadataTool {
 //=============================================================================
 
 pub struct GetSchemaTool {
-    db_conn: Arc<Mutex<Connection>>,
+    db_factory: Arc<DatabaseFactory>,
 }
 
 impl GetSchemaTool {
-    pub fn new(db_conn: Arc<Mutex<Connection>>) -> Self {
-        Self { db_conn }
+    pub fn new(db_factory: Arc<DatabaseFactory>) -> Self {
+        Self { db_factory }
     }
 }
 
@@ -267,15 +344,30 @@ impl ToolHandler for GetSchemaTool {
     fn definition(&self) -> Tool {
         build_tool_definition::<GetSchemaParams>(
             "get_schema",
-            "Get the database schema, including table names and column definitions",
+            "Get the database schema, including table names and column definitions. Requires project key to specify which database to query.",
         )
     }
 
     async fn execute(&self, arguments: Value) -> Result<CallToolResult> {
         let params: GetSchemaParams = serde_json::from_value(arguments)?;
 
-        let conn = self
-            .db_conn
+        // Get project key (required for per-project databases)
+        let project_key = match &params.project {
+            Some(key) => key.clone(),
+            None => {
+                // Return list of available databases
+                let projects = self.db_factory.list_project_databases()?;
+                let result = serde_json::json!({
+                    "available_databases": projects,
+                    "message": "Please specify a project key using the 'project' parameter to get schema"
+                });
+                let json = serde_json::to_string_pretty(&result)?;
+                return Ok(CallToolResult::text(json));
+            }
+        };
+
+        let conn = self.db_factory.get_connection(&project_key)?;
+        let conn = conn
             .lock()
             .map_err(|e| anyhow::anyhow!("Failed to lock connection: {}", e))?;
 
@@ -301,6 +393,7 @@ impl ToolHandler for GetSchemaTool {
             let columns: Vec<_> = rows.filter_map(|r| r.ok()).collect();
 
             serde_json::json!({
+                "project": project_key,
                 "table": params.table,
                 "columns": columns
             })
@@ -309,6 +402,7 @@ impl ToolHandler for GetSchemaTool {
             let tables: Vec<_> = rows.filter_map(|r| r.ok()).collect();
 
             serde_json::json!({
+                "project": project_key,
                 "tables": tables
             })
         };
@@ -323,12 +417,12 @@ impl ToolHandler for GetSchemaTool {
 //=============================================================================
 
 pub struct ExecuteSqlTool {
-    db_conn: Arc<Mutex<Connection>>,
+    db_factory: Arc<DatabaseFactory>,
 }
 
 impl ExecuteSqlTool {
-    pub fn new(db_conn: Arc<Mutex<Connection>>) -> Self {
-        Self { db_conn }
+    pub fn new(db_factory: Arc<DatabaseFactory>) -> Self {
+        Self { db_factory }
     }
 }
 
@@ -337,12 +431,25 @@ impl ToolHandler for ExecuteSqlTool {
     fn definition(&self) -> Tool {
         build_tool_definition::<ExecuteSqlParams>(
             "execute_sql",
-            "Execute a read-only SQL query (SELECT statements only) on the JIRA database",
+            "Execute a read-only SQL query (SELECT statements only) on the JIRA database. Requires project key to specify which database to query.",
         )
     }
 
     async fn execute(&self, arguments: Value) -> Result<CallToolResult> {
         let params: ExecuteSqlParams = serde_json::from_value(arguments)?;
+
+        // Get project key (required for per-project databases)
+        let project_key = match &params.project {
+            Some(key) => key.clone(),
+            None => {
+                // Return list of available databases
+                let projects = self.db_factory.list_project_databases()?;
+                return Ok(CallToolResult::error(format!(
+                    "Project key required. Available databases: {:?}",
+                    projects
+                )));
+            }
+        };
 
         // Security checks
         let query_upper = params.query.trim().to_uppercase();
@@ -364,8 +471,8 @@ impl ToolHandler for ExecuteSqlTool {
             }
         }
 
-        let conn = self
-            .db_conn
+        let conn = self.db_factory.get_connection(&project_key)?;
+        let conn = conn
             .lock()
             .map_err(|e| anyhow::anyhow!("Failed to lock connection: {}", e))?;
 
@@ -418,6 +525,7 @@ impl ToolHandler for ExecuteSqlTool {
         let rows: Vec<serde_json::Value> = rows_result.filter_map(|r| r.ok()).collect();
 
         let result = serde_json::json!({
+            "project": project_key,
             "columns": column_names,
             "rows": rows,
             "row_count": rows.len()
@@ -433,25 +541,25 @@ impl ToolHandler for ExecuteSqlTool {
 //=============================================================================
 
 pub struct SemanticSearchTool {
-    db_conn: Arc<Mutex<Connection>>,
+    db_factory: Arc<DatabaseFactory>,
     openai_api_key: Option<String>,
 }
 
 impl SemanticSearchTool {
-    pub fn new(db_conn: Arc<Mutex<Connection>>) -> Self {
+    pub fn new(db_factory: Arc<DatabaseFactory>) -> Self {
         // Try to get OpenAI API key from environment
         let openai_api_key = std::env::var("OPENAI_API_KEY").ok();
         Self {
-            db_conn,
+            db_factory,
             openai_api_key,
         }
     }
 
     #[allow(dead_code)]
-    pub fn with_api_key(db_conn: Arc<Mutex<Connection>>, api_key: Option<String>) -> Self {
+    pub fn with_api_key(db_factory: Arc<DatabaseFactory>, api_key: Option<String>) -> Self {
         let openai_api_key = api_key.or_else(|| std::env::var("OPENAI_API_KEY").ok());
         Self {
-            db_conn,
+            db_factory,
             openai_api_key,
         }
     }
@@ -462,15 +570,27 @@ impl ToolHandler for SemanticSearchTool {
     fn definition(&self) -> Tool {
         build_tool_definition::<SemanticSearchParams>(
             "semantic_search",
-            "Search for issues using natural language semantic search (requires embeddings to be generated with 'jira-db embeddings')",
+            "Search for issues using natural language semantic search (requires embeddings to be generated with 'jira-db embeddings'). Project key is required.",
         )
     }
 
     async fn execute(&self, arguments: Value) -> Result<CallToolResult> {
         let params: SemanticSearchParams = serde_json::from_value(arguments)?;
 
+        // Project key is required
+        let project_key = match &params.project {
+            Some(key) => key.clone(),
+            None => {
+                return Ok(CallToolResult::error(
+                    "Project key is required for semantic search. Use the 'project' parameter.",
+                ));
+            }
+        };
+
+        let conn = self.db_factory.get_connection(&project_key)?;
+
         // Check if embeddings table exists and has data
-        let embeddings_repo = jira_db_core::EmbeddingsRepository::new(self.db_conn.clone());
+        let embeddings_repo = jira_db_core::EmbeddingsRepository::new(conn);
 
         // Check if we have embeddings
         let count = match embeddings_repo.count() {
@@ -524,19 +644,16 @@ impl ToolHandler for SemanticSearchTool {
 
         // Perform semantic search
         let limit = params.limit.unwrap_or(10);
-        let results = match embeddings_repo.semantic_search(
-            &query_embedding,
-            params.project.as_deref(),
-            limit,
-        ) {
-            Ok(results) => results,
-            Err(e) => {
-                return Ok(CallToolResult::error(format!(
-                    "Failed to perform semantic search: {}",
-                    e
-                )));
-            }
-        };
+        let results =
+            match embeddings_repo.semantic_search(&query_embedding, Some(&project_key), limit) {
+                Ok(results) => results,
+                Err(e) => {
+                    return Ok(CallToolResult::error(format!(
+                        "Failed to perform semantic search: {}",
+                        e
+                    )));
+                }
+            };
 
         // Format results
         let response: Vec<serde_json::Value> = results
@@ -554,6 +671,7 @@ impl ToolHandler for SemanticSearchTool {
             .collect();
 
         let result = serde_json::json!({
+            "project": project_key,
             "query": params.query,
             "result_count": response.len(),
             "results": response
@@ -561,5 +679,64 @@ impl ToolHandler for SemanticSearchTool {
 
         let json = serde_json::to_string_pretty(&result)?;
         Ok(CallToolResult::text(json))
+    }
+}
+
+//=============================================================================
+// GetRawIssueDataTool
+//=============================================================================
+
+pub struct GetRawIssueDataTool {
+    db_factory: Arc<DatabaseFactory>,
+}
+
+impl GetRawIssueDataTool {
+    pub fn new(db_factory: Arc<DatabaseFactory>) -> Self {
+        Self { db_factory }
+    }
+}
+
+#[async_trait]
+impl ToolHandler for GetRawIssueDataTool {
+    fn definition(&self) -> Tool {
+        build_tool_definition::<GetRawIssueDataParams>(
+            "get_raw_issue_data",
+            "Get the raw JSON data from JIRA API for a specific issue. This data is stored separately from processed issue data.",
+        )
+    }
+
+    async fn execute(&self, arguments: Value) -> Result<CallToolResult> {
+        let params: GetRawIssueDataParams = serde_json::from_value(arguments)?;
+
+        // Extract project key from issue key
+        let project_key = extract_project_key(&params.issue_key)
+            .ok_or_else(|| anyhow::anyhow!("Invalid issue key format: {}", params.issue_key))?;
+
+        // Get raw connection for this project
+        let raw_conn = match self.db_factory.get_raw_connection(project_key) {
+            Ok(conn) => conn,
+            Err(_) => {
+                return Ok(CallToolResult::error(format!(
+                    "Raw data database not found for project {}. Run sync with raw data enabled.",
+                    project_key
+                )));
+            }
+        };
+
+        let raw_repo = RawDataRepository::new(raw_conn);
+
+        match raw_repo.get_issue_raw_data(&params.issue_key)? {
+            Some(raw_data) => {
+                // Parse and re-format the JSON for pretty output
+                let parsed: serde_json::Value = serde_json::from_str(&raw_data)
+                    .unwrap_or_else(|_| serde_json::Value::String(raw_data));
+                let json = serde_json::to_string_pretty(&parsed)?;
+                Ok(CallToolResult::text(json))
+            }
+            None => Ok(CallToolResult::error(format!(
+                "Raw data not found for issue {}. It may not have been synced with raw data enabled.",
+                params.issue_key
+            ))),
+        }
     }
 }

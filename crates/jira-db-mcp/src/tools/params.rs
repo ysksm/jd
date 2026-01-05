@@ -84,6 +84,10 @@ pub struct GetProjectMetadataParams {
 /// Parameters for getting database schema
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct GetSchemaParams {
+    /// Project key (required for per-project databases)
+    #[schemars(description = "Project key to specify which database to query (e.g., 'PROJ')")]
+    pub project: Option<String>,
+
     /// Table name to get schema for
     #[schemars(
         description = "Table name to get schema for (optional, returns all tables if not specified)"
@@ -94,6 +98,10 @@ pub struct GetSchemaParams {
 /// Parameters for executing SQL queries
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct ExecuteSqlParams {
+    /// Project key (required for per-project databases)
+    #[schemars(description = "Project key to specify which database to query (e.g., 'PROJ')")]
+    pub project: Option<String>,
+
     /// SQL query (SELECT only)
     #[schemars(description = "SQL query to execute (SELECT statements only for read-only access)")]
     pub query: String,
@@ -118,6 +126,14 @@ pub struct SemanticSearchParams {
     /// Maximum number of results
     #[schemars(description = "Maximum number of results (default: 10)")]
     pub limit: Option<usize>,
+}
+
+/// Parameters for getting raw issue data
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct GetRawIssueDataParams {
+    /// Issue key (e.g., "PROJ-123")
+    #[schemars(description = "The issue key (e.g., 'PROJ-123')")]
+    pub issue_key: String,
 }
 
 /// Issue response for JSON output

@@ -2,6 +2,9 @@ import {
   Component,
   OnInit,
   OnDestroy,
+  OnChanges,
+  SimpleChanges,
+  Input,
   signal,
   computed,
   ElementRef,
@@ -46,8 +49,11 @@ interface FilterConfig {
   templateUrl: './visualization.component.html',
   styleUrl: './visualization.component.scss',
 })
-export class VisualizationComponent implements OnInit, OnDestroy, AfterViewInit {
+export class VisualizationComponent implements OnInit, OnDestroy, AfterViewInit, OnChanges {
   @ViewChild('chartContainer') chartContainer!: ElementRef<HTMLDivElement>;
+
+  // Input for project context (when used inside project detail)
+  @Input() projectKey: string = '';
 
   // Query state
   savedQueries = signal<SavedQuery[]>([]);
@@ -233,7 +239,13 @@ ORDER BY 日付`;
   private api = inject<IApiService>(API_SERVICE);
 
   ngOnInit(): void {
-    this.loadSavedQueries();
+    this.initializeComponent();
+  }
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['projectKey'] && !changes['projectKey'].firstChange) {
+      this.initializeComponent();
+    }
   }
 
   ngAfterViewInit(): void {
@@ -242,6 +254,10 @@ ORDER BY 日付`;
 
   ngOnDestroy(): void {
     this.destroyChart();
+  }
+
+  private initializeComponent(): void {
+    this.loadSavedQueries();
   }
 
   loadSavedQueries(): void {
@@ -277,7 +293,7 @@ ORDER BY 日付`;
     this.error.set(null);
     this.successMessage.set(null);
 
-    this.api.sqlExecute({ query, limit: 10000 }).subscribe({
+    this.api.sqlExecute({ projectKey: this.projectKey || undefined, query, limit: 10000 }).subscribe({
       next: (response) => {
         this.columns.set(response.columns);
         this.rows.set(response.rows as Record<string, unknown>[]);

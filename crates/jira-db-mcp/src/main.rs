@@ -43,9 +43,9 @@ struct Args {
     #[arg(long)]
     init: bool,
 
-    /// Database path (overrides config file)
+    /// Database directory containing per-project databases (overrides config file)
     #[arg(long)]
-    database: Option<PathBuf>,
+    database_dir: Option<PathBuf>,
 }
 
 #[tokio::main]
@@ -86,9 +86,9 @@ async fn main() -> Result<()> {
         McpConfig::default_config()
     };
 
-    // Override database path if provided
-    if let Some(db_path) = args.database {
-        config.database_path = db_path;
+    // Override database directory if provided
+    if let Some(db_dir) = args.database_dir {
+        config.database_dir = db_dir;
     }
 
     // Create and run server
