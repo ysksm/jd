@@ -13,12 +13,12 @@ pub mod report;
 
 // Re-export commonly used types for convenience
 pub use application::dto::{CreatedIssueDto, SyncResult};
-pub use application::services::JiraService;
+pub use application::services::{FetchProgress, JiraService};
 pub use application::use_cases::{
     CreateTestTicketUseCase, EmbeddingGenerationConfig, EmbeddingGenerationResult, EmbeddingTiming,
     ExecuteSqlUseCase, GenerateEmbeddingsUseCase, GenerateReportUseCase, GenerateSnapshotsUseCase,
-    GetChangeHistoryUseCase, GetProjectMetadataUseCase, ReportData, SearchIssuesUseCase,
-    SnapshotGenerationResult, SqlResult, SyncFieldsResult, SyncFieldsUseCase,
+    GetChangeHistoryUseCase, GetProjectMetadataUseCase, ReportData, ResumableSyncResult,
+    SearchIssuesUseCase, SnapshotGenerationResult, SqlResult, SyncFieldsResult, SyncFieldsUseCase,
     SyncProjectListUseCase, SyncProjectUseCase,
 };
 
@@ -33,7 +33,7 @@ pub use domain::repositories::{
 };
 
 pub use infrastructure::config::{
-    DatabaseConfig, EmbeddingsConfig, JiraConfig, ProjectConfig, Settings,
+    DatabaseConfig, EmbeddingsConfig, JiraConfig, ProjectConfig, Settings, SyncCheckpoint,
 };
 pub use infrastructure::database::{
     Database, DbConnection, DuckDbChangeHistoryRepository, DuckDbFieldRepository,

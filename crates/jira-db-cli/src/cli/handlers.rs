@@ -189,6 +189,7 @@ where
                 name: project.name.clone(),
                 sync_enabled: false,
                 last_synced: None,
+                sync_checkpoint: None,
             };
             settings.upsert_project(project_config);
         }
@@ -306,10 +307,23 @@ where
             self.jira_service.clone(),
         );
 
+        let settings_path = self.settings_path.clone();
+
         if let Some(key) = project_key {
             let project = settings
                 .find_project(&key)
                 .ok_or_else(|| DomainError::NotFound(format!("Project not found: {}", key)))?;
+
+            let project_id = project.id.clone();
+            let checkpoint = project.sync_checkpoint.clone();
+
+            // Show resuming message if we have a checkpoint
+            if let Some(ref cp) = checkpoint {
+                println!(
+                    "Resuming sync for {} from checkpoint ({}/{} issues processed)",
+                    key, cp.items_processed, cp.total_items
+                );
+            }
 
             let pb = ProgressBar::new_spinner();
             pb.set_style(
@@ -319,31 +333,57 @@ where
             );
             pb.set_message(format!("Syncing project {}...", key));
 
-            let result = use_case.execute(&key, &project.id).await?;
+            // Use resumable sync with checkpoint saving callback
+            let result = use_case
+                .execute_resumable(&key, &project_id, checkpoint, |new_checkpoint| {
+                    // Update progress bar with checkpoint info
+                    pb.set_message(format!(
+                        "Syncing project {}... ({}/{} issues)",
+                        key, new_checkpoint.items_processed, new_checkpoint.total_items
+                    ));
+
+                    // Save checkpoint to settings
+                    if let Ok(mut s) = Settings::load(&settings_path) {
+                        if let Some(p) = s.find_project_mut(&key) {
+                            p.sync_checkpoint = Some(new_checkpoint.clone());
+                        }
+                        let _ = s.save(&settings_path);
+                    }
+                })
+                .await?;
+
             pb.finish_and_clear();
 
-            if result.success {
+            if result.sync_result.success {
                 println!(
                     "Synced {} issues ({} history items) for project {}",
-                    result.issues_synced, result.history_items_synced, key
+                    result.sync_result.issues_synced, result.sync_result.history_items_synced, key
                 );
 
+                // Clear checkpoint on success
                 if let Some(p) = settings.find_project_mut(&key) {
                     p.last_synced = Some(Utc::now());
+                    p.sync_checkpoint = None;
                 }
                 settings.save(&self.settings_path)?;
             } else {
                 println!(
                     "Sync failed for project {}: {}",
                     key,
-                    result.error_message.unwrap_or_default()
+                    result.sync_result.error_message.unwrap_or_default()
                 );
+
+                // Save checkpoint for resume (already saved in callback, but update last_synced)
+                if let Some(p) = settings.find_project_mut(&key) {
+                    p.sync_checkpoint = result.checkpoint;
+                }
+                settings.save(&self.settings_path)?;
             }
         } else {
             let enabled_projects: Vec<_> = settings
                 .sync_enabled_projects()
                 .iter()
-                .map(|p| (p.key.clone(), p.id.clone()))
+                .map(|p| (p.key.clone(), p.id.clone(), p.sync_checkpoint.clone()))
                 .collect();
 
             if enabled_projects.is_empty() {
@@ -353,20 +393,49 @@ where
 
             info!("Syncing {} projects", enabled_projects.len());
 
-            for (key, id) in enabled_projects {
-                match use_case.execute(&key, &id).await {
+            for (key, id, checkpoint) in enabled_projects {
+                // Show resuming message if we have a checkpoint
+                if let Some(ref cp) = checkpoint {
+                    println!(
+                        "Resuming sync for {} from checkpoint ({}/{} issues processed)",
+                        key, cp.items_processed, cp.total_items
+                    );
+                }
+
+                let settings_path_clone = settings_path.clone();
+                let key_clone = key.clone();
+
+                match use_case
+                    .execute_resumable(&key, &id, checkpoint, |new_checkpoint| {
+                        // Save checkpoint to settings
+                        if let Ok(mut s) = Settings::load(&settings_path_clone) {
+                            if let Some(p) = s.find_project_mut(&key_clone) {
+                                p.sync_checkpoint = Some(new_checkpoint.clone());
+                            }
+                            let _ = s.save(&settings_path_clone);
+                        }
+                    })
+                    .await
+                {
                     Ok(result) => {
-                        if result.success {
-                            println!("Synced {} issues for project {}", result.issues_synced, key);
+                        if result.sync_result.success {
+                            println!(
+                                "Synced {} issues for project {}",
+                                result.sync_result.issues_synced, key
+                            );
                             if let Some(p) = settings.find_project_mut(&key) {
                                 p.last_synced = Some(Utc::now());
+                                p.sync_checkpoint = None;
                             }
                         } else {
                             warn!(
                                 "Sync failed for project {}: {}",
                                 key,
-                                result.error_message.unwrap_or_default()
+                                result.sync_result.error_message.unwrap_or_default()
                             );
+                            if let Some(p) = settings.find_project_mut(&key) {
+                                p.sync_checkpoint = result.checkpoint;
+                            }
                         }
                     }
                     Err(e) => {

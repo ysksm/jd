@@ -1,15 +1,24 @@
 use crate::application::dto::SyncResult;
 use crate::application::services::JiraService;
 use crate::application::use_cases::GenerateSnapshotsUseCase;
-use crate::domain::entities::ChangeHistoryItem;
+use crate::domain::entities::{ChangeHistoryItem, Issue};
 use crate::domain::error::DomainResult;
 use crate::domain::repositories::{
     ChangeHistoryRepository, IssueRepository, IssueSnapshotRepository, MetadataRepository,
     SyncHistoryRepository,
 };
+use crate::infrastructure::config::SyncCheckpoint;
 use chrono::Utc;
 use log::{info, warn};
 use std::sync::Arc;
+
+/// Result of resumable sync operation
+#[derive(Debug)]
+pub struct ResumableSyncResult {
+    pub sync_result: SyncResult,
+    /// Checkpoint to save (Some if sync failed and can be resumed, None if completed)
+    pub checkpoint: Option<SyncCheckpoint>,
+}
 
 pub struct SyncProjectUseCase<I, C, M, S, N, J>
 where
@@ -56,14 +65,53 @@ where
     }
 
     pub async fn execute(&self, project_key: &str, project_id: &str) -> DomainResult<SyncResult> {
-        info!("Syncing project: {}", project_key);
+        // Use resumable sync without checkpoint (full sync)
+        let result = self
+            .execute_resumable(project_key, project_id, None, |_| {})
+            .await?;
+        Ok(result.sync_result)
+    }
+
+    /// Execute resumable sync with checkpoint support
+    ///
+    /// # Arguments
+    /// * `project_key` - The JIRA project key
+    /// * `project_id` - The JIRA project ID
+    /// * `checkpoint` - Optional checkpoint to resume from
+    /// * `on_progress` - Callback called after each batch with the new checkpoint
+    ///
+    /// # Returns
+    /// ResumableSyncResult containing the sync result and checkpoint (if sync failed)
+    pub async fn execute_resumable<F>(
+        &self,
+        project_key: &str,
+        project_id: &str,
+        checkpoint: Option<SyncCheckpoint>,
+        mut on_progress: F,
+    ) -> DomainResult<ResumableSyncResult>
+    where
+        F: FnMut(&SyncCheckpoint) + Send,
+    {
+        if checkpoint.is_some() {
+            info!("Resuming sync for project: {} from checkpoint", project_key);
+        } else {
+            info!("Syncing project: {}", project_key);
+        }
 
         let started_at = Utc::now();
+        let sync_type = if checkpoint.is_some() {
+            "resumable"
+        } else {
+            "full"
+        };
         let history_id = self
             .sync_history_repository
-            .insert(project_id, "full", started_at)?;
+            .insert(project_id, sync_type, started_at)?;
 
-        match self.sync_internal(project_key, project_id).await {
+        match self
+            .sync_internal_resumable(project_key, project_id, checkpoint, &mut on_progress)
+            .await
+        {
             Ok((issues_count, history_count)) => {
                 let completed_at = Utc::now();
                 self.sync_history_repository.update_completed(
@@ -76,87 +124,192 @@ where
                     "Successfully synced {} issues for project {}",
                     issues_count, project_key
                 );
-                Ok(SyncResult::success(
-                    project_key.to_string(),
-                    issues_count,
-                    history_count,
-                ))
+                Ok(ResumableSyncResult {
+                    sync_result: SyncResult::success(
+                        project_key.to_string(),
+                        issues_count,
+                        history_count,
+                    ),
+                    checkpoint: None, // Clear checkpoint on success
+                })
             }
-            Err(e) => {
+            Err((e, last_checkpoint)) => {
                 let completed_at = Utc::now();
                 self.sync_history_repository.update_failed(
                     history_id,
                     &e.to_string(),
                     completed_at,
                 )?;
-                Ok(SyncResult::failure(project_key.to_string(), e.to_string()))
+                Ok(ResumableSyncResult {
+                    sync_result: SyncResult::failure(project_key.to_string(), e.to_string()),
+                    checkpoint: last_checkpoint, // Keep checkpoint for resume
+                })
             }
         }
     }
 
-    async fn sync_internal(
+    /// Internal sync with resumable support
+    /// Returns Ok((issues_count, history_count)) on success
+    /// Returns Err((error, last_checkpoint)) on failure with the last successful checkpoint
+    async fn sync_internal_resumable<F>(
         &self,
         project_key: &str,
         project_id: &str,
-    ) -> DomainResult<(usize, usize)> {
+        checkpoint: Option<SyncCheckpoint>,
+        on_progress: &mut F,
+    ) -> Result<(usize, usize), (crate::domain::error::DomainError, Option<SyncCheckpoint>)>
+    where
+        F: FnMut(&SyncCheckpoint) + Send,
+    {
         info!("Fetching issues for project: {}", project_key);
 
-        let issues = self.jira_service.fetch_project_issues(project_key).await?;
-        let count = issues.len();
+        // Determine where to resume from
+        let after_updated_at = checkpoint.as_ref().map(|cp| cp.last_issue_updated_at);
+        let skip_until_key = checkpoint.as_ref().map(|cp| cp.last_issue_key.clone());
+        let mut items_processed = checkpoint
+            .as_ref()
+            .map(|cp| cp.items_processed)
+            .unwrap_or(0);
 
-        info!("Fetched {} issues, saving to database...", count);
+        // Collect all issues using batch fetching
+        let mut all_issues: Vec<Issue> = Vec::new();
+        let mut all_issue_keys: Vec<String> = Vec::new();
+        let mut start_at = 0;
+        let max_results = 100;
+        let mut total_items: usize;
+        let mut last_checkpoint: Option<SyncCheckpoint> = checkpoint.clone();
+        let mut skipping = skip_until_key.is_some();
 
-        // Save issues in chunks
-        let chunk_size = 50;
-        for chunk in issues.chunks(chunk_size) {
-            self.issue_repository.batch_insert(chunk)?;
+        loop {
+            // Fetch a batch of issues
+            let progress = self
+                .jira_service
+                .fetch_project_issues_batch(project_key, after_updated_at, start_at, max_results)
+                .await
+                .map_err(|e| (e, last_checkpoint.clone()))?;
+
+            total_items = progress.total;
+
+            if progress.issues.is_empty() {
+                break;
+            }
+
+            // Filter out already processed issues when resuming
+            let issues_to_process: Vec<Issue> = if skipping {
+                let mut filtered = Vec::new();
+                for issue in progress.issues {
+                    if skipping {
+                        // Skip until we find the issue after the checkpoint
+                        if let Some(ref skip_key) = skip_until_key {
+                            if issue.key == *skip_key {
+                                skipping = false;
+                                // Skip this issue too (it was already processed)
+                                continue;
+                            }
+                        }
+                        continue;
+                    }
+                    filtered.push(issue);
+                }
+                filtered
+            } else {
+                progress.issues
+            };
+
+            if !issues_to_process.is_empty() {
+                info!(
+                    "Processing batch: {} issues (total progress: {}/{})",
+                    issues_to_process.len(),
+                    items_processed + issues_to_process.len(),
+                    total_items
+                );
+
+                // Save issues to database
+                self.issue_repository
+                    .batch_insert(&issues_to_process)
+                    .map_err(|e| (e, last_checkpoint.clone()))?;
+
+                // Extract and save change history for this batch
+                for issue in &issues_to_process {
+                    if let Some(raw_json) = &issue.raw_json {
+                        self.change_history_repository
+                            .delete_by_issue_id(&issue.id)
+                            .map_err(|e| (e, last_checkpoint.clone()))?;
+
+                        let history_items = ChangeHistoryItem::extract_from_raw_json(
+                            &issue.id, &issue.key, raw_json,
+                        );
+
+                        if !history_items.is_empty() {
+                            self.change_history_repository
+                                .batch_insert(&history_items)
+                                .map_err(|e| (e, last_checkpoint.clone()))?;
+                        }
+                    }
+                }
+
+                // Update checkpoint after successful batch processing
+                let batch_len = issues_to_process.len();
+                if batch_len > 0 {
+                    items_processed += batch_len;
+                    all_issue_keys.extend(issues_to_process.iter().map(|i| i.key.clone()));
+                    all_issues.extend(issues_to_process);
+
+                    // Get the last issue from all_issues (which now contains the batch)
+                    if let Some(last_issue) = all_issues.last() {
+                        let new_checkpoint = SyncCheckpoint {
+                            last_issue_updated_at: last_issue.updated_date.unwrap_or_else(Utc::now),
+                            last_issue_key: last_issue.key.clone(),
+                            items_processed,
+                            total_items,
+                        };
+
+                        // Notify progress callback
+                        on_progress(&new_checkpoint);
+                        last_checkpoint = Some(new_checkpoint);
+                    }
+                }
+            }
+
+            if !progress.has_more {
+                break;
+            }
+            start_at = progress.fetched_so_far;
         }
+
+        let count = all_issues.len();
+        info!("Fetched and saved {} issues total", count);
 
         // Mark issues that no longer exist in JIRA as deleted (soft delete)
-        let issue_keys: Vec<String> = issues.iter().map(|i| i.key.clone()).collect();
-        let deleted_count = self
-            .issue_repository
-            .mark_deleted_not_in_keys(project_id, &issue_keys)?;
-        if deleted_count > 0 {
-            info!(
-                "Marked {} issues as deleted (no longer in JIRA)",
-                deleted_count
-            );
-        }
-
-        // Extract and save change history
-        info!("Extracting and saving change history...");
-        let mut total_history_items = 0;
-
-        for issue in &issues {
-            if let Some(raw_json) = &issue.raw_json {
-                self.change_history_repository
-                    .delete_by_issue_id(&issue.id)?;
-
-                let history_items =
-                    ChangeHistoryItem::extract_from_raw_json(&issue.id, &issue.key, raw_json);
-
-                if !history_items.is_empty() {
-                    info!(
-                        "  {} has {} change history items",
-                        issue.key,
-                        history_items.len()
-                    );
-                    self.change_history_repository
-                        .batch_insert(&history_items)?;
-                    total_history_items += history_items.len();
-                }
-            } else {
-                warn!("  {} has no raw_json", issue.key);
+        // Only do this for full sync (not resumable)
+        if checkpoint.is_none() && !all_issue_keys.is_empty() {
+            let deleted_count = self
+                .issue_repository
+                .mark_deleted_not_in_keys(project_id, &all_issue_keys)
+                .map_err(|e| (e, last_checkpoint.clone()))?;
+            if deleted_count > 0 {
+                info!(
+                    "Marked {} issues as deleted (no longer in JIRA)",
+                    deleted_count
+                );
             }
         }
+
+        // Count total history items
+        let total_history_items = all_issues
+            .iter()
+            .filter_map(|i| i.raw_json.as_ref())
+            .map(|json| ChangeHistoryItem::extract_from_raw_json("", "", json).len())
+            .sum();
 
         if total_history_items > 0 {
             info!("Saved {} change history items", total_history_items);
         }
 
         // Fetch and save metadata
-        self.sync_metadata(project_key, project_id).await?;
+        self.sync_metadata(project_key, project_id)
+            .await
+            .map_err(|e| (e, last_checkpoint.clone()))?;
 
         // Generate issue snapshots
         info!("Generating issue snapshots...");

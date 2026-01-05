@@ -5,12 +5,13 @@ use std::time::Duration;
 use tokio::time::{sleep, timeout};
 
 use crate::application::dto::CreatedIssueDto;
-use crate::application::services::JiraService;
+use crate::application::services::{FetchProgress, JiraService};
 use crate::domain::entities::{
     Component, FixVersion, Issue, IssueType, JiraField, Label, Priority, Project, Status,
 };
 use crate::domain::error::{DomainError, DomainResult};
 use crate::infrastructure::config::JiraConfig;
+use chrono::{DateTime, Utc};
 
 pub struct JiraApiClient {
     client: jira_api::JiraClient,
@@ -150,6 +151,91 @@ impl JiraApiClient {
 
         None
     }
+
+    /// Parse a single issue from JSON response
+    fn parse_issue(issue_json: &serde_json::Value) -> Option<Issue> {
+        let id = issue_json["id"].as_str()?;
+        let key = issue_json["key"].as_str()?;
+        let fields = &issue_json["fields"];
+
+        let project_id = fields["project"]["id"].as_str().unwrap_or("").to_string();
+        let summary = fields["summary"].as_str().unwrap_or("").to_string();
+        let description = fields["description"].as_str().map(|s| s.to_string());
+        let status = fields["status"]["name"].as_str().map(|s| s.to_string());
+        let priority = fields["priority"]["name"].as_str().map(|s| s.to_string());
+        let assignee = fields["assignee"]["displayName"]
+            .as_str()
+            .map(|s| s.to_string());
+        let reporter = fields["reporter"]["displayName"]
+            .as_str()
+            .map(|s| s.to_string());
+        let issue_type = fields["issuetype"]["name"].as_str().map(|s| s.to_string());
+        let resolution = fields["resolution"]["name"].as_str().map(|s| s.to_string());
+
+        let labels = fields["labels"]
+            .as_array()
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                    .collect::<Vec<String>>()
+            })
+            .filter(|v| !v.is_empty());
+
+        let components = fields["components"]
+            .as_array()
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v["name"].as_str().map(|s| s.to_string()))
+                    .collect::<Vec<String>>()
+            })
+            .filter(|v| !v.is_empty());
+
+        let fix_versions = fields["fixVersions"]
+            .as_array()
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v["name"].as_str().map(|s| s.to_string()))
+                    .collect::<Vec<String>>()
+            })
+            .filter(|v| !v.is_empty());
+
+        let sprint = Self::extract_sprint(fields);
+        let parent_key = fields["parent"]["key"].as_str().map(|s| s.to_string());
+
+        let created_date = fields["created"]
+            .as_str()
+            .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+            .map(|dt| dt.with_timezone(&chrono::Utc));
+
+        let updated_date = fields["updated"]
+            .as_str()
+            .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+            .map(|dt| dt.with_timezone(&chrono::Utc));
+
+        let raw_json = serde_json::to_string(&issue_json).ok();
+
+        Some(Issue::new(
+            id.to_string(),
+            project_id,
+            key.to_string(),
+            summary,
+            description,
+            status,
+            priority,
+            assignee,
+            reporter,
+            issue_type,
+            resolution,
+            labels,
+            components,
+            fix_versions,
+            sprint,
+            parent_key,
+            created_date,
+            updated_date,
+            raw_json,
+        ))
+    }
 }
 
 #[async_trait]
@@ -168,160 +254,100 @@ impl JiraService for JiraApiClient {
     }
 
     async fn fetch_project_issues(&self, project_key: &str) -> DomainResult<Vec<Issue>> {
-        let jql = format!("project = {} ORDER BY created DESC", project_key);
-        let url = format!("{}/rest/api/3/search/jql", self.base_url);
-
+        // Use the batch method to fetch all issues
         let mut all_issues = Vec::new();
         let mut start_at = 0;
         let max_results = 100;
 
         loop {
-            let response = self
-                .http_client
-                .get(&url)
-                .query(&[
-                    ("jql", jql.as_str()),
-                    ("fields", "*navigable"),
-                    ("expand", "changelog"),
-                    ("maxResults", &max_results.to_string()),
-                    ("startAt", &start_at.to_string()),
-                ])
-                .header("Authorization", &self.auth_header)
-                .header("Accept", "application/json")
-                .send()
-                .await
-                .map_err(|e| {
-                    DomainError::ExternalService(format!("Failed to fetch issues: {}", e))
-                })?;
+            let progress = self
+                .fetch_project_issues_batch(project_key, None, start_at, max_results)
+                .await?;
 
-            if !response.status().is_success() {
-                let status = response.status();
-                let error_text = response
-                    .text()
-                    .await
-                    .unwrap_or_else(|_| "Could not read error response".to_string());
-                return Err(DomainError::ExternalService(format!(
-                    "Failed to fetch issues: {} - {}",
-                    status, error_text
-                )));
-            }
+            all_issues.extend(progress.issues);
 
-            let json: serde_json::Value = response.json().await.map_err(|e| {
-                DomainError::ExternalService(format!("Failed to parse issues: {}", e))
-            })?;
-
-            let total = json["total"].as_i64().unwrap_or(0);
-
-            if let Some(issues_array) = json["issues"].as_array() {
-                for issue_json in issues_array {
-                    if let (Some(id), Some(key)) =
-                        (issue_json["id"].as_str(), issue_json["key"].as_str())
-                    {
-                        let fields = &issue_json["fields"];
-
-                        let project_id = fields["project"]["id"].as_str().unwrap_or("").to_string();
-
-                        let summary = fields["summary"].as_str().unwrap_or("").to_string();
-
-                        let description = fields["description"].as_str().map(|s| s.to_string());
-
-                        let status = fields["status"]["name"].as_str().map(|s| s.to_string());
-
-                        let priority = fields["priority"]["name"].as_str().map(|s| s.to_string());
-
-                        let assignee = fields["assignee"]["displayName"]
-                            .as_str()
-                            .map(|s| s.to_string());
-
-                        let reporter = fields["reporter"]["displayName"]
-                            .as_str()
-                            .map(|s| s.to_string());
-
-                        let issue_type =
-                            fields["issuetype"]["name"].as_str().map(|s| s.to_string());
-
-                        let resolution =
-                            fields["resolution"]["name"].as_str().map(|s| s.to_string());
-
-                        let labels = fields["labels"]
-                            .as_array()
-                            .map(|arr| {
-                                arr.iter()
-                                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                                    .collect::<Vec<String>>()
-                            })
-                            .filter(|v| !v.is_empty());
-
-                        let components = fields["components"]
-                            .as_array()
-                            .map(|arr| {
-                                arr.iter()
-                                    .filter_map(|v| v["name"].as_str().map(|s| s.to_string()))
-                                    .collect::<Vec<String>>()
-                            })
-                            .filter(|v| !v.is_empty());
-
-                        let fix_versions = fields["fixVersions"]
-                            .as_array()
-                            .map(|arr| {
-                                arr.iter()
-                                    .filter_map(|v| v["name"].as_str().map(|s| s.to_string()))
-                                    .collect::<Vec<String>>()
-                            })
-                            .filter(|v| !v.is_empty());
-
-                        // Extract sprint - JIRA stores sprints in customfield_10020 or similar
-                        // Sprint can be an array of sprint objects with "name" field
-                        let sprint = Self::extract_sprint(fields);
-
-                        let parent_key = fields["parent"]["key"].as_str().map(|s| s.to_string());
-
-                        let created_date = fields["created"]
-                            .as_str()
-                            .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
-                            .map(|dt| dt.with_timezone(&chrono::Utc));
-
-                        let updated_date = fields["updated"]
-                            .as_str()
-                            .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
-                            .map(|dt| dt.with_timezone(&chrono::Utc));
-
-                        let raw_json = serde_json::to_string(&issue_json).ok();
-
-                        all_issues.push(Issue::new(
-                            id.to_string(),
-                            project_id,
-                            key.to_string(),
-                            summary,
-                            description,
-                            status,
-                            priority,
-                            assignee,
-                            reporter,
-                            issue_type,
-                            resolution,
-                            labels,
-                            components,
-                            fix_versions,
-                            sprint,
-                            parent_key,
-                            created_date,
-                            updated_date,
-                            raw_json,
-                        ));
-                    }
-                }
-
-                if (start_at + max_results) >= total as usize {
-                    break;
-                }
-                start_at += max_results;
-            } else {
+            if !progress.has_more {
                 break;
             }
+            start_at = progress.fetched_so_far;
         }
 
         Ok(all_issues)
+    }
+
+    async fn fetch_project_issues_batch(
+        &self,
+        project_key: &str,
+        after_updated_at: Option<DateTime<Utc>>,
+        start_at: usize,
+        max_results: usize,
+    ) -> DomainResult<FetchProgress> {
+        // Build JQL: order by updated ASC (oldest first) for resumable sync
+        let jql = if let Some(after) = after_updated_at {
+            format!(
+                "project = {} AND updated >= \"{}\" ORDER BY updated ASC, key ASC",
+                project_key,
+                after.format("%Y-%m-%d %H:%M")
+            )
+        } else {
+            format!("project = {} ORDER BY updated ASC, key ASC", project_key)
+        };
+
+        let url = format!("{}/rest/api/3/search/jql", self.base_url);
+
+        let response = self
+            .http_client
+            .get(&url)
+            .query(&[
+                ("jql", jql.as_str()),
+                ("fields", "*navigable"),
+                ("expand", "changelog"),
+                ("maxResults", &max_results.to_string()),
+                ("startAt", &start_at.to_string()),
+            ])
+            .header("Authorization", &self.auth_header)
+            .header("Accept", "application/json")
+            .send()
+            .await
+            .map_err(|e| DomainError::ExternalService(format!("Failed to fetch issues: {}", e)))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Could not read error response".to_string());
+            return Err(DomainError::ExternalService(format!(
+                "Failed to fetch issues: {} - {}",
+                status, error_text
+            )));
+        }
+
+        let json: serde_json::Value = response
+            .json()
+            .await
+            .map_err(|e| DomainError::ExternalService(format!("Failed to parse issues: {}", e)))?;
+
+        let total = json["total"].as_i64().unwrap_or(0) as usize;
+
+        let mut issues = Vec::new();
+        if let Some(issues_array) = json["issues"].as_array() {
+            for issue_json in issues_array {
+                if let Some(issue) = Self::parse_issue(issue_json) {
+                    issues.push(issue);
+                }
+            }
+        }
+
+        let fetched_so_far = start_at + issues.len();
+        let has_more = fetched_so_far < total;
+
+        Ok(FetchProgress {
+            issues,
+            total,
+            fetched_so_far,
+            has_more,
+        })
     }
 
     async fn test_connection(&self) -> DomainResult<()> {

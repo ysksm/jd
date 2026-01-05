@@ -22,5 +22,5 @@ pub use get_change_history::GetChangeHistoryUseCase;
 pub use get_project_metadata::GetProjectMetadataUseCase;
 pub use search_issues::SearchIssuesUseCase;
 pub use sync_fields::{SyncFieldsResult, SyncFieldsUseCase};
-pub use sync_project::SyncProjectUseCase;
+pub use sync_project::{ResumableSyncResult, SyncProjectUseCase};
 pub use sync_project_list::SyncProjectListUseCase;
