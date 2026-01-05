@@ -11,6 +11,11 @@ use jira_db_core::{
 use crate::generated::*;
 use crate::state::AppState;
 
+/// Extract project key from issue key (e.g., "PROJ-123" -> "PROJ")
+fn extract_project_key(issue_key: &str) -> Option<&str> {
+    issue_key.split('-').next()
+}
+
 /// Convert core Issue to generated Issue type
 fn convert_issue(i: jira_db_core::Issue) -> Issue {
     Issue {
@@ -40,14 +45,22 @@ pub async fn issues_search(
     state: State<'_, AppState>,
     request: IssueSearchRequest,
 ) -> Result<IssueSearchResponse, String> {
-    let db = state.get_db().ok_or("Database not initialized")?;
+    // Project key is required for per-project database
+    let project_key = request
+        .project
+        .as_ref()
+        .ok_or("project is required for search (per-project database)")?;
+
+    let db = state
+        .get_db(project_key)
+        .ok_or_else(|| format!("Database not initialized for project {}", project_key))?;
 
     let issue_repo = Arc::new(DuckDbIssueRepository::new(db));
     let use_case = SearchIssuesUseCase::new(issue_repo);
 
     let params = SearchParams {
         query: request.query,
-        project_key: request.project,
+        project_key: request.project.clone(),
         status: request.status,
         assignee: request.assignee,
         issue_type: request.issue_type,
@@ -70,7 +83,13 @@ pub async fn issues_get(
     state: State<'_, AppState>,
     request: IssueGetRequest,
 ) -> Result<IssueGetResponse, String> {
-    let db = state.get_db().ok_or("Database not initialized")?;
+    // Extract project key from issue key (e.g., "PROJ-123" -> "PROJ")
+    let project_key = extract_project_key(&request.key)
+        .ok_or_else(|| format!("Invalid issue key format: {}", request.key))?;
+
+    let db = state
+        .get_db(project_key)
+        .ok_or_else(|| format!("Database not initialized for project {}", project_key))?;
 
     let issue_repo = Arc::new(DuckDbIssueRepository::new(db));
     let use_case = SearchIssuesUseCase::new(issue_repo);
@@ -78,7 +97,7 @@ pub async fn issues_get(
     // Use search with the exact key as query
     let params = SearchParams {
         query: Some(request.key.clone()),
-        project_key: None,
+        project_key: Some(project_key.to_string()),
         status: None,
         assignee: None,
         issue_type: None,
@@ -105,7 +124,13 @@ pub async fn issues_history(
     state: State<'_, AppState>,
     request: IssueHistoryRequest,
 ) -> Result<IssueHistoryResponse, String> {
-    let db = state.get_db().ok_or("Database not initialized")?;
+    // Extract project key from issue key (e.g., "PROJ-123" -> "PROJ")
+    let project_key = extract_project_key(&request.key)
+        .ok_or_else(|| format!("Invalid issue key format: {}", request.key))?;
+
+    let db = state
+        .get_db(project_key)
+        .ok_or_else(|| format!("Database not initialized for project {}", project_key))?;
 
     let history_repo = DuckDbChangeHistoryRepository::new(db);
 

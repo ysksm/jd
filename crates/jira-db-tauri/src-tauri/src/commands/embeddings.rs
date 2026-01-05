@@ -25,7 +25,16 @@ pub async fn embeddings_generate(
     request: EmbeddingsGenerateRequest,
 ) -> Result<EmbeddingsGenerateResponse, String> {
     let settings = state.get_settings().ok_or("Not initialized")?;
-    let db = state.get_db().ok_or("Database not initialized")?;
+
+    // Project key is required for per-project database
+    let project_key = request
+        .project_key
+        .as_ref()
+        .ok_or("project_key is required for embeddings generation")?;
+
+    let db = state
+        .get_db(project_key)
+        .ok_or_else(|| format!("Database not initialized for project {}", project_key))?;
 
     // Get embedding config from settings
     let embedding_config = settings
@@ -87,7 +96,16 @@ pub async fn embeddings_search(
     request: SemanticSearchRequest,
 ) -> Result<SemanticSearchResponse, String> {
     let settings = state.get_settings().ok_or("Not initialized")?;
-    let db = state.get_db().ok_or("Database not initialized")?;
+
+    // Project key is required for per-project database
+    let project_key = request
+        .project_key
+        .as_ref()
+        .ok_or("project_key is required for semantic search")?;
+
+    let db = state
+        .get_db(project_key)
+        .ok_or_else(|| format!("Database not initialized for project {}", project_key))?;
 
     // Get embedding config from settings
     let embedding_config = settings

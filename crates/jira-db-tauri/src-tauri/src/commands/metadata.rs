@@ -15,7 +15,12 @@ pub async fn metadata_get(
     request: MetadataGetRequest,
 ) -> Result<MetadataGetResponse, String> {
     let settings = state.get_settings().ok_or("Not initialized")?;
-    let db = state.get_db().ok_or("Database not initialized")?;
+    let db = state.get_db(&request.project_key).ok_or_else(|| {
+        format!(
+            "Database not initialized for project {}",
+            request.project_key
+        )
+    })?;
 
     // Find project ID from key
     let project = settings

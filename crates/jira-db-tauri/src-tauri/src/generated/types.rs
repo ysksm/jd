@@ -537,6 +537,9 @@ pub struct ReportGenerateResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SqlExecuteRequest {
+    /// Project key (required for per-project database)
+    #[serde(rename = "projectKey")]
+    pub project_key: String,
     pub query: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub limit: Option<i32>,
@@ -556,6 +559,9 @@ pub struct SqlExecuteResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SqlGetSchemaRequest {
+    /// Project key (required for per-project database)
+    #[serde(rename = "projectKey")]
+    pub project_key: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub table: Option<String>,
 }
