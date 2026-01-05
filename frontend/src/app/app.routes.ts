@@ -4,6 +4,7 @@ import { ProjectsComponent } from './pages/projects/projects.component';
 import { ProjectDetailComponent } from './pages/project-detail/project-detail.component';
 import { SyncComponent } from './pages/sync/sync.component';
 import { SettingsComponent } from './pages/settings/settings.component';
+import { DebugComponent } from './pages/debug/debug.component';
 
 export const routes: Routes = [
   { path: '', redirectTo: '/dashboard', pathMatch: 'full' },
@@ -22,4 +23,5 @@ export const routes: Routes = [
   },
   { path: 'sync', component: SyncComponent },
   { path: 'settings', component: SettingsComponent },
+  { path: 'debug', component: DebugComponent },
 ];

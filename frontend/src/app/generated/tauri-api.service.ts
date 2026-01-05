@@ -11,6 +11,16 @@ import {
   ConfigInitResponse,
   ConfigUpdateRequest,
   ConfigUpdateResponse,
+  DebugBulkTransitionRequest,
+  DebugBulkTransitionResponse,
+  DebugCreateIssuesRequest,
+  DebugCreateIssuesResponse,
+  DebugListTransitionsRequest,
+  DebugListTransitionsResponse,
+  DebugStatusRequest,
+  DebugStatusResponse,
+  DebugTransitionIssueRequest,
+  DebugTransitionIssueResponse,
   EmbeddingsGenerateRequest,
   EmbeddingsGenerateResponse,
   IssueGetRequest,
@@ -186,6 +196,35 @@ export class TauriApiService {
   /** Delete a saved query */
   sqlDeleteQuery(request: SqlQueryDeleteRequest): Observable<SqlQueryDeleteResponse> {
     return from(invoke<SqlQueryDeleteResponse>('sql_delete_query', { request }));
+  }
+
+  // ----------------------------------------
+  // Debug (requires debug_mode in settings)
+  // ----------------------------------------
+
+  /** Get debug mode status */
+  debugStatus(request: DebugStatusRequest): Observable<DebugStatusResponse> {
+    return from(invoke<DebugStatusResponse>('debug_status', { request }));
+  }
+
+  /** Create test issues in JIRA */
+  debugCreateIssues(request: DebugCreateIssuesRequest): Observable<DebugCreateIssuesResponse> {
+    return from(invoke<DebugCreateIssuesResponse>('debug_create_issues', { request }));
+  }
+
+  /** List available transitions for an issue */
+  debugListTransitions(request: DebugListTransitionsRequest): Observable<DebugListTransitionsResponse> {
+    return from(invoke<DebugListTransitionsResponse>('debug_list_transitions', { request }));
+  }
+
+  /** Transition a single issue */
+  debugTransitionIssue(request: DebugTransitionIssueRequest): Observable<DebugTransitionIssueResponse> {
+    return from(invoke<DebugTransitionIssueResponse>('debug_transition_issue', { request }));
+  }
+
+  /** Bulk transition multiple issues */
+  debugBulkTransition(request: DebugBulkTransitionRequest): Observable<DebugBulkTransitionResponse> {
+    return from(invoke<DebugBulkTransitionResponse>('debug_bulk_transition', { request }));
   }
 
 }

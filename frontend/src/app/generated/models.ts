@@ -374,3 +374,76 @@ export interface SqlQueryDeleteResponse {
   success: boolean;
 }
 
+// ----------------------------------------
+// Debug Types
+// ----------------------------------------
+
+export interface DebugStatusRequest {
+}
+
+export interface DebugStatusResponse {
+  enabled: boolean;
+  message: string;
+}
+
+export interface DebugCreateIssuesRequest {
+  project: string;
+  count?: number;
+  issueType?: string;
+  summary?: string;
+  description?: string;
+}
+
+export interface CreatedIssue {
+  key: string;
+  id: string;
+  selfUrl: string;
+}
+
+export interface DebugCreateIssuesResponse {
+  success: boolean;
+  created: CreatedIssue[];
+  error?: string;
+}
+
+export interface DebugListTransitionsRequest {
+  issueKey: string;
+}
+
+export interface Transition {
+  id: string;
+  name: string;
+  toStatus: string;
+}
+
+export interface DebugListTransitionsResponse {
+  transitions: Transition[];
+}
+
+export interface DebugTransitionIssueRequest {
+  issueKey: string;
+  transitionId: string;
+}
+
+export interface DebugTransitionIssueResponse {
+  success: boolean;
+  error?: string;
+}
+
+export interface DebugBulkTransitionRequest {
+  issues: string[];
+  transitionId: string;
+}
+
+export interface BulkTransitionResult {
+  issueKey: string;
+  success: boolean;
+  error?: string;
+}
+
+export interface DebugBulkTransitionResponse {
+  results: BulkTransitionResult[];
+  successCount: number;
+  failureCount: number;
+}
+

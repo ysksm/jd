@@ -11,6 +11,16 @@ import {
   ConfigInitResponse,
   ConfigUpdateRequest,
   ConfigUpdateResponse,
+  DebugBulkTransitionRequest,
+  DebugBulkTransitionResponse,
+  DebugCreateIssuesRequest,
+  DebugCreateIssuesResponse,
+  DebugListTransitionsRequest,
+  DebugListTransitionsResponse,
+  DebugStatusRequest,
+  DebugStatusResponse,
+  DebugTransitionIssueRequest,
+  DebugTransitionIssueResponse,
   EmbeddingsGenerateRequest,
   EmbeddingsGenerateResponse,
   IssueGetRequest,
@@ -190,6 +200,35 @@ export class ApiService {
   /** Delete a saved query */
   sqlDeleteQuery(request: SqlQueryDeleteRequest): Observable<SqlQueryDeleteResponse> {
     return this.http.post<SqlQueryDeleteResponse>(`${this.baseUrl}/sql.delete-query`, request);
+  }
+
+  // ----------------------------------------
+  // Debug (requires debug_mode in settings)
+  // ----------------------------------------
+
+  /** Get debug mode status */
+  debugStatus(request: DebugStatusRequest): Observable<DebugStatusResponse> {
+    return this.http.post<DebugStatusResponse>(`${this.baseUrl}/debug.status`, request);
+  }
+
+  /** Create test issues in JIRA */
+  debugCreateIssues(request: DebugCreateIssuesRequest): Observable<DebugCreateIssuesResponse> {
+    return this.http.post<DebugCreateIssuesResponse>(`${this.baseUrl}/debug.create-issues`, request);
+  }
+
+  /** List available transitions for an issue */
+  debugListTransitions(request: DebugListTransitionsRequest): Observable<DebugListTransitionsResponse> {
+    return this.http.post<DebugListTransitionsResponse>(`${this.baseUrl}/debug.list-transitions`, request);
+  }
+
+  /** Transition a single issue */
+  debugTransitionIssue(request: DebugTransitionIssueRequest): Observable<DebugTransitionIssueResponse> {
+    return this.http.post<DebugTransitionIssueResponse>(`${this.baseUrl}/debug.transition-issue`, request);
+  }
+
+  /** Bulk transition multiple issues */
+  debugBulkTransition(request: DebugBulkTransitionRequest): Observable<DebugBulkTransitionResponse> {
+    return this.http.post<DebugBulkTransitionResponse>(`${this.baseUrl}/debug.bulk-transition`, request);
   }
 
 }
