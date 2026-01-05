@@ -216,7 +216,7 @@ pub async fn debug_create_issues(
                 created.push(CreatedIssue {
                     key: result.key,
                     id: result.id,
-                    self_url: result.self_url,
+                    self_url: result.self_url.unwrap_or_default(),
                 });
             }
             Err(e) => {
@@ -270,7 +270,7 @@ pub async fn debug_list_transitions(
             .map(|t| Transition {
                 id: t.id,
                 name: t.name,
-                to_status: t.to_status_name,
+                to_status: t.to_status,
             })
             .collect(),
     })
