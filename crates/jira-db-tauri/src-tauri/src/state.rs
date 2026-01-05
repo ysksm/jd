@@ -1,12 +1,9 @@
 //! Application state management
 
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
-use jira_db_core::{Database, DbConnection, Settings, checkpoint_connection};
-
-/// Default database filename
-const DEFAULT_DB_FILENAME: &str = "jira.duckdb";
+use jira_db_core::{DatabaseFactory, DbConnection, Settings};
 
 /// Shared application state
 pub struct AppState {
@@ -14,8 +11,8 @@ pub struct AppState {
     pub settings_path: Mutex<Option<PathBuf>>,
     /// Loaded settings
     pub settings: Mutex<Option<Settings>>,
-    /// Database connection
-    pub db: Mutex<Option<DbConnection>>,
+    /// Database factory for per-project databases
+    pub db_factory: Mutex<Option<Arc<DatabaseFactory>>>,
 }
 
 impl Default for AppState {
@@ -23,68 +20,28 @@ impl Default for AppState {
         Self {
             settings_path: Mutex::new(None),
             settings: Mutex::new(None),
-            db: Mutex::new(None),
+            db_factory: Mutex::new(None),
         }
     }
-}
-
-/// Ensure the database path is a file path, not a directory
-fn ensure_db_file_path(path: PathBuf) -> PathBuf {
-    // If path exists and is a directory, or if path has no extension (likely a directory),
-    // append the default database filename
-    if path.is_dir() {
-        return path.join(DEFAULT_DB_FILENAME);
-    }
-
-    // Check if path looks like a directory (no extension and no .duckdb suffix)
-    if path.extension().is_none() && !path.to_string_lossy().ends_with(".duckdb") {
-        // Check if it's "." or ".." or ends with separator
-        let path_str = path.to_string_lossy();
-        if path_str == "." || path_str == ".." || path_str.ends_with('/') {
-            return path.join(DEFAULT_DB_FILENAME);
-        }
-    }
-
-    path
 }
 
 impl AppState {
     /// Initialize the application state with a settings file
     pub fn initialize(&self, settings_path: PathBuf) -> anyhow::Result<()> {
-        let mut settings = Settings::load(&settings_path)?;
+        // Load and resolve paths relative to settings file location
+        let settings = Settings::load_and_resolve(&settings_path)?;
 
         tracing::info!(
-            "Loaded settings, database_dir from file: {:?}",
+            "Loaded settings, database_dir: {:?}",
             settings.database.database_dir
         );
 
-        // Resolve database directory relative to settings file directory if it's relative
-        let db_dir = if settings.database.database_dir.is_relative() {
-            if let Some(settings_dir) = settings_path.parent() {
-                let resolved = settings_dir.join(&settings.database.database_dir);
-                // Canonicalize if possible, otherwise use resolved path
-                resolved.canonicalize().unwrap_or(resolved)
-            } else {
-                settings.database.database_dir.clone()
-            }
-        } else {
-            settings.database.database_dir.clone()
-        };
-
-        // For Tauri app, we use a default database file in the database directory
-        let db_path = ensure_db_file_path(db_dir.clone());
-
-        tracing::info!("Database path (resolved): {:?}", db_path);
-
-        // Initialize database with resolved path
-        let db = Database::new(&db_path)?;
-
-        // Update settings with resolved directory for consistency
-        settings.database.database_dir = db_dir;
+        // Create database factory
+        let db_factory = Arc::new(DatabaseFactory::new(&settings));
 
         // Store state
         *self.settings_path.lock().unwrap() = Some(settings_path);
-        *self.db.lock().unwrap() = Some(db.connection());
+        *self.db_factory.lock().unwrap() = Some(db_factory);
         *self.settings.lock().unwrap() = Some(settings);
 
         Ok(())
@@ -98,34 +55,26 @@ impl AppState {
     ) -> anyhow::Result<()> {
         let mut settings = settings;
 
-        // Resolve database directory relative to settings file directory if it's relative
-        let db_dir = if settings.database.database_dir.is_relative() {
-            if let Some(settings_dir) = settings_path.parent() {
-                settings_dir.join(&settings.database.database_dir)
-            } else {
-                settings.database.database_dir.clone()
-            }
-        } else {
-            settings.database.database_dir.clone()
-        };
+        // Resolve paths relative to settings file location
+        settings.resolve_paths(&settings_path)?;
 
-        // For Tauri app, we use a default database file in the database directory
-        let db_path = ensure_db_file_path(db_dir.clone());
+        tracing::info!(
+            "Database directory (resolved): {:?}",
+            settings.database.database_dir
+        );
 
-        tracing::info!("Database path (resolved): {:?}", db_path);
+        // Ensure the database directory exists
+        std::fs::create_dir_all(&settings.database.database_dir)?;
 
-        // Update settings with resolved directory before saving
-        settings.database.database_dir = db_dir;
-
-        // Save settings with absolute path
+        // Save settings
         settings.save(&settings_path)?;
 
-        // Initialize database
-        let db = Database::new(&db_path)?;
+        // Create database factory
+        let db_factory = Arc::new(DatabaseFactory::new(&settings));
 
         // Store state
         *self.settings_path.lock().unwrap() = Some(settings_path);
-        *self.db.lock().unwrap() = Some(db.connection());
+        *self.db_factory.lock().unwrap() = Some(db_factory);
         *self.settings.lock().unwrap() = Some(settings);
 
         Ok(())
@@ -166,9 +115,25 @@ impl AppState {
         self.settings_path.lock().unwrap().clone()
     }
 
-    /// Get database connection
-    pub fn get_db(&self) -> Option<DbConnection> {
-        self.db.lock().unwrap().clone()
+    /// Get database factory
+    pub fn get_db_factory(&self) -> Option<Arc<DatabaseFactory>> {
+        self.db_factory.lock().unwrap().clone()
+    }
+
+    /// Get database connection for a specific project
+    pub fn get_db(&self, project_key: &str) -> Option<DbConnection> {
+        let factory = self.db_factory.lock().unwrap();
+        factory
+            .as_ref()
+            .and_then(|f| f.get_connection(project_key).ok())
+    }
+
+    /// Get raw database connection for a specific project
+    pub fn get_raw_db(&self, project_key: &str) -> Option<DbConnection> {
+        let factory = self.db_factory.lock().unwrap();
+        factory
+            .as_ref()
+            .and_then(|f| f.get_raw_connection(project_key).ok())
     }
 
     /// Check if initialized
@@ -177,13 +142,13 @@ impl AppState {
         self.settings.lock().unwrap().is_some()
     }
 
-    /// Cleanup the database connection by running a checkpoint.
-    /// This flushes the WAL file to the main database file.
+    /// Cleanup the database connections by running checkpoints.
+    /// This flushes the WAL files to the main database files.
     /// Should be called before the application exits.
     pub fn cleanup(&self) {
-        if let Some(ref db) = *self.db.lock().unwrap() {
+        if let Some(ref factory) = *self.db_factory.lock().unwrap() {
             tracing::info!("Running database checkpoint before exit...");
-            match checkpoint_connection(db) {
+            match factory.checkpoint_all() {
                 Ok(()) => {
                     tracing::info!("Database checkpoint completed successfully");
                 }

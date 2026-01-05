@@ -6,7 +6,8 @@ use tauri::State;
 use jira_db_core::{
     DuckDbChangeHistoryRepository, DuckDbFieldRepository, DuckDbIssueRepository,
     DuckDbIssueSnapshotRepository, DuckDbIssuesExpandedRepository, DuckDbMetadataRepository,
-    DuckDbSyncHistoryRepository, JiraApiClient, JiraConfig, SyncFieldsUseCase, SyncProjectUseCase,
+    DuckDbSyncHistoryRepository, JiraApiClient, JiraConfig, RawDataRepository, SyncFieldsUseCase,
+    SyncProjectUseCase,
 };
 use serde::{Deserialize, Serialize};
 
@@ -57,7 +58,9 @@ pub async fn sync_execute(
     request: SyncExecuteRequest,
 ) -> Result<SyncExecuteResponseExtended, String> {
     let settings = state.get_settings().ok_or("Not initialized")?;
-    let db = state.get_db().ok_or("Database not initialized")?;
+    let db_factory = state
+        .get_db_factory()
+        .ok_or("Database factory not initialized")?;
 
     // Create JIRA config and client
     let jira_config = JiraConfig {
@@ -66,29 +69,6 @@ pub async fn sync_execute(
         api_key: settings.jira.api_key.clone(),
     };
     let jira_client = Arc::new(JiraApiClient::new(&jira_config).map_err(|e| e.to_string())?);
-
-    // Create repositories for sync
-    let issue_repo = Arc::new(DuckDbIssueRepository::new(db.clone()));
-    let change_history_repo = Arc::new(DuckDbChangeHistoryRepository::new(db.clone()));
-    let metadata_repo = Arc::new(DuckDbMetadataRepository::new(db.clone()));
-    let sync_history_repo = Arc::new(DuckDbSyncHistoryRepository::new(db.clone()));
-    let snapshot_repo = Arc::new(DuckDbIssueSnapshotRepository::new(db.clone()));
-
-    // Create repositories for fields expansion
-    let field_repo = Arc::new(DuckDbFieldRepository::new(db.clone()));
-    let expanded_repo = Arc::new(DuckDbIssuesExpandedRepository::new(db));
-
-    // Create use cases
-    let sync_use_case = SyncProjectUseCase::new(
-        issue_repo,
-        change_history_repo,
-        metadata_repo,
-        sync_history_repo,
-        snapshot_repo,
-        jira_client.clone(),
-    );
-
-    let fields_use_case = SyncFieldsUseCase::new(jira_client, field_repo, expanded_repo);
 
     // Get projects to sync
     let projects_to_sync: Vec<_> = if let Some(ref project_key) = request.project_key {
@@ -109,33 +89,79 @@ pub async fn sync_execute(
         return Err("No projects to sync".to_string());
     }
 
-    // Step 1: Sync fields from JIRA (once for all projects)
-    tracing::info!("Syncing fields from JIRA...");
-    let fields_synced = fields_use_case
-        .sync_fields()
-        .await
-        .map_err(|e| e.to_string())? as i32;
-    tracing::info!("Synced {} fields from JIRA", fields_synced);
-
-    // Step 2: Add columns based on fields
-    tracing::info!("Adding columns to issues_expanded table...");
-    let added_columns = fields_use_case.add_columns().map_err(|e| e.to_string())?;
-    let total_columns_added = added_columns.len() as i32;
-    if total_columns_added > 0 {
-        tracing::info!(
-            "Added {} new columns: {:?}",
-            total_columns_added,
-            added_columns
-        );
-    }
-
-    // Step 3: Execute sync for each project
+    // Execute sync for each project with separate database
     let mut results = Vec::new();
+    let mut total_fields_synced = 0i32;
+
     for project in &projects_to_sync {
         let start_time = std::time::Instant::now();
+
+        // Get database connection for this project
+        let db = db_factory
+            .get_connection(&project.key)
+            .map_err(|e| format!("Failed to get database for {}: {}", project.key, e))?;
+
+        // Get raw database connection for this project
+        let raw_db = db_factory
+            .get_raw_connection(&project.key)
+            .map_err(|e| format!("Failed to get raw database for {}: {}", project.key, e))?;
+
+        // Create repositories for sync
+        let issue_repo = Arc::new(DuckDbIssueRepository::new(db.clone()));
+        let change_history_repo = Arc::new(DuckDbChangeHistoryRepository::new(db.clone()));
+        let metadata_repo = Arc::new(DuckDbMetadataRepository::new(db.clone()));
+        let sync_history_repo = Arc::new(DuckDbSyncHistoryRepository::new(db.clone()));
+        let snapshot_repo = Arc::new(DuckDbIssueSnapshotRepository::new(db.clone()));
+        let raw_repo = Arc::new(RawDataRepository::new(raw_db));
+
+        // Create repositories for fields expansion
+        let field_repo = Arc::new(DuckDbFieldRepository::new(db.clone()));
+        let expanded_repo = Arc::new(DuckDbIssuesExpandedRepository::new(db));
+
+        // Create use cases
+        let sync_use_case = SyncProjectUseCase::new(
+            issue_repo,
+            change_history_repo,
+            metadata_repo,
+            sync_history_repo,
+            snapshot_repo,
+            jira_client.clone(),
+        )
+        .with_raw_repository(raw_repo);
+
+        let fields_use_case =
+            SyncFieldsUseCase::new(jira_client.clone(), field_repo, expanded_repo);
+
+        // Step 1: Sync fields from JIRA
+        tracing::info!("Syncing fields from JIRA for project {}...", project.key);
+        let fields_synced = fields_use_case
+            .sync_fields()
+            .await
+            .map_err(|e| e.to_string())? as i32;
+        tracing::info!(
+            "Synced {} fields for project {}",
+            fields_synced,
+            project.key
+        );
+        total_fields_synced = fields_synced;
+
+        // Step 2: Add columns based on fields
+        tracing::info!("Adding columns for project {}...", project.key);
+        let added_columns = fields_use_case.add_columns().map_err(|e| e.to_string())?;
+        let total_columns_added = added_columns.len() as i32;
+        if total_columns_added > 0 {
+            tracing::info!(
+                "Added {} new columns for {}: {:?}",
+                total_columns_added,
+                project.key,
+                added_columns
+            );
+        }
+
+        // Step 3: Execute sync
         let result = sync_use_case.execute(&project.key, &project.id).await;
 
-        // Step 4: Expand issues for this project (use project.id, not project.key)
+        // Step 4: Expand issues for this project
         let (issues_expanded, expand_error) = match fields_use_case.expand_issues(Some(&project.id))
         {
             Ok(count) => {
@@ -157,6 +183,18 @@ pub async fn sync_execute(
                 (0, Some(e.to_string()))
             }
         };
+
+        // Step 5: Create readable views
+        if let Err(e) = fields_use_case.create_readable_view() {
+            tracing::warn!("Failed to create readable view for {}: {}", project.key, e);
+        }
+        if let Err(e) = fields_use_case.create_snapshots_readable_view() {
+            tracing::warn!(
+                "Failed to create snapshot readable views for {}: {}",
+                project.key,
+                e
+            );
+        }
 
         let duration = start_time.elapsed().as_secs_f64();
 
@@ -191,28 +229,6 @@ pub async fn sync_execute(
         }
     }
 
-    // Step 5: Create readable views with human-friendly column names
-    match fields_use_case.create_readable_view() {
-        Ok(()) => {
-            tracing::info!("Created issues_readable view");
-        }
-        Err(e) => {
-            tracing::warn!("Failed to create readable view: {}", e);
-        }
-    }
-
-    // Step 6: Create readable views for issue_snapshots
-    match fields_use_case.create_snapshots_readable_view() {
-        Ok(()) => {
-            tracing::info!(
-                "Created issue_snapshots_readable, issue_snapshots_expanded, and issue_snapshots_expanded_readable views"
-            );
-        }
-        Err(e) => {
-            tracing::warn!("Failed to create snapshot readable views: {}", e);
-        }
-    }
-
     // Update last_synced for successful projects
     state
         .update_settings(|s| {
@@ -227,15 +243,14 @@ pub async fn sync_execute(
         .map_err(|e| e.to_string())?;
 
     tracing::info!(
-        "Sync complete: {} projects, {} fields synced, {} columns added",
+        "Sync complete: {} projects, {} fields synced",
         results.len(),
-        fields_synced,
-        total_columns_added
+        total_fields_synced
     );
 
     Ok(SyncExecuteResponseExtended {
         results,
-        total_fields_synced: fields_synced,
+        total_fields_synced,
     })
 }
 

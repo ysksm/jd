@@ -121,6 +121,30 @@ impl Settings {
         Ok(settings)
     }
 
+    /// Load settings and resolve relative paths based on settings file location
+    ///
+    /// This method resolves the `database_dir` relative to the settings file's
+    /// parent directory if it's a relative path.
+    pub fn load_and_resolve<P: AsRef<Path>>(path: P) -> DomainResult<Self> {
+        let mut settings = Self::load(&path)?;
+        settings.resolve_paths(&path)?;
+        Ok(settings)
+    }
+
+    /// Resolve relative paths in settings based on a base path (typically the settings file path)
+    ///
+    /// If `database_dir` is relative, it will be resolved relative to the base path's parent directory.
+    pub fn resolve_paths<P: AsRef<Path>>(&mut self, base_path: P) -> DomainResult<()> {
+        if self.database.database_dir.is_relative() {
+            if let Some(base_dir) = base_path.as_ref().parent() {
+                let resolved = base_dir.join(&self.database.database_dir);
+                // Try to canonicalize, fall back to resolved path
+                self.database.database_dir = resolved.canonicalize().unwrap_or(resolved);
+            }
+        }
+        Ok(())
+    }
+
     pub fn save<P: AsRef<Path>>(&self, path: P) -> DomainResult<()> {
         if let Some(parent) = path.as_ref().parent() {
             fs::create_dir_all(parent).map_err(|e| {

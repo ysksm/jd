@@ -54,35 +54,21 @@ impl AppState {
 
     /// Initialize the application state with a settings file
     pub fn initialize(&self, settings_path: PathBuf) -> anyhow::Result<()> {
-        let mut settings = Settings::load(&settings_path)?;
+        // Load and resolve paths relative to settings file location
+        let settings = Settings::load_and_resolve(&settings_path)?;
 
         tracing::info!(
-            "Loaded settings, database_dir from file: {:?}",
+            "Loaded settings, database_dir: {:?}",
             settings.database.database_dir
         );
 
-        // Resolve database directory relative to settings file directory if it's relative
-        let db_dir = if settings.database.database_dir.is_relative() {
-            if let Some(settings_dir) = settings_path.parent() {
-                let resolved = settings_dir.join(&settings.database.database_dir);
-                resolved.canonicalize().unwrap_or(resolved)
-            } else {
-                settings.database.database_dir.clone()
-            }
-        } else {
-            settings.database.database_dir.clone()
-        };
-
         // For service, we use a default database file in the database directory
-        let db_path = ensure_db_file_path(db_dir.clone());
+        let db_path = ensure_db_file_path(settings.database.database_dir.clone());
 
         tracing::info!("Database path (resolved): {:?}", db_path);
 
         // Initialize database with resolved path
         let db = Database::new(&db_path)?;
-
-        // Update settings with resolved directory for consistency
-        settings.database.database_dir = db_dir;
 
         // Store state
         *self.settings_path.lock().unwrap() = Some(settings_path);
@@ -100,26 +86,23 @@ impl AppState {
     ) -> anyhow::Result<()> {
         let mut settings = settings;
 
-        // Resolve database directory relative to settings file directory if it's relative
-        let db_dir = if settings.database.database_dir.is_relative() {
-            if let Some(settings_dir) = settings_path.parent() {
-                settings_dir.join(&settings.database.database_dir)
-            } else {
-                settings.database.database_dir.clone()
-            }
-        } else {
-            settings.database.database_dir.clone()
-        };
+        // Resolve paths relative to settings file location
+        settings.resolve_paths(&settings_path)?;
+
+        tracing::info!(
+            "Database directory (resolved): {:?}",
+            settings.database.database_dir
+        );
+
+        // Ensure the database directory exists
+        std::fs::create_dir_all(&settings.database.database_dir)?;
 
         // For service, we use a default database file in the database directory
-        let db_path = ensure_db_file_path(db_dir.clone());
+        let db_path = ensure_db_file_path(settings.database.database_dir.clone());
 
         tracing::info!("Database path (resolved): {:?}", db_path);
 
-        // Update settings with resolved directory before saving
-        settings.database.database_dir = db_dir;
-
-        // Save settings with absolute path
+        // Save settings
         settings.save(&settings_path)?;
 
         // Initialize database
