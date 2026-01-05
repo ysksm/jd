@@ -145,6 +145,12 @@ pub fn run() {
             // Database management
             commands::database::database_close,
             commands::database::database_status,
+            // Debug (requires debug_mode in settings)
+            commands::debug::debug_status,
+            commands::debug::debug_create_issues,
+            commands::debug::debug_list_transitions,
+            commands::debug::debug_transition_issue,
+            commands::debug::debug_bulk_transition,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
