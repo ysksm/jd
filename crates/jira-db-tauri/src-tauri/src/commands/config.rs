@@ -89,20 +89,14 @@ pub async fn config_initialize(
     std::fs::create_dir_all(&database_dir)
         .map_err(|e| format!("Failed to create database directory: {}", e))?;
 
-    let settings = jira_db_core::Settings {
-        jira: jira_db_core::JiraConfig {
+    let settings = jira_db_core::Settings::new(
+        jira_db_core::JiraConfig {
             endpoint: request.endpoint,
             username: request.username,
             api_key: request.api_key,
         },
-        projects: Vec::new(),
-        database: jira_db_core::DatabaseConfig {
-            path: None,
-            database_dir,
-        },
-        embeddings: None,
-        debug_mode: false,
-    };
+        database_dir,
+    );
 
     state
         .create_settings(settings_path, settings.clone())
