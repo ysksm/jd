@@ -36,7 +36,7 @@ pub async fn config_update(
 
             // Update database config if provided
             if let Some(database) = request.database {
-                settings.database.path = PathBuf::from(database.path);
+                settings.database.database_dir = PathBuf::from(database.path);
             }
 
             // Update embeddings config if provided
@@ -70,26 +70,24 @@ pub async fn config_initialize(
         .get_settings_path()
         .ok_or("Settings path not configured. App may not be properly initialized.")?;
 
-    // Determine database path - use provided path or default relative to settings directory
-    let database_path = if let Some(db_path) = request.database_path {
+    // Determine database directory - use provided path or default relative to settings directory
+    let database_dir = if let Some(db_path) = request.database_path {
         PathBuf::from(db_path)
     } else {
-        // Default: put database in the same directory as settings file
+        // Default: put database in a 'data' subdirectory relative to settings file
         if let Some(parent) = settings_path.parent() {
-            parent.join("jira.duckdb")
+            parent.join("data")
         } else {
             // Fallback to current directory with absolute path
             std::env::current_dir()
-                .map(|cwd| cwd.join("data").join("jira.duckdb"))
-                .unwrap_or_else(|_| PathBuf::from("./data/jira.duckdb"))
+                .map(|cwd| cwd.join("data"))
+                .unwrap_or_else(|_| PathBuf::from("./data"))
         }
     };
 
     // Ensure the database directory exists
-    if let Some(parent) = database_path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("Failed to create database directory: {}", e))?;
-    }
+    std::fs::create_dir_all(&database_dir)
+        .map_err(|e| format!("Failed to create database directory: {}", e))?;
 
     let settings = jira_db_core::Settings {
         jira: jira_db_core::JiraConfig {
@@ -99,7 +97,8 @@ pub async fn config_initialize(
         },
         projects: Vec::new(),
         database: jira_db_core::DatabaseConfig {
-            path: database_path,
+            path: None,
+            database_dir,
         },
         embeddings: None,
     };
@@ -124,7 +123,7 @@ impl From<jira_db_core::Settings> for Settings {
                 api_key: s.jira.api_key,
             },
             database: DatabaseConfig {
-                path: s.database.path.to_string_lossy().to_string(),
+                path: s.database.database_dir.to_string_lossy().to_string(),
             },
             projects: s
                 .projects

@@ -54,33 +54,33 @@ impl AppState {
         let mut settings = Settings::load(&settings_path)?;
 
         tracing::info!(
-            "Loaded settings, database.path from file: {:?}",
-            settings.database.path
+            "Loaded settings, database_dir from file: {:?}",
+            settings.database.database_dir
         );
 
-        // Resolve database path relative to settings file directory if it's relative
-        let db_path = if settings.database.path.is_relative() {
+        // Resolve database directory relative to settings file directory if it's relative
+        let db_dir = if settings.database.database_dir.is_relative() {
             if let Some(settings_dir) = settings_path.parent() {
-                let resolved = settings_dir.join(&settings.database.path);
+                let resolved = settings_dir.join(&settings.database.database_dir);
                 // Canonicalize if possible, otherwise use resolved path
                 resolved.canonicalize().unwrap_or(resolved)
             } else {
-                settings.database.path.clone()
+                settings.database.database_dir.clone()
             }
         } else {
-            settings.database.path.clone()
+            settings.database.database_dir.clone()
         };
 
-        // Ensure the path is a file path, not a directory
-        let db_path = ensure_db_file_path(db_path);
+        // For Tauri app, we use a default database file in the database directory
+        let db_path = ensure_db_file_path(db_dir.clone());
 
         tracing::info!("Database path (resolved): {:?}", db_path);
 
         // Initialize database with resolved path
         let db = Database::new(&db_path)?;
 
-        // Update settings with resolved path for consistency
-        settings.database.path = db_path;
+        // Update settings with resolved directory for consistency
+        settings.database.database_dir = db_dir;
 
         // Store state
         *self.settings_path.lock().unwrap() = Some(settings_path);
@@ -98,24 +98,24 @@ impl AppState {
     ) -> anyhow::Result<()> {
         let mut settings = settings;
 
-        // Resolve database path relative to settings file directory if it's relative
-        let db_path = if settings.database.path.is_relative() {
+        // Resolve database directory relative to settings file directory if it's relative
+        let db_dir = if settings.database.database_dir.is_relative() {
             if let Some(settings_dir) = settings_path.parent() {
-                settings_dir.join(&settings.database.path)
+                settings_dir.join(&settings.database.database_dir)
             } else {
-                settings.database.path.clone()
+                settings.database.database_dir.clone()
             }
         } else {
-            settings.database.path.clone()
+            settings.database.database_dir.clone()
         };
 
-        // Ensure the path is a file path, not a directory
-        let db_path = ensure_db_file_path(db_path);
+        // For Tauri app, we use a default database file in the database directory
+        let db_path = ensure_db_file_path(db_dir.clone());
 
         tracing::info!("Database path (resolved): {:?}", db_path);
 
-        // Update settings with resolved path before saving
-        settings.database.path = db_path.clone();
+        // Update settings with resolved directory before saving
+        settings.database.database_dir = db_dir;
 
         // Save settings with absolute path
         settings.save(&settings_path)?;
