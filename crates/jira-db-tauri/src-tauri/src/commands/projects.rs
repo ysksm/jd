@@ -70,6 +70,7 @@ pub async fn projects_initialize(
                         name: project.name.clone(),
                         sync_enabled: false,
                         last_synced: None,
+                        sync_checkpoint: None,
                     });
                 }
             }

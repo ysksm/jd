@@ -8,6 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Key Features
 - Sync JIRA projects and issues to a local DuckDB database
+- **Resumable sync**: Interruption-safe with checkpoint support (resumes from last successful batch)
 - Per-project sync configuration
 - Settings managed via `./data/settings.json`
 - Full async implementation using Tokio
@@ -309,6 +310,9 @@ The CLI is organized with clear separation of concerns:
   - `list` - Display projects (supports `--verbose`)
   - `enable/disable` - Control sync settings
 - **`sync`** - Pure data synchronization (issues + metadata)
+  - Resumable: automatically resumes from last checkpoint if interrupted
+  - Fetches issues ordered by `updated ASC` (oldest first) for reliable checkpointing
+  - Checkpoint saved to `settings.json` after each batch
 - **`config`** - Global settings management
   - `show` - Display current configuration
   - `set` - Update configuration values
@@ -391,11 +395,11 @@ Metadata is NOT extracted from issues - it's fetched from API to ensure complete
 - ✅ **Semantic Search** tool via MCP
 - ✅ **SQL Execution** tool via MCP (read-only)
 - ✅ **Multiple Embedding Providers** (OpenAI, Ollama, Cohere)
+- ✅ **Resumable Sync** with checkpoint support (survives interruptions)
 
 ## Future Enhancements
 
 - GUI implementation (Tauri desktop app or Web server)
-- Incremental sync (currently only full sync)
 - Multiple JIRA instance support
 - Export capabilities (CSV, Excel)
 - Webhook-based real-time sync

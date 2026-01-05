@@ -20,6 +20,20 @@ pub struct JiraConfig {
     pub api_key: String,
 }
 
+/// Checkpoint for resumable sync
+/// Stored in settings.json to allow sync to resume after interruption
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SyncCheckpoint {
+    /// Timestamp of the last successfully synced issue's updated field
+    pub last_issue_updated_at: DateTime<Utc>,
+    /// Key of the last successfully synced issue (for tie-breaking)
+    pub last_issue_key: String,
+    /// Number of issues processed so far in this sync session
+    pub items_processed: usize,
+    /// Total number of issues expected (from JIRA)
+    pub total_items: usize,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProjectConfig {
     pub id: String,
@@ -27,6 +41,9 @@ pub struct ProjectConfig {
     pub name: String,
     pub sync_enabled: bool,
     pub last_synced: Option<DateTime<Utc>>,
+    /// Checkpoint for resuming interrupted sync
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sync_checkpoint: Option<SyncCheckpoint>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -4,6 +4,20 @@ use crate::domain::entities::{
 };
 use crate::domain::error::DomainResult;
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
+
+/// Progress information for resumable fetch
+#[derive(Debug, Clone)]
+pub struct FetchProgress {
+    /// Fetched issues in this batch
+    pub issues: Vec<Issue>,
+    /// Total number of issues matching the query
+    pub total: usize,
+    /// Number of issues fetched so far (including this batch)
+    pub fetched_so_far: usize,
+    /// Whether there are more issues to fetch
+    pub has_more: bool,
+}
 
 /// Service trait for JIRA API operations
 /// Infrastructure layer will implement this trait (DIP)
@@ -14,6 +28,25 @@ pub trait JiraService: Send + Sync {
 
     /// Fetch all issues for a project
     async fn fetch_project_issues(&self, project_key: &str) -> DomainResult<Vec<Issue>>;
+
+    /// Fetch a batch of issues for a project with resumable support
+    /// Issues are fetched ordered by `updated ASC` (oldest first)
+    ///
+    /// # Arguments
+    /// * `project_key` - The JIRA project key
+    /// * `after_updated_at` - Only fetch issues updated at or after this timestamp (for resume)
+    /// * `start_at` - Pagination offset within the filtered results
+    /// * `max_results` - Maximum number of issues to fetch in this batch
+    ///
+    /// # Returns
+    /// FetchProgress containing the batch of issues and pagination info
+    async fn fetch_project_issues_batch(
+        &self,
+        project_key: &str,
+        after_updated_at: Option<DateTime<Utc>>,
+        start_at: usize,
+        max_results: usize,
+    ) -> DomainResult<FetchProgress>;
 
     /// Test connection to JIRA
     async fn test_connection(&self) -> DomainResult<()>;
