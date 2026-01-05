@@ -101,6 +101,7 @@ pub async fn config_initialize(
             database_dir,
         },
         embeddings: None,
+        debug_mode: false,
     };
 
     state
