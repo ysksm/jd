@@ -51,14 +51,17 @@ fn get_output() -> LogOutput {
 fn log_internal(level: LogLevel, target: &str, message: &str) {
     let output = get_output();
 
+    // Format message with target prefix
+    let formatted = format!("[{}] {}", target, message);
+
     match output {
         LogOutput::Console | LogOutput::ConsoleAndGui => {
             // Output to console via tracing
             match level {
-                LogLevel::Debug => tracing::debug!(target: target, "{}", message),
-                LogLevel::Info => tracing::info!(target: target, "{}", message),
-                LogLevel::Warn => tracing::warn!(target: target, "{}", message),
-                LogLevel::Error => tracing::error!(target: target, "{}", message),
+                LogLevel::Debug => tracing::debug!("{}", formatted),
+                LogLevel::Info => tracing::info!("{}", formatted),
+                LogLevel::Warn => tracing::warn!("{}", formatted),
+                LogLevel::Error => tracing::error!("{}", formatted),
             }
         }
     }
