@@ -57,8 +57,14 @@ pub trait JiraService: Send + Sync {
     /// Fetch priorities
     async fn fetch_priorities(&self) -> DomainResult<Vec<Priority>>;
 
-    /// Fetch project issue types
+    /// Fetch project issue types by project ID
     async fn fetch_project_issue_types(&self, project_id: &str) -> DomainResult<Vec<IssueType>>;
+
+    /// Fetch project issue types by project key (for create issue)
+    async fn fetch_issue_types_by_project_key(
+        &self,
+        project_key: &str,
+    ) -> DomainResult<Vec<IssueType>>;
 
     /// Fetch project labels
     async fn fetch_project_labels(&self, project_key: &str) -> DomainResult<Vec<Label>>;

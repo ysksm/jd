@@ -4,6 +4,7 @@
 
 mod commands;
 mod generated;
+pub mod logging;
 mod state;
 
 use state::AppState;
@@ -70,6 +71,9 @@ pub fn run() {
 
     // Bridge log crate to tracing (for jira-db-core logs)
     tracing_log::LogTracer::init().ok();
+
+    // Initialize logging wrapper
+    logging::init(logging::LogOutput::Console);
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -145,6 +149,13 @@ pub fn run() {
             // Database management
             commands::database::database_close,
             commands::database::database_status,
+            // Debug (requires debug_mode in settings)
+            commands::debug::debug_status,
+            commands::debug::debug_create_issues,
+            commands::debug::debug_list_transitions,
+            commands::debug::debug_transition_issue,
+            commands::debug::debug_bulk_transition,
+            commands::debug::debug_get_issue_types,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

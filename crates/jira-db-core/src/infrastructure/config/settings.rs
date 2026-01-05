@@ -116,6 +116,21 @@ impl EmbeddingsConfig {
 }
 
 impl Settings {
+    /// Create a new Settings with the required JIRA config and database directory.
+    /// Other fields are set to sensible defaults.
+    pub fn new(jira: JiraConfig, database_dir: PathBuf) -> Self {
+        Self {
+            jira,
+            projects: Vec::new(),
+            database: DatabaseConfig {
+                path: None,
+                database_dir,
+            },
+            embeddings: None,
+            debug_mode: false,
+        }
+    }
+
     pub fn load<P: AsRef<Path>>(path: P) -> DomainResult<Self> {
         let content = fs::read_to_string(&path)
             .map_err(|e| DomainError::Repository(format!("Failed to read settings file: {}", e)))?;

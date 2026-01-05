@@ -1,0 +1,254 @@
+<div class="debug-page">
+  <h1>Debug Tools</h1>
+
+  <!-- Status Banner -->
+  @if (loading()) {
+    <div class="status-banner loading">Loading...</div>
+  } @else if (!debugEnabled()) {
+    <div class="status-banner disabled">
+      <strong>Debug Mode Disabled</strong>
+      <p>{{ statusMessage() }}</p>
+    </div>
+  } @else {
+    <div class="status-banner enabled">
+      <strong>Debug Mode Enabled</strong>
+      <p>{{ statusMessage() }}</p>
+    </div>
+  }
+
+  <!-- Messages -->
+  @if (error()) {
+    <div class="message error" (click)="clearMessages()">
+      <span class="icon">✕</span>
+      {{ error() }}
+    </div>
+  }
+  @if (success()) {
+    <div class="message success" (click)="clearMessages()">
+      <span class="icon">✓</span>
+      {{ success() }}
+    </div>
+  }
+
+  @if (debugEnabled()) {
+    <!-- Create Issues Section -->
+    <section class="card">
+      <h2>Create Test Issues</h2>
+      <p class="description">Create test issues in JIRA for debugging purposes.</p>
+
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="project">Project</label>
+          <select
+            id="project"
+            [ngModel]="selectedProject()"
+            (ngModelChange)="onProjectChange($event)"
+          >
+            @for (project of projects(); track project.key) {
+              <option [value]="project.key">{{ project.key }} - {{ project.name }}</option>
+            }
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="issueType">Issue Type</label>
+          <select
+            id="issueType"
+            [ngModel]="issueType()"
+            (ngModelChange)="issueType.set($event)"
+            [disabled]="loadingIssueTypes()"
+          >
+            @if (loadingIssueTypes()) {
+              <option value="">Loading...</option>
+            } @else {
+              @for (type of issueTypes(); track type.name) {
+                <option [value]="type.name">{{ type.name }}</option>
+              }
+            }
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="count">Count</label>
+          <input
+            type="number"
+            id="count"
+            min="1"
+            max="100"
+            [ngModel]="issueCount()"
+            (ngModelChange)="issueCount.set($event)"
+          />
+        </div>
+
+        <div class="form-group full-width">
+          <label for="summary">Summary</label>
+          <input
+            type="text"
+            id="summary"
+            [ngModel]="summary()"
+            (ngModelChange)="summary.set($event)"
+          />
+        </div>
+
+        <div class="form-group full-width">
+          <label for="description">Description (optional)</label>
+          <textarea
+            id="description"
+            rows="3"
+            [ngModel]="description()"
+            (ngModelChange)="description.set($event)"
+          ></textarea>
+        </div>
+      </div>
+
+      <button
+        class="btn primary"
+        [disabled]="creatingIssues() || !selectedProject()"
+        (click)="createIssues()"
+      >
+        @if (creatingIssues()) {
+          Creating...
+        } @else {
+          Create {{ issueCount() }} Issue(s)
+        }
+      </button>
+
+      @if (createdIssues().length > 0) {
+        <div class="results">
+          <h4>Created Issues:</h4>
+          <ul>
+            @for (issue of createdIssues(); track issue.key) {
+              <li>
+                <a [href]="issue.selfUrl" target="_blank">{{ issue.key }}</a>
+              </li>
+            }
+          </ul>
+        </div>
+      }
+    </section>
+
+    <!-- Transition Issue Section -->
+    <section class="card">
+      <h2>Transition Issue</h2>
+      <p class="description">Change the status of an issue by applying a transition.</p>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="transitionIssueKey">Issue Key</label>
+          <input
+            type="text"
+            id="transitionIssueKey"
+            placeholder="e.g., PROJ-123"
+            [ngModel]="transitionIssueKey()"
+            (ngModelChange)="transitionIssueKey.set($event)"
+          />
+        </div>
+        <button
+          class="btn secondary"
+          [disabled]="loadingTransitions() || !transitionIssueKey()"
+          (click)="loadTransitions()"
+        >
+          @if (loadingTransitions()) {
+            Loading...
+          } @else {
+            Load Transitions
+          }
+        </button>
+      </div>
+
+      @if (transitions().length > 0) {
+        <div class="form-row">
+          <div class="form-group">
+            <label for="transition">Available Transitions</label>
+            <select
+              id="transition"
+              [ngModel]="selectedTransition()"
+              (ngModelChange)="selectedTransition.set($event)"
+            >
+              @for (t of transitions(); track t.id) {
+                <option [value]="t.id">{{ t.name }} → {{ t.toStatus }}</option>
+              }
+            </select>
+          </div>
+          <button
+            class="btn primary"
+            [disabled]="transitioning() || !selectedTransition()"
+            (click)="transitionIssue()"
+          >
+            @if (transitioning()) {
+              Transitioning...
+            } @else {
+              Apply Transition
+            }
+          </button>
+        </div>
+      }
+    </section>
+
+    <!-- Bulk Transition Section -->
+    <section class="card">
+      <h2>Bulk Transition</h2>
+      <p class="description">Apply the same transition to multiple issues at once.</p>
+
+      <div class="form-grid">
+        <div class="form-group full-width">
+          <label for="bulkIssueKeys">Issue Keys (comma-separated)</label>
+          <input
+            type="text"
+            id="bulkIssueKeys"
+            placeholder="e.g., PROJ-1, PROJ-2, PROJ-3"
+            [ngModel]="bulkIssueKeys()"
+            (ngModelChange)="bulkIssueKeys.set($event)"
+          />
+        </div>
+
+        <div class="form-group">
+          <label for="bulkTransitionId">Transition ID</label>
+          <input
+            type="text"
+            id="bulkTransitionId"
+            placeholder="e.g., 21"
+            [ngModel]="bulkTransitionId()"
+            (ngModelChange)="bulkTransitionId.set($event)"
+          />
+        </div>
+      </div>
+
+      <button
+        class="btn primary"
+        [disabled]="bulkTransitioning() || !bulkIssueKeys() || !bulkTransitionId()"
+        (click)="bulkTransition()"
+      >
+        @if (bulkTransitioning()) {
+          Processing...
+        } @else {
+          Apply Bulk Transition
+        }
+      </button>
+
+      @if (bulkResults().length > 0) {
+        <div class="results">
+          <h4>Results:</h4>
+          <table class="results-table">
+            <thead>
+              <tr>
+                <th>Issue</th>
+                <th>Status</th>
+                <th>Error</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (result of bulkResults(); track result.issueKey) {
+                <tr [class.success]="result.success" [class.error]="!result.success">
+                  <td>{{ result.issueKey }}</td>
+                  <td>{{ result.success ? 'Success' : 'Failed' }}</td>
+                  <td>{{ result.error || '-' }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    </section>
+  }
+</div>

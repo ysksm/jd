@@ -24,6 +24,23 @@ This will:
 1. Start the Angular dev server with Tauri configuration
 2. Launch the Tauri development window
 
+### Debug Logging
+
+To enable debug log output during development:
+
+```bash
+# Enable info level logs (default)
+RUST_LOG=info cargo tauri dev
+
+# Enable debug level logs (more verbose)
+RUST_LOG=debug cargo tauri dev
+
+# Enable trace level logs (most verbose)
+RUST_LOG=trace cargo tauri dev
+```
+
+Logs are output to the terminal where `cargo tauri dev` is running.
+
 ### Building
 
 ```bash
