@@ -36,7 +36,7 @@ pub use infrastructure::config::{
     DatabaseConfig, EmbeddingsConfig, JiraConfig, ProjectConfig, Settings, SyncCheckpoint,
 };
 pub use infrastructure::database::{
-    Database, DbConnection, DuckDbChangeHistoryRepository, DuckDbFieldRepository,
+    Database, DatabaseFactory, DbConnection, DuckDbChangeHistoryRepository, DuckDbFieldRepository,
     DuckDbIssueRepository, DuckDbIssueSnapshotRepository, DuckDbIssuesExpandedRepository,
     DuckDbMetadataRepository, DuckDbProjectRepository, DuckDbSyncHistoryRepository,
     EmbeddingsRepository, SemanticSearchResult, checkpoint_connection,

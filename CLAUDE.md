@@ -7,7 +7,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 `jira-db` is a command-line tool for synchronizing JIRA data to a local DuckDB database. It enables offline searching and analysis of JIRA issues.
 
 ### Key Features
-- Sync JIRA projects and issues to a local DuckDB database
+- Sync JIRA projects and issues to local DuckDB databases
+- **Per-project databases**: Each project has its own database file (`./data/{PROJECT_KEY}.duckdb`)
 - **Resumable sync**: Interruption-safe with checkpoint support (resumes from last successful batch)
 - Per-project sync configuration
 - Settings managed via `./data/settings.json`
@@ -61,10 +62,10 @@ cargo run -- report --interactive  # Generate interactive HTML report
 ### Running MCP Server
 ```bash
 # Stdio mode (for Claude Desktop, VS Code, etc.)
-cargo run -p jira-db-mcp -- --database ./data/jira.duckdb
+cargo run -p jira-db-mcp -- --database-dir ./data
 
 # HTTP mode (for web clients)
-cargo run -p jira-db-mcp -- --database ./data/jira.duckdb --http --port 8080
+cargo run -p jira-db-mcp -- --database-dir ./data --http --port 8080
 ```
 
 ### Testing
@@ -295,10 +296,12 @@ Located at `./data/settings.json`:
   },
   "projects": [],
   "database": {
-    "path": "./data/jira.duckdb"
+    "database_dir": "./data"
   }
 }
 ```
+
+Each project gets its own database file at `{database_dir}/{PROJECT_KEY}.duckdb`.
 
 ## CLI Structure
 

@@ -48,7 +48,17 @@ pub struct ProjectConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DatabaseConfig {
-    pub path: PathBuf,
+    /// Legacy single database path (deprecated, kept for backward compatibility)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub path: Option<PathBuf>,
+    /// Directory containing per-project database files
+    /// Each project will have its own database at {database_dir}/{project_key}.duckdb
+    #[serde(default = "default_database_dir")]
+    pub database_dir: PathBuf,
+}
+
+fn default_database_dir() -> PathBuf {
+    PathBuf::from("./data")
 }
 
 /// Configuration for embedding generation
@@ -147,7 +157,8 @@ impl Settings {
             },
             projects: Vec::new(),
             database: DatabaseConfig {
-                path: PathBuf::from("./data/jira.duckdb"),
+                path: None,
+                database_dir: PathBuf::from("./data"),
             },
             embeddings: None,
         };
@@ -205,6 +216,19 @@ impl Settings {
     pub fn sync_enabled_projects(&self) -> Vec<&ProjectConfig> {
         self.projects.iter().filter(|p| p.sync_enabled).collect()
     }
+
+    /// Get the database path for a specific project
+    /// Returns {database_dir}/{project_key}.duckdb
+    pub fn get_database_path_for_project(&self, project_key: &str) -> PathBuf {
+        self.database
+            .database_dir
+            .join(format!("{}.duckdb", project_key))
+    }
+
+    /// Get the database directory
+    pub fn get_database_dir(&self) -> &Path {
+        &self.database.database_dir
+    }
 }
 
 #[cfg(test)]
@@ -221,7 +245,8 @@ mod tests {
             },
             projects: vec![],
             database: DatabaseConfig {
-                path: PathBuf::from("./test.db"),
+                path: None,
+                database_dir: PathBuf::from("./data"),
             },
             embeddings: None,
         };
@@ -242,7 +267,8 @@ mod tests {
             },
             projects: vec![],
             database: DatabaseConfig {
-                path: PathBuf::from("./test.db"),
+                path: None,
+                database_dir: PathBuf::from("./data"),
             },
             embeddings: None,
         };
@@ -251,5 +277,25 @@ mod tests {
 
         settings.jira.api_key = "your-api-key-here".into();
         assert!(settings.validate().is_err());
+    }
+
+    #[test]
+    fn test_get_database_path_for_project() {
+        let settings = Settings {
+            jira: JiraConfig {
+                endpoint: "https://test.atlassian.net".into(),
+                username: "test@example.com".into(),
+                api_key: "test-key".into(),
+            },
+            projects: vec![],
+            database: DatabaseConfig {
+                path: None,
+                database_dir: PathBuf::from("./data"),
+            },
+            embeddings: None,
+        };
+
+        let path = settings.get_database_path_for_project("MYPROJ");
+        assert_eq!(path, PathBuf::from("./data/MYPROJ.duckdb"));
     }
 }

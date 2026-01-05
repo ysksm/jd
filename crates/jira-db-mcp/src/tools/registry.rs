@@ -5,9 +5,8 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use async_trait::async_trait;
-use duckdb::Connection;
+use jira_db_core::DatabaseFactory;
 use serde_json::Value;
-use std::sync::Mutex;
 
 use super::implementations::*;
 use crate::protocol::{CallToolResult, Tool, ToolInputSchema};
@@ -29,32 +28,32 @@ pub struct ToolRegistry {
 
 impl ToolRegistry {
     /// Create a new tool registry with all available tools
-    pub fn new(db_conn: Arc<Mutex<Connection>>) -> Self {
+    pub fn new(db_factory: Arc<DatabaseFactory>) -> Self {
         let mut tools: HashMap<String, Arc<dyn ToolHandler>> = HashMap::new();
 
         // Register all tools
-        let search_issues = Arc::new(SearchIssuesTool::new(db_conn.clone()));
+        let search_issues = Arc::new(SearchIssuesTool::new(db_factory.clone()));
         tools.insert("search_issues".to_string(), search_issues);
 
-        let get_issue = Arc::new(GetIssueTool::new(db_conn.clone()));
+        let get_issue = Arc::new(GetIssueTool::new(db_factory.clone()));
         tools.insert("get_issue".to_string(), get_issue);
 
-        let get_issue_history = Arc::new(GetIssueHistoryTool::new(db_conn.clone()));
+        let get_issue_history = Arc::new(GetIssueHistoryTool::new(db_factory.clone()));
         tools.insert("get_issue_history".to_string(), get_issue_history);
 
-        let list_projects = Arc::new(ListProjectsTool::new(db_conn.clone()));
+        let list_projects = Arc::new(ListProjectsTool::new(db_factory.clone()));
         tools.insert("list_projects".to_string(), list_projects);
 
-        let get_project_metadata = Arc::new(GetProjectMetadataTool::new(db_conn.clone()));
+        let get_project_metadata = Arc::new(GetProjectMetadataTool::new(db_factory.clone()));
         tools.insert("get_project_metadata".to_string(), get_project_metadata);
 
-        let get_schema = Arc::new(GetSchemaTool::new(db_conn.clone()));
+        let get_schema = Arc::new(GetSchemaTool::new(db_factory.clone()));
         tools.insert("get_schema".to_string(), get_schema);
 
-        let execute_sql = Arc::new(ExecuteSqlTool::new(db_conn.clone()));
+        let execute_sql = Arc::new(ExecuteSqlTool::new(db_factory.clone()));
         tools.insert("execute_sql".to_string(), execute_sql);
 
-        let semantic_search = Arc::new(SemanticSearchTool::new(db_conn.clone()));
+        let semantic_search = Arc::new(SemanticSearchTool::new(db_factory.clone()));
         tools.insert("semantic_search".to_string(), semantic_search);
 
         Self { tools }
