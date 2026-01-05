@@ -32,7 +32,6 @@ export interface Issue {
   fixVersions: string[];
   createdAt: string;
   updatedAt: string;
-  dueDate?: string;
 }
 
 export interface ChangeHistoryItem {
