@@ -3,6 +3,7 @@ use crate::domain::error::{DomainError, DomainResult};
 use crate::domain::repositories::{IssueRepository, SearchParams};
 use chrono::{DateTime, Utc};
 use duckdb::Connection;
+use log::debug;
 use std::sync::{Arc, Mutex};
 
 pub struct DuckDbIssueRepository {
@@ -19,6 +20,8 @@ impl IssueRepository for DuckDbIssueRepository {
     fn batch_insert(&self, issues: &[Issue]) -> DomainResult<()> {
         let conn = self.conn.lock().unwrap();
         let now = Utc::now().to_rfc3339();
+
+        debug!("[SQL] Inserting {} issues into issues table", issues.len());
 
         for issue in issues {
             let labels_json = issue

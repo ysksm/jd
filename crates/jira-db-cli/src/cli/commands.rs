@@ -168,6 +168,12 @@ pub enum Commands {
         #[command(subcommand)]
         action: FieldsAction,
     },
+
+    /// Debug tools for JIRA data creation and testing (requires debug_mode in settings)
+    Debug {
+        #[command(subcommand)]
+        action: DebugAction,
+    },
 }
 
 #[derive(Subcommand)]
@@ -259,4 +265,60 @@ pub enum FieldsAction {
         #[arg(short, long)]
         project: Option<String>,
     },
+}
+
+#[derive(Subcommand)]
+pub enum DebugAction {
+    /// Create test issues in JIRA
+    CreateIssues {
+        /// Project key
+        #[arg(short, long)]
+        project: String,
+
+        /// Number of issues to create (1-100)
+        #[arg(short = 'n', long, default_value = "1")]
+        count: usize,
+
+        /// Issue type (e.g., Task, Bug, Story)
+        #[arg(short = 't', long, default_value = "Task")]
+        issue_type: String,
+
+        /// Summary prefix for created issues
+        #[arg(short, long, default_value = "[Debug] Test Issue")]
+        summary: String,
+
+        /// Description for created issues
+        #[arg(short, long)]
+        description: Option<String>,
+    },
+
+    /// List available status transitions for an issue
+    ListTransitions {
+        /// Issue key (e.g., PROJ-123)
+        issue_key: String,
+    },
+
+    /// Transition a single issue to a new status
+    TransitionIssue {
+        /// Issue key (e.g., PROJ-123)
+        issue_key: String,
+
+        /// Transition ID (use list-transitions to find available IDs)
+        #[arg(short = 't', long)]
+        transition_id: String,
+    },
+
+    /// Transition multiple issues to a new status
+    BulkTransition {
+        /// Issue keys (comma-separated, e.g., PROJ-1,PROJ-2,PROJ-3)
+        #[arg(short, long)]
+        issues: String,
+
+        /// Transition ID (use list-transitions to find available IDs)
+        #[arg(short = 't', long)]
+        transition_id: String,
+    },
+
+    /// Show current debug mode status
+    Status,
 }

@@ -1,10 +1,10 @@
 use async_trait::async_trait;
 use base64::{Engine as _, engine::general_purpose};
-use log::warn;
+use log::{debug, warn};
 use std::time::Duration;
 use tokio::time::{sleep, timeout};
 
-use crate::application::dto::CreatedIssueDto;
+use crate::application::dto::{CreatedIssueDto, TransitionDto};
 use crate::application::services::{FetchProgress, JiraService};
 use crate::domain::entities::{
     Component, FixVersion, Issue, IssueType, JiraField, Label, Priority, Project, Status,
@@ -295,6 +295,11 @@ impl JiraService for JiraApiClient {
 
         let url = format!("{}/rest/api/3/search/jql", self.base_url);
 
+        debug!(
+            "[JIRA API] GET {} (jql={}, startAt={}, maxResults={})",
+            url, jql, start_at, max_results
+        );
+
         let response = self
             .http_client
             .get(&url)
@@ -310,6 +315,8 @@ impl JiraService for JiraApiClient {
             .send()
             .await
             .map_err(|e| DomainError::ExternalService(format!("Failed to fetch issues: {}", e)))?;
+
+        debug!("[JIRA API] Response status: {}", response.status());
 
         if !response.status().is_success() {
             let status = response.status();
@@ -342,6 +349,14 @@ impl JiraService for JiraApiClient {
         let fetched_so_far = start_at + issues.len();
         let has_more = fetched_so_far < total;
 
+        debug!(
+            "[JIRA API] Fetched {} issues ({}/{}), has_more={}",
+            issues.len(),
+            fetched_so_far,
+            total,
+            has_more
+        );
+
         Ok(FetchProgress {
             issues,
             total,
@@ -366,6 +381,8 @@ impl JiraService for JiraApiClient {
             self.base_url, project_key
         );
 
+        debug!("[JIRA API] GET {} (fetching statuses)", url);
+
         let response = self
             .http_client
             .get(&url)
@@ -376,6 +393,8 @@ impl JiraService for JiraApiClient {
             .map_err(|e| {
                 DomainError::ExternalService(format!("Failed to fetch statuses: {}", e))
             })?;
+
+        debug!("[JIRA API] Response status: {}", response.status());
 
         if !response.status().is_success() {
             return Err(DomainError::ExternalService(format!(
@@ -750,6 +769,11 @@ impl JiraService for JiraApiClient {
             "fields": fields
         });
 
+        debug!(
+            "[JIRA API] POST {} (creating issue: project={}, type={}, summary={})",
+            url, project_key, issue_type, summary
+        );
+
         let response = self
             .http_client
             .post(&url)
@@ -760,6 +784,8 @@ impl JiraService for JiraApiClient {
             .send()
             .await
             .map_err(|e| DomainError::ExternalService(format!("Failed to create issue: {}", e)))?;
+
+        debug!("[JIRA API] Response status: {}", response.status());
 
         if !response.status().is_success() {
             let status = response.status();
@@ -792,5 +818,118 @@ impl JiraService for JiraApiClient {
         let self_url = json["self"].as_str().map(|s| s.to_string());
 
         Ok(CreatedIssueDto::new(id, key, self_url))
+    }
+
+    async fn get_issue_transitions(&self, issue_key: &str) -> DomainResult<Vec<TransitionDto>> {
+        let url = format!(
+            "{}/rest/api/3/issue/{}/transitions",
+            self.base_url, issue_key
+        );
+
+        debug!(
+            "[JIRA API] GET {} (fetching transitions for {})",
+            url, issue_key
+        );
+
+        let response = self
+            .http_client
+            .get(&url)
+            .header("Authorization", &self.auth_header)
+            .header("Accept", "application/json")
+            .send()
+            .await
+            .map_err(|e| {
+                DomainError::ExternalService(format!("Failed to get transitions: {}", e))
+            })?;
+
+        debug!("[JIRA API] Response status: {}", response.status());
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Could not read error response".to_string());
+            return Err(DomainError::ExternalService(format!(
+                "Failed to get transitions: {} - {}",
+                status, error_text
+            )));
+        }
+
+        let json: serde_json::Value = response.json().await.map_err(|e| {
+            DomainError::ExternalService(format!("Failed to parse transitions response: {}", e))
+        })?;
+
+        let mut transitions = Vec::new();
+        if let Some(transition_array) = json["transitions"].as_array() {
+            for transition_obj in transition_array {
+                let id = transition_obj["id"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .to_string();
+                let name = transition_obj["name"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .to_string();
+                let to_status = transition_obj["to"]["name"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .to_string();
+                let to_status_category = transition_obj["to"]["statusCategory"]["key"]
+                    .as_str()
+                    .map(|s| s.to_string());
+
+                transitions.push(TransitionDto::new(id, name, to_status, to_status_category));
+            }
+        }
+
+        Ok(transitions)
+    }
+
+    async fn transition_issue(&self, issue_key: &str, transition_id: &str) -> DomainResult<()> {
+        let url = format!(
+            "{}/rest/api/3/issue/{}/transitions",
+            self.base_url, issue_key
+        );
+
+        let body = serde_json::json!({
+            "transition": {
+                "id": transition_id
+            }
+        });
+
+        debug!(
+            "[JIRA API] POST {} (transitioning {} with id={})",
+            url, issue_key, transition_id
+        );
+
+        let response = self
+            .http_client
+            .post(&url)
+            .header("Authorization", &self.auth_header)
+            .header("Content-Type", "application/json")
+            .header("Accept", "application/json")
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| {
+                DomainError::ExternalService(format!("Failed to transition issue: {}", e))
+            })?;
+
+        debug!("[JIRA API] Response status: {}", response.status());
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Could not read error response".to_string());
+            return Err(DomainError::ExternalService(format!(
+                "Failed to transition issue: {} - {}",
+                status, error_text
+            )));
+        }
+
+        Ok(())
     }
 }

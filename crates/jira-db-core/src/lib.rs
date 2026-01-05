@@ -12,14 +12,14 @@ pub mod infrastructure;
 pub mod report;
 
 // Re-export commonly used types for convenience
-pub use application::dto::{CreatedIssueDto, SyncResult};
+pub use application::dto::{CreatedIssueDto, SyncResult, TransitionDto};
 pub use application::services::{FetchProgress, JiraService};
 pub use application::use_cases::{
     CreateTestTicketUseCase, EmbeddingGenerationConfig, EmbeddingGenerationResult, EmbeddingTiming,
     ExecuteSqlUseCase, GenerateEmbeddingsUseCase, GenerateReportUseCase, GenerateSnapshotsUseCase,
     GetChangeHistoryUseCase, GetProjectMetadataUseCase, ReportData, ResumableSyncResult,
     SearchIssuesUseCase, SnapshotGenerationResult, SqlResult, SyncFieldsResult, SyncFieldsUseCase,
-    SyncProjectListUseCase, SyncProjectUseCase,
+    SyncProjectListUseCase, SyncProjectUseCase, TransitionIssueUseCase, TransitionResult,
 };
 
 pub use domain::entities::{

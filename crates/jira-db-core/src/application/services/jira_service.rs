@@ -1,4 +1,4 @@
-use crate::application::dto::CreatedIssueDto;
+use crate::application::dto::{CreatedIssueDto, TransitionDto};
 use crate::domain::entities::{
     Component, FixVersion, Issue, IssueType, JiraField, Label, Priority, Project, Status,
 };
@@ -80,4 +80,10 @@ pub trait JiraService: Send + Sync {
         description: Option<&str>,
         issue_type: &str,
     ) -> DomainResult<CreatedIssueDto>;
+
+    /// Get available transitions for an issue
+    async fn get_issue_transitions(&self, issue_key: &str) -> DomainResult<Vec<TransitionDto>>;
+
+    /// Transition an issue to a new status
+    async fn transition_issue(&self, issue_key: &str, transition_id: &str) -> DomainResult<()>;
 }
