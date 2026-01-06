@@ -18,7 +18,9 @@ impl DuckDbIssueRepository {
 
 impl IssueRepository for DuckDbIssueRepository {
     fn batch_insert(&self, issues: &[Issue]) -> DomainResult<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().map_err(|e| {
+            DomainError::Repository(format!("Failed to acquire database lock: {}", e))
+        })?;
         let now = Utc::now().to_rfc3339();
 
         debug!("[SQL] Inserting {} issues into issues table", issues.len());
@@ -108,7 +110,9 @@ impl IssueRepository for DuckDbIssueRepository {
     }
 
     fn find_by_project(&self, project_id: &str) -> DomainResult<Vec<Issue>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().map_err(|e| {
+            DomainError::Repository(format!("Failed to acquire database lock: {}", e))
+        })?;
         let mut stmt = conn
             .prepare(
                 r#"
@@ -175,7 +179,9 @@ impl IssueRepository for DuckDbIssueRepository {
     }
 
     fn count_by_project(&self, project_id: &str) -> DomainResult<usize> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().map_err(|e| {
+            DomainError::Repository(format!("Failed to acquire database lock: {}", e))
+        })?;
         let count: i64 = conn
             .query_row(
                 "SELECT COUNT(*) FROM issues WHERE project_id = ?",
@@ -188,7 +194,9 @@ impl IssueRepository for DuckDbIssueRepository {
     }
 
     fn search(&self, params: &SearchParams) -> DomainResult<Vec<Issue>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().map_err(|e| {
+            DomainError::Repository(format!("Failed to acquire database lock: {}", e))
+        })?;
 
         let mut sql = String::from(
             r#"
@@ -313,7 +321,9 @@ impl IssueRepository for DuckDbIssueRepository {
     }
 
     fn mark_deleted_not_in_keys(&self, project_id: &str, keys: &[String]) -> DomainResult<usize> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().map_err(|e| {
+            DomainError::Repository(format!("Failed to acquire database lock: {}", e))
+        })?;
 
         if keys.is_empty() {
             // If no keys provided, mark all issues for this project as deleted

@@ -18,7 +18,9 @@ impl DuckDbChangeHistoryRepository {
 
 impl ChangeHistoryRepository for DuckDbChangeHistoryRepository {
     fn batch_insert(&self, items: &[ChangeHistoryItem]) -> DomainResult<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().map_err(|e| {
+            DomainError::Repository(format!("Failed to acquire database lock: {}", e))
+        })?;
         let now = Utc::now().to_rfc3339();
 
         debug!(
@@ -63,7 +65,9 @@ impl ChangeHistoryRepository for DuckDbChangeHistoryRepository {
     }
 
     fn delete_by_issue_id(&self, issue_id: &str) -> DomainResult<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().map_err(|e| {
+            DomainError::Repository(format!("Failed to acquire database lock: {}", e))
+        })?;
         conn.execute(
             "DELETE FROM issue_change_history WHERE issue_id = ?",
             duckdb::params![issue_id],
@@ -73,7 +77,9 @@ impl ChangeHistoryRepository for DuckDbChangeHistoryRepository {
     }
 
     fn find_by_issue_key(&self, issue_key: &str) -> DomainResult<Vec<ChangeHistoryItem>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().map_err(|e| {
+            DomainError::Repository(format!("Failed to acquire database lock: {}", e))
+        })?;
         let mut stmt = conn
             .prepare(
                 r#"
@@ -124,7 +130,9 @@ impl ChangeHistoryRepository for DuckDbChangeHistoryRepository {
         issue_key: &str,
         field_filter: Option<&str>,
     ) -> DomainResult<Vec<ChangeHistoryItem>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().map_err(|e| {
+            DomainError::Repository(format!("Failed to acquire database lock: {}", e))
+        })?;
 
         let sql = if field_filter.is_some() {
             r#"
@@ -209,7 +217,9 @@ impl ChangeHistoryRepository for DuckDbChangeHistoryRepository {
     }
 
     fn count_by_issue_key(&self, issue_key: &str) -> DomainResult<usize> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().map_err(|e| {
+            DomainError::Repository(format!("Failed to acquire database lock: {}", e))
+        })?;
         let count: i64 = conn
             .query_row(
                 "SELECT COUNT(*) FROM issue_change_history WHERE issue_key = ?",
