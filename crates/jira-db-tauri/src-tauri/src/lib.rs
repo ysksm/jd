@@ -143,9 +143,9 @@ pub fn run() {
             // SQL
             commands::sql::sql_execute,
             commands::sql::sql_get_schema,
-            commands::sql::sql_query_list,
-            commands::sql::sql_query_save,
-            commands::sql::sql_query_delete,
+            commands::sql::sql_list_queries,
+            commands::sql::sql_save_query,
+            commands::sql::sql_delete_query,
             // Database management
             commands::database::database_close,
             commands::database::database_status,
