@@ -347,7 +347,9 @@ impl JiraService for JiraApiClient {
         }
 
         let fetched_so_far = start_at + issues.len();
-        let has_more = fetched_so_far < total;
+        // JIRA Cloud APIではtotalが正確でない場合がある（パフォーマンス上の理由）
+        // 取得した件数がmax_resultsと同じなら次のページがある可能性あり
+        let has_more = issues.len() >= max_results || fetched_so_far < total;
 
         debug!(
             "[JIRA API] Fetched {} issues ({}/{}), has_more={}",
