@@ -21,10 +21,11 @@ pub async fn sql_execute(
     state: State<'_, AppState>,
     request: SqlExecuteRequest,
 ) -> Result<SqlExecuteResponse, String> {
-    let db = state.get_db(&request.project_key).ok_or_else(|| {
+    let project_key = request.project_key.as_deref().unwrap_or("");
+    let db = state.get_db(project_key).ok_or_else(|| {
         format!(
             "Database not initialized for project {}",
-            request.project_key
+            project_key
         )
     })?;
 
@@ -70,10 +71,11 @@ pub async fn sql_get_schema(
     state: State<'_, AppState>,
     request: SqlGetSchemaRequest,
 ) -> Result<SqlGetSchemaResponse, String> {
-    let db = state.get_db(&request.project_key).ok_or_else(|| {
+    let project_key = request.project_key.as_deref().unwrap_or("");
+    let db = state.get_db(project_key).ok_or_else(|| {
         format!(
             "Database not initialized for project {}",
-            request.project_key
+            project_key
         )
     })?;
 

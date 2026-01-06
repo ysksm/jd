@@ -50,6 +50,16 @@ pub async fn config_update(
                     auto_generate: embeddings.auto_generate,
                 });
             }
+
+            // Update log config if provided
+            if let Some(log) = request.log {
+                settings.log = Some(jira_db_core::LogConfig {
+                    file_enabled: log.file_enabled,
+                    file_dir: log.file_dir.map(PathBuf::from),
+                    level: log.level,
+                    max_files: log.max_files as usize,
+                });
+            }
         })
         .map_err(|e| e.to_string())?;
 
@@ -133,6 +143,12 @@ impl From<jira_db_core::Settings> for Settings {
                 model_name: Some(e.model),
                 endpoint: e.endpoint,
                 auto_generate: e.auto_generate,
+            }),
+            log: s.log.map(|l| LogConfig {
+                file_enabled: l.file_enabled,
+                file_dir: l.file_dir.map(|p| p.to_string_lossy().to_string()),
+                level: l.level,
+                max_files: l.max_files as i32,
             }),
         }
     }

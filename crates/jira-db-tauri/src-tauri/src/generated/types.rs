@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 /// JiraDb API Definition
-///
+/// 
 /// Design principles:
 /// - All operations use POST method (RPC-style)
 /// - Parameters are passed in request body
@@ -269,12 +269,27 @@ pub struct EmbeddingsConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct LogConfig {
+    #[serde(rename = "fileEnabled")]
+    pub file_enabled: bool,
+    #[serde(rename = "fileDir")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file_dir: Option<String>,
+    pub level: String,
+    #[serde(rename = "maxFiles")]
+    pub max_files: i32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Settings {
     pub jira: JiraConfig,
     pub database: DatabaseConfig,
     pub projects: Vec<ProjectConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub embeddings: Option<EmbeddingsConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub log: Option<LogConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -286,7 +301,8 @@ pub struct ProjectConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ConfigGetRequest {}
+pub struct ConfigGetRequest {
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -303,6 +319,8 @@ pub struct ConfigUpdateRequest {
     pub database: Option<DatabaseConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub embeddings: Option<EmbeddingsConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub log: Option<LogConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -333,7 +351,8 @@ pub struct ConfigInitResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ProjectListRequest {}
+pub struct ProjectListRequest {
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -343,7 +362,8 @@ pub struct ProjectListResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ProjectInitRequest {}
+pub struct ProjectInitRequest {
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -393,7 +413,8 @@ pub struct SyncExecuteResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SyncStatusRequest {}
+pub struct SyncStatusRequest {
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -537,9 +558,9 @@ pub struct ReportGenerateResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SqlExecuteRequest {
-    /// Project key (required for per-project database)
     #[serde(rename = "projectKey")]
-    pub project_key: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub project_key: Option<String>,
     pub query: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub limit: Option<i32>,
@@ -559,9 +580,9 @@ pub struct SqlExecuteResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SqlGetSchemaRequest {
-    /// Project key (required for per-project database)
     #[serde(rename = "projectKey")]
-    pub project_key: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub project_key: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub table: Option<String>,
 }
@@ -574,7 +595,8 @@ pub struct SqlGetSchemaResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SqlQueryListRequest {}
+pub struct SqlQueryListRequest {
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -610,3 +632,141 @@ pub struct SqlQueryDeleteRequest {
 pub struct SqlQueryDeleteResponse {
     pub success: bool,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreatedIssue {
+    pub key: String,
+    pub id: String,
+    #[serde(rename = "selfUrl")]
+    pub self_url: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Transition {
+    pub id: String,
+    pub name: String,
+    #[serde(rename = "toStatus")]
+    pub to_status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BulkTransitionResult {
+    #[serde(rename = "issueKey")]
+    pub issue_key: String,
+    pub success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IssueTypeInfo {
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(rename = "iconUrl")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub icon_url: Option<String>,
+    pub subtask: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DebugStatusRequest {
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DebugStatusResponse {
+    pub enabled: bool,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DebugGetIssueTypesRequest {
+    pub project: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DebugGetIssueTypesResponse {
+    #[serde(rename = "issueTypes")]
+    pub issue_types: Vec<IssueTypeInfo>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DebugCreateIssuesRequest {
+    pub project: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub count: Option<i32>,
+    #[serde(rename = "issueType")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub issue_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DebugCreateIssuesResponse {
+    pub success: bool,
+    pub created: Vec<CreatedIssue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DebugListTransitionsRequest {
+    #[serde(rename = "issueKey")]
+    pub issue_key: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DebugListTransitionsResponse {
+    pub transitions: Vec<Transition>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DebugTransitionIssueRequest {
+    #[serde(rename = "issueKey")]
+    pub issue_key: String,
+    #[serde(rename = "transitionId")]
+    pub transition_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DebugTransitionIssueResponse {
+    pub success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DebugBulkTransitionRequest {
+    pub issues: Vec<String>,
+    #[serde(rename = "transitionId")]
+    pub transition_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DebugBulkTransitionResponse {
+    pub results: Vec<BulkTransitionResult>,
+    #[serde(rename = "successCount")]
+    pub success_count: i32,
+    #[serde(rename = "failureCount")]
+    pub failure_count: i32,
+}
+

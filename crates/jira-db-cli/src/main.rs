@@ -215,6 +215,7 @@ async fn handle_init_command(
                 database_dir: std::path::PathBuf::from(db_dir),
             },
             embeddings: None,
+            log: None,
             debug_mode: false,
         };
 

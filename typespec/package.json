@@ -4,7 +4,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "build:emitters": "npm run build --prefix emitters/common && npm run build --prefix emitters/emit-rust && npm run build --prefix emitters/emit-tauri && npm run build --prefix emitters/emit-angular",
+    "build:emitters": "npm run build --prefix emitters/common && npm run build --prefix emitters/emit-tauri && npm run build --prefix emitters/emit-angular",
     "build": "npm run build:emitters && tsp compile .",
     "watch": "tsp compile . --watch",
     "format": "tsp format **/*.tsp"
@@ -12,7 +12,6 @@
   "dependencies": {
     "@typespec/compiler": "^0.62.0",
     "@jira-db/emitter-common": "file:./emitters/common",
-    "@jira-db/emit-rust": "file:./emitters/emit-rust",
     "@jira-db/emit-tauri": "file:./emitters/emit-tauri",
     "@jira-db/emit-angular": "file:./emitters/emit-angular"
   },

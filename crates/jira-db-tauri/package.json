@@ -5,6 +5,7 @@
   "scripts": {
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
+    "tauri:dev-debug": "RUST_LOG=info tauri dev",
     "tauri:build": "tauri build"
   },
   "devDependencies": {

@@ -10,6 +10,8 @@ mod state;
 use state::AppState;
 use std::path::PathBuf;
 use tauri::{Manager, RunEvent};
+use tracing_appender::non_blocking::WorkerGuard;
+use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 /// Default settings file path (relative, will be resolved to absolute)
 const DEFAULT_SETTINGS_FILE: &str = "./data/settings.json";
@@ -63,11 +65,88 @@ fn resolve_data_path() -> PathBuf {
     }
 }
 
+/// Initialize logging with file output based on LogConfig
+/// Returns a guard that must be kept alive for the duration of the application
+fn init_logging(settings_path: &PathBuf) -> Option<WorkerGuard> {
+    use jira_db_core::Settings;
+
+    // Try to load settings to get log config
+    let log_config = Settings::load(settings_path)
+        .ok()
+        .and_then(|s| s.log);
+
+    // Determine log level from config or default
+    let log_level = log_config
+        .as_ref()
+        .map(|c| c.level.as_str())
+        .unwrap_or("info");
+
+    // Create env filter
+    let env_filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new(log_level));
+
+    // Check if file logging is enabled
+    let file_enabled = log_config
+        .as_ref()
+        .map(|c| c.file_enabled)
+        .unwrap_or(false);
+
+    if file_enabled {
+        // Get log directory
+        let log_dir = log_config
+            .as_ref()
+            .and_then(|c| c.file_dir.clone())
+            .unwrap_or_else(|| {
+                settings_path
+                    .parent()
+                    .map(|p| p.join("logs"))
+                    .unwrap_or_else(|| PathBuf::from("./data/logs"))
+            });
+
+        // Ensure log directory exists
+        if let Err(e) = std::fs::create_dir_all(&log_dir) {
+            eprintln!("Failed to create log directory {:?}: {}", log_dir, e);
+            // Fall back to console only
+            tracing_subscriber::fmt()
+                .with_env_filter(env_filter)
+                .init();
+            return None;
+        }
+
+        // Create file appender with daily rotation
+        let file_appender = tracing_appender::rolling::daily(&log_dir, "jira-db.log");
+        let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
+
+        // Create subscriber with both console and file output
+        tracing_subscriber::registry()
+            .with(env_filter)
+            .with(fmt::layer().with_ansi(true)) // Console layer with colors
+            .with(
+                fmt::layer()
+                    .with_ansi(false)
+                    .with_writer(non_blocking)
+            ) // File layer without colors
+            .init();
+
+        Some(guard)
+    } else {
+        // Console only
+        tracing_subscriber::fmt()
+            .with_env_filter(env_filter)
+            .init();
+        None
+    }
+}
+
 /// Run the Tauri application
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // Initialize tracing subscriber
-    tracing_subscriber::fmt::init();
+    // Resolve settings path first (before initializing logging)
+    let settings_path = resolve_data_path();
+
+    // Initialize logging with file support
+    // The guard must be kept alive for the duration of the application
+    let _log_guard = init_logging(&settings_path);
 
     // Bridge log crate to tracing (for jira-db-core logs)
     tracing_log::LogTracer::init().ok();
@@ -75,12 +154,14 @@ pub fn run() {
     // Initialize logging wrapper
     logging::init(logging::LogOutput::Console);
 
+    // Clone for use in setup closure
+    let setup_settings_path = settings_path.clone();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(AppState::default())
-        .setup(|app| {
-            // Resolve the settings path to an absolute path
-            let settings_path = resolve_data_path();
+        .setup(move |app| {
+            let settings_path = setup_settings_path;
             let state = app.state::<AppState>();
 
             tracing::info!("Settings path (resolved): {:?}", settings_path);

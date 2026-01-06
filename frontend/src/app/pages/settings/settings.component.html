@@ -128,6 +128,67 @@
         </div>
       </section>
 
+      <!-- Log Configuration -->
+      <section class="settings-section">
+        <h3>Logging</h3>
+
+        <div class="form-group checkbox">
+          <label>
+            <input
+              type="checkbox"
+              name="logFileEnabled"
+              [ngModel]="logFileEnabled()"
+              (ngModelChange)="logFileEnabled.set($event)"
+            />
+            Enable file logging
+          </label>
+        </div>
+
+        @if (logFileEnabled()) {
+          <div class="form-group">
+            <label for="logFileDir">Log Directory (optional)</label>
+            <input
+              type="text"
+              id="logFileDir"
+              name="logFileDir"
+              [ngModel]="logFileDir()"
+              (ngModelChange)="logFileDir.set($event)"
+              placeholder="Default: data/logs"
+            />
+          </div>
+
+          <div class="form-group">
+            <label for="logLevel">Log Level</label>
+            <select
+              id="logLevel"
+              name="logLevel"
+              [ngModel]="logLevel()"
+              (ngModelChange)="logLevel.set($event)"
+            >
+              <option value="error">Error</option>
+              <option value="warn">Warn</option>
+              <option value="info">Info</option>
+              <option value="debug">Debug</option>
+              <option value="trace">Trace</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="logMaxFiles">Max Log Files</label>
+            <input
+              type="number"
+              id="logMaxFiles"
+              name="logMaxFiles"
+              [ngModel]="logMaxFiles()"
+              (ngModelChange)="logMaxFiles.set($event)"
+              min="0"
+              placeholder="10"
+            />
+            <small class="form-hint">0 = unlimited</small>
+          </div>
+        }
+      </section>
+
       <!-- Actions -->
       <div class="form-actions">
         @if (!initialized()) {

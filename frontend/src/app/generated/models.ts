@@ -163,11 +163,19 @@ export interface EmbeddingsConfig {
   autoGenerate: boolean;
 }
 
+export interface LogConfig {
+  fileEnabled: boolean;
+  fileDir?: string;
+  level: string;
+  maxFiles: number;
+}
+
 export interface Settings {
   jira: JiraConfig;
   database: DatabaseConfig;
   projects: ProjectConfig[];
   embeddings?: EmbeddingsConfig;
+  log?: LogConfig;
 }
 
 export interface ProjectConfig {
@@ -186,6 +194,7 @@ export interface ConfigUpdateRequest {
   jira?: JiraConfig;
   database?: DatabaseConfig;
   embeddings?: EmbeddingsConfig;
+  log?: LogConfig;
 }
 
 export interface ConfigUpdateResponse {
@@ -374,9 +383,30 @@ export interface SqlQueryDeleteResponse {
   success: boolean;
 }
 
-// ----------------------------------------
-// Debug Types
-// ----------------------------------------
+export interface CreatedIssue {
+  key: string;
+  id: string;
+  selfUrl: string;
+}
+
+export interface Transition {
+  id: string;
+  name: string;
+  toStatus: string;
+}
+
+export interface BulkTransitionResult {
+  issueKey: string;
+  success: boolean;
+  error?: string;
+}
+
+export interface IssueTypeInfo {
+  name: string;
+  description?: string;
+  iconUrl?: string;
+  subtask: boolean;
+}
 
 export interface DebugStatusRequest {
 }
@@ -384,6 +414,14 @@ export interface DebugStatusRequest {
 export interface DebugStatusResponse {
   enabled: boolean;
   message: string;
+}
+
+export interface DebugGetIssueTypesRequest {
+  project: string;
+}
+
+export interface DebugGetIssueTypesResponse {
+  issueTypes: IssueTypeInfo[];
 }
 
 export interface DebugCreateIssuesRequest {
@@ -394,12 +432,6 @@ export interface DebugCreateIssuesRequest {
   description?: string;
 }
 
-export interface CreatedIssue {
-  key: string;
-  id: string;
-  selfUrl: string;
-}
-
 export interface DebugCreateIssuesResponse {
   success: boolean;
   created: CreatedIssue[];
@@ -408,12 +440,6 @@ export interface DebugCreateIssuesResponse {
 
 export interface DebugListTransitionsRequest {
   issueKey: string;
-}
-
-export interface Transition {
-  id: string;
-  name: string;
-  toStatus: string;
 }
 
 export interface DebugListTransitionsResponse {
@@ -435,30 +461,9 @@ export interface DebugBulkTransitionRequest {
   transitionId: string;
 }
 
-export interface BulkTransitionResult {
-  issueKey: string;
-  success: boolean;
-  error?: string;
-}
-
 export interface DebugBulkTransitionResponse {
   results: BulkTransitionResult[];
   successCount: number;
   failureCount: number;
-}
-
-export interface DebugGetIssueTypesRequest {
-  project: string;
-}
-
-export interface IssueTypeInfo {
-  name: string;
-  description?: string;
-  iconUrl?: string;
-  subtask: boolean;
-}
-
-export interface DebugGetIssueTypesResponse {
-  issueTypes: IssueTypeInfo[];
 }
 

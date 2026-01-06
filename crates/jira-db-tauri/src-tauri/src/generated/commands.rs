@@ -244,6 +244,64 @@ pub async fn sql_delete_query(
 }
 
 // ============================================================
+// Debug Commands
+// ============================================================
+
+/// Get debug status
+#[tauri::command]
+pub async fn debug_status(
+    state: State<'_, AppState>,
+    request: DebugStatusRequest,
+) -> Result<DebugStatusResponse, String> {
+    todo!("Implement debug_status")
+}
+
+/// Get issue types for a project
+#[tauri::command]
+pub async fn debug_get_issue_types(
+    state: State<'_, AppState>,
+    request: DebugGetIssueTypesRequest,
+) -> Result<DebugGetIssueTypesResponse, String> {
+    todo!("Implement debug_get_issue_types")
+}
+
+/// Create test issues
+#[tauri::command]
+pub async fn debug_create_issues(
+    state: State<'_, AppState>,
+    request: DebugCreateIssuesRequest,
+) -> Result<DebugCreateIssuesResponse, String> {
+    todo!("Implement debug_create_issues")
+}
+
+/// List available transitions for an issue
+#[tauri::command]
+pub async fn debug_list_transitions(
+    state: State<'_, AppState>,
+    request: DebugListTransitionsRequest,
+) -> Result<DebugListTransitionsResponse, String> {
+    todo!("Implement debug_list_transitions")
+}
+
+/// Transition an issue to a new status
+#[tauri::command]
+pub async fn debug_transition_issue(
+    state: State<'_, AppState>,
+    request: DebugTransitionIssueRequest,
+) -> Result<DebugTransitionIssueResponse, String> {
+    todo!("Implement debug_transition_issue")
+}
+
+/// Bulk transition multiple issues
+#[tauri::command]
+pub async fn debug_bulk_transition(
+    state: State<'_, AppState>,
+    request: DebugBulkTransitionRequest,
+) -> Result<DebugBulkTransitionResponse, String> {
+    todo!("Implement debug_bulk_transition")
+}
+
+// ============================================================
 // Command Registration
 // ============================================================
 
@@ -273,6 +331,12 @@ macro_rules! register_commands {
             sql_list_queries,
             sql_save_query,
             sql_delete_query,
+            debug_status,
+            debug_get_issue_types,
+            debug_create_issues,
+            debug_list_transitions,
+            debug_transition_issue,
+            debug_bulk_transition,
         ])
     };
 }

@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use base64::{Engine as _, engine::general_purpose};
-use log::{debug, warn};
+use log::{debug, info, warn};
 use std::time::Duration;
 use tokio::time::{sleep, timeout};
 
@@ -254,14 +254,14 @@ impl JiraService for JiraApiClient {
     }
 
     async fn fetch_project_issues(&self, project_key: &str) -> DomainResult<Vec<Issue>> {
-        // Use the batch method to fetch all issues
+        // Use the batch method to fetch all issues with token-based pagination
         let mut all_issues = Vec::new();
-        let mut start_at = 0;
+        let mut page_token: Option<String> = None;
         let max_results = 100;
 
         loop {
             let progress = self
-                .fetch_project_issues_batch(project_key, None, start_at, max_results)
+                .fetch_project_issues_batch(project_key, None, page_token.as_deref(), max_results)
                 .await?;
 
             all_issues.extend(progress.issues);
@@ -269,7 +269,7 @@ impl JiraService for JiraApiClient {
             if !progress.has_more {
                 break;
             }
-            start_at = progress.fetched_so_far;
+            page_token = progress.next_page_token;
         }
 
         Ok(all_issues)
@@ -279,37 +279,50 @@ impl JiraService for JiraApiClient {
         &self,
         project_key: &str,
         after_updated_at: Option<DateTime<Utc>>,
-        start_at: usize,
+        page_token: Option<&str>,
         max_results: usize,
     ) -> DomainResult<FetchProgress> {
         // Build JQL: order by updated ASC (oldest first) for resumable sync
         let jql = if let Some(after) = after_updated_at {
+            let formatted_date = after.format("%Y-%m-%d %H:%M").to_string();
+            info!(
+                "[JIRA API] Incremental sync: after_updated_at={:?}, formatted={}",
+                after, formatted_date
+            );
             format!(
                 "project = {} AND updated >= \"{}\" ORDER BY updated ASC, key ASC",
-                project_key,
-                after.format("%Y-%m-%d %H:%M")
+                project_key, formatted_date
             )
         } else {
             format!("project = {} ORDER BY updated ASC, key ASC", project_key)
         };
 
+        info!("[JIRA API] JQL query: {}", jql);
+
+        // Use GET /rest/api/3/search/jql with token-based pagination
         let url = format!("{}/rest/api/3/search/jql", self.base_url);
 
         debug!(
-            "[JIRA API] GET {} (jql={}, startAt={}, maxResults={})",
-            url, jql, start_at, max_results
+            "[JIRA API] GET {} (jql={}, pageToken={:?}, maxResults={})",
+            url, jql, page_token, max_results
         );
+
+        // Build query parameters
+        let mut query_params: Vec<(&str, String)> = vec![
+            ("jql", jql.clone()),
+            ("fields", "*navigable".to_string()),
+            ("expand", "changelog".to_string()),
+            ("maxResults", max_results.to_string()),
+        ];
+
+        if let Some(token) = page_token {
+            query_params.push(("nextPageToken", token.to_string()));
+        }
 
         let response = self
             .http_client
             .get(&url)
-            .query(&[
-                ("jql", jql.as_str()),
-                ("fields", "*navigable"),
-                ("expand", "changelog"),
-                ("maxResults", &max_results.to_string()),
-                ("startAt", &start_at.to_string()),
-            ])
+            .query(&query_params)
             .header("Authorization", &self.auth_header)
             .header("Accept", "application/json")
             .send()
@@ -335,7 +348,9 @@ impl JiraService for JiraApiClient {
             .await
             .map_err(|e| DomainError::ExternalService(format!("Failed to parse issues: {}", e)))?;
 
-        let total = json["total"].as_i64().unwrap_or(0) as usize;
+        // Parse token-based pagination fields
+        let is_last = json["isLast"].as_bool().unwrap_or(true);
+        let next_page_token = json["nextPageToken"].as_str().map(|s| s.to_string());
 
         let mut issues = Vec::new();
         if let Some(issues_array) = json["issues"].as_array() {
@@ -346,22 +361,21 @@ impl JiraService for JiraApiClient {
             }
         }
 
-        let fetched_so_far = start_at + issues.len();
-        let has_more = fetched_so_far < total;
+        let has_more = !is_last && next_page_token.is_some();
 
-        debug!(
-            "[JIRA API] Fetched {} issues ({}/{}), has_more={}",
+        info!(
+            "[JIRA API] Fetched {} issues, isLast={}, has_more={}",
             issues.len(),
-            fetched_so_far,
-            total,
+            is_last,
             has_more
         );
 
         Ok(FetchProgress {
             issues,
-            total,
-            fetched_so_far,
+            total: 0, // Token-based pagination doesn't provide total
+            fetched_so_far: 0, // Will be calculated by caller
             has_more,
+            next_page_token,
         })
     }
 
@@ -1009,5 +1023,157 @@ impl JiraService for JiraApiClient {
         }
 
         Ok(())
+    }
+
+    async fn get_issue_count_by_status(
+        &self,
+        project_key: &str,
+    ) -> DomainResult<std::collections::HashMap<String, usize>> {
+        use log::info;
+
+        // Get all statuses for the project first
+        let statuses = self.fetch_project_statuses(project_key).await?;
+        info!("[get_issue_count_by_status] Found {} statuses for project {}", statuses.len(), project_key);
+
+        let mut result = std::collections::HashMap::new();
+
+        // For each status, count issues using JQL
+        for status in statuses {
+            let jql = format!(
+                "project = {} AND status = \"{}\"",
+                project_key, status.name
+            );
+
+            let url = format!("{}/rest/api/3/search/jql", self.base_url);
+
+            // Build request body for POST
+            let request_body = serde_json::json!({
+                "jql": jql,
+                "maxResults": 1,  // Minimal results, we just need total
+                "fields": ["key"]  // Minimal fields
+            });
+
+            // Use POST method for /rest/api/3/search/jql endpoint
+            let response = self
+                .http_client
+                .post(&url)
+                .header("Authorization", &self.auth_header)
+                .header("Accept", "application/json")
+                .header("Content-Type", "application/json")
+                .json(&request_body)
+                .send()
+                .await
+                .map_err(|e| {
+                    DomainError::ExternalService(format!("Failed to count issues: {}", e))
+                })?;
+
+            if response.status().is_success() {
+                let json: serde_json::Value = response.json().await.map_err(|e| {
+                    DomainError::ExternalService(format!("Failed to parse count response: {}", e))
+                })?;
+
+                // Try to get total from response, fallback to counting issues array
+                let count = json["total"]
+                    .as_i64()
+                    .or_else(|| json["issues"].as_array().map(|arr| arr.len() as i64))
+                    .unwrap_or(0) as usize;
+
+                info!("[get_issue_count_by_status] Status '{}': {} issues", status.name, count);
+
+                if count > 0 {
+                    result.insert(status.name, count);
+                }
+            } else {
+                info!("[get_issue_count_by_status] Failed to get count for status '{}': HTTP {}", status.name, response.status());
+            }
+        }
+
+        info!("[get_issue_count_by_status] Total statuses with issues: {}", result.len());
+        Ok(result)
+    }
+
+    /// Get total issue count for a project using JQL
+    /// Uses pagination to count all issues accurately
+    async fn get_total_issue_count(&self, project_key: &str) -> DomainResult<usize> {
+        use log::info;
+
+        let jql = format!("project = {}", project_key);
+        let url = format!("{}/rest/api/3/search/jql", self.base_url);
+
+        info!("[get_total_issue_count] Starting count for project: {}", project_key);
+
+        // Build request body for POST
+        let request_body = serde_json::json!({
+            "jql": jql,
+            "maxResults": 1,  // Minimal results, we just need total
+            "fields": ["key"]  // Minimal fields
+        });
+
+        // Use POST method for /rest/api/3/search/jql endpoint
+        let response = self
+            .http_client
+            .post(&url)
+            .header("Authorization", &self.auth_header)
+            .header("Accept", "application/json")
+            .header("Content-Type", "application/json")
+            .json(&request_body)
+            .send()
+            .await
+            .map_err(|e| {
+                DomainError::ExternalService(format!("Failed to get issue count: {}", e))
+            })?;
+
+        let status = response.status();
+        info!("[get_total_issue_count] API response status: {}", status);
+
+        if !status.is_success() {
+            let body = response.text().await.unwrap_or_default();
+            info!("[get_total_issue_count] API error body: {}", body);
+            return Err(DomainError::ExternalService(format!(
+                "Failed to get issue count: HTTP {}",
+                status
+            )));
+        }
+
+        let json: serde_json::Value = response.json().await.map_err(|e| {
+            DomainError::ExternalService(format!("Failed to parse count response: {}", e))
+        })?;
+
+        info!("[get_total_issue_count] API response: total={:?}", json["total"]);
+
+        // Try to get total from response
+        // Note: JIRA Cloud may not return accurate total for large datasets
+        // In that case, we need to paginate through all results
+        if let Some(total) = json["total"].as_i64() {
+            info!("[get_total_issue_count] Got total from API: {}", total);
+            if total > 0 {
+                return Ok(total as usize);
+            }
+        }
+
+        info!("[get_total_issue_count] API total was 0 or missing, using pagination fallback");
+
+        // Fallback: paginate through all issues to get accurate count
+        // This is slower but more reliable
+        let mut count = 0usize;
+        let mut page_token: Option<String> = None;
+
+        loop {
+            let progress = self
+                .fetch_project_issues_batch(project_key, None, page_token.as_deref(), 100)
+                .await?;
+
+            count += progress.issues.len();
+            info!("[get_total_issue_count] Pagination batch: {} issues, total so far: {}", progress.issues.len(), count);
+
+            if !progress.has_more || progress.issues.is_empty() {
+                break;
+            }
+
+            page_token = progress.next_page_token;
+        }
+
+        info!("[get_total_issue_count] Final count via pagination: {}", count);
+        Ok(count)
     }
 }

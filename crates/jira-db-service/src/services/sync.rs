@@ -87,11 +87,13 @@ pub async fn execute(
         .add_columns()
         .map_err(|e| ServiceError::Database(e.to_string()))?;
 
-    // Step 3: Execute sync for each project
+    // Step 3: Execute sync for each project (incremental if last_synced exists)
     let mut results = Vec::new();
     for project in &projects_to_sync {
         let start_time = std::time::Instant::now();
-        let result = sync_use_case.execute(&project.key, &project.id).await;
+        let result = sync_use_case
+            .execute(&project.key, &project.id, project.last_synced)
+            .await;
 
         // Step 4: Expand issues for this project
         let _ = fields_use_case.expand_issues(Some(&project.id));
