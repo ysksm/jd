@@ -164,14 +164,16 @@ fn save_queries_to_file(queries: &[SavedQuery]) -> Result<(), String> {
 
 /// List saved queries
 #[tauri::command]
-pub async fn sql_query_list(_request: SqlQueryListRequest) -> Result<SqlQueryListResponse, String> {
+pub async fn sql_list_queries(
+    _request: SqlQueryListRequest,
+) -> Result<SqlQueryListResponse, String> {
     let queries = load_saved_queries();
     Ok(SqlQueryListResponse { queries })
 }
 
 /// Save a query
 #[tauri::command]
-pub async fn sql_query_save(request: SqlQuerySaveRequest) -> Result<SqlQuerySaveResponse, String> {
+pub async fn sql_save_query(request: SqlQuerySaveRequest) -> Result<SqlQuerySaveResponse, String> {
     let mut queries = load_saved_queries();
     let now = Utc::now();
 
@@ -207,7 +209,7 @@ pub async fn sql_query_save(request: SqlQuerySaveRequest) -> Result<SqlQuerySave
 
 /// Delete a saved query
 #[tauri::command]
-pub async fn sql_query_delete(
+pub async fn sql_delete_query(
     request: SqlQueryDeleteRequest,
 ) -> Result<SqlQueryDeleteResponse, String> {
     let mut queries = load_saved_queries();
