@@ -18,7 +18,9 @@ impl DuckDbMetadataRepository {
 
 impl MetadataRepository for DuckDbMetadataRepository {
     fn upsert_statuses(&self, project_id: &str, statuses: &[Status]) -> DomainResult<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().map_err(|e| {
+            DomainError::Repository(format!("Failed to acquire database lock: {}", e))
+        })?;
         let now = Utc::now().to_rfc3339();
 
         debug!(
@@ -51,7 +53,9 @@ impl MetadataRepository for DuckDbMetadataRepository {
     }
 
     fn find_statuses_by_project(&self, project_id: &str) -> DomainResult<Vec<Status>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().map_err(|e| {
+            DomainError::Repository(format!("Failed to acquire database lock: {}", e))
+        })?;
         let mut stmt = conn
             .prepare("SELECT name, description, category FROM statuses WHERE project_id = ? ORDER BY name")
             .map_err(|e| DomainError::Repository(format!("Failed to prepare query: {}", e)))?;
@@ -74,7 +78,9 @@ impl MetadataRepository for DuckDbMetadataRepository {
     }
 
     fn upsert_priorities(&self, project_id: &str, priorities: &[Priority]) -> DomainResult<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().map_err(|e| {
+            DomainError::Repository(format!("Failed to acquire database lock: {}", e))
+        })?;
         let now = Utc::now().to_rfc3339();
 
         for priority in priorities {
@@ -101,7 +107,9 @@ impl MetadataRepository for DuckDbMetadataRepository {
     }
 
     fn find_priorities_by_project(&self, project_id: &str) -> DomainResult<Vec<Priority>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().map_err(|e| {
+            DomainError::Repository(format!("Failed to acquire database lock: {}", e))
+        })?;
         let mut stmt = conn
             .prepare("SELECT name, description, icon_url FROM priorities WHERE project_id = ? ORDER BY name")
             .map_err(|e| DomainError::Repository(format!("Failed to prepare query: {}", e)))?;
@@ -124,7 +132,9 @@ impl MetadataRepository for DuckDbMetadataRepository {
     }
 
     fn upsert_issue_types(&self, project_id: &str, issue_types: &[IssueType]) -> DomainResult<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().map_err(|e| {
+            DomainError::Repository(format!("Failed to acquire database lock: {}", e))
+        })?;
         let now = Utc::now().to_rfc3339();
 
         for issue_type in issue_types {
@@ -153,7 +163,9 @@ impl MetadataRepository for DuckDbMetadataRepository {
     }
 
     fn find_issue_types_by_project(&self, project_id: &str) -> DomainResult<Vec<IssueType>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().map_err(|e| {
+            DomainError::Repository(format!("Failed to acquire database lock: {}", e))
+        })?;
         let mut stmt = conn
             .prepare("SELECT name, description, icon_url, subtask FROM issue_types WHERE project_id = ? ORDER BY name")
             .map_err(|e| DomainError::Repository(format!("Failed to prepare query: {}", e)))?;
@@ -177,7 +189,9 @@ impl MetadataRepository for DuckDbMetadataRepository {
     }
 
     fn upsert_labels(&self, project_id: &str, labels: &[Label]) -> DomainResult<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().map_err(|e| {
+            DomainError::Repository(format!("Failed to acquire database lock: {}", e))
+        })?;
         let now = Utc::now().to_rfc3339();
 
         for label in labels {
@@ -196,7 +210,9 @@ impl MetadataRepository for DuckDbMetadataRepository {
     }
 
     fn find_labels_by_project(&self, project_id: &str) -> DomainResult<Vec<Label>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().map_err(|e| {
+            DomainError::Repository(format!("Failed to acquire database lock: {}", e))
+        })?;
         let mut stmt = conn
             .prepare("SELECT name FROM labels WHERE project_id = ? ORDER BY name")
             .map_err(|e| DomainError::Repository(format!("Failed to prepare query: {}", e)))?;
@@ -215,7 +231,9 @@ impl MetadataRepository for DuckDbMetadataRepository {
     }
 
     fn upsert_components(&self, project_id: &str, components: &[Component]) -> DomainResult<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().map_err(|e| {
+            DomainError::Repository(format!("Failed to acquire database lock: {}", e))
+        })?;
         let now = Utc::now().to_rfc3339();
 
         for component in components {
@@ -243,7 +261,9 @@ impl MetadataRepository for DuckDbMetadataRepository {
     }
 
     fn find_components_by_project(&self, project_id: &str) -> DomainResult<Vec<Component>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().map_err(|e| {
+            DomainError::Repository(format!("Failed to acquire database lock: {}", e))
+        })?;
         let mut stmt = conn
             .prepare(
                 "SELECT name, description, lead FROM components WHERE project_id = ? ORDER BY name",
@@ -272,7 +292,9 @@ impl MetadataRepository for DuckDbMetadataRepository {
         project_id: &str,
         fix_versions: &[FixVersion],
     ) -> DomainResult<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().map_err(|e| {
+            DomainError::Repository(format!("Failed to acquire database lock: {}", e))
+        })?;
         let now = Utc::now().to_rfc3339();
 
         for version in fix_versions {
@@ -301,7 +323,9 @@ impl MetadataRepository for DuckDbMetadataRepository {
     }
 
     fn find_fix_versions_by_project(&self, project_id: &str) -> DomainResult<Vec<FixVersion>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().map_err(|e| {
+            DomainError::Repository(format!("Failed to acquire database lock: {}", e))
+        })?;
         let mut stmt = conn
             .prepare("SELECT name, description, released, release_date FROM fix_versions WHERE project_id = ? ORDER BY name")
             .map_err(|e| DomainError::Repository(format!("Failed to prepare query: {}", e)))?;

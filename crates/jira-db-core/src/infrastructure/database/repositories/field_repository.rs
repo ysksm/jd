@@ -15,7 +15,9 @@ impl DuckDbFieldRepository {
 
     /// Upsert JIRA fields metadata
     pub fn upsert_fields(&self, fields: &[JiraField]) -> DomainResult<usize> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().map_err(|e| {
+            DomainError::Repository(format!("Failed to acquire database lock: {}", e))
+        })?;
         let now = Utc::now().to_rfc3339();
         let mut count = 0;
 
@@ -68,7 +70,9 @@ impl DuckDbFieldRepository {
 
     /// Find all JIRA fields
     pub fn find_all(&self) -> DomainResult<Vec<JiraField>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().map_err(|e| {
+            DomainError::Repository(format!("Failed to acquire database lock: {}", e))
+        })?;
         let mut stmt = conn
             .prepare(
                 r#"
@@ -108,7 +112,9 @@ impl DuckDbFieldRepository {
 
     /// Find navigable fields (these are typically useful for display)
     pub fn find_navigable(&self) -> DomainResult<Vec<JiraField>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().map_err(|e| {
+            DomainError::Repository(format!("Failed to acquire database lock: {}", e))
+        })?;
         let mut stmt = conn
             .prepare(
                 r#"
@@ -149,7 +155,9 @@ impl DuckDbFieldRepository {
 
     /// Find field by ID
     pub fn find_by_id(&self, id: &str) -> DomainResult<Option<JiraField>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().map_err(|e| {
+            DomainError::Repository(format!("Failed to acquire database lock: {}", e))
+        })?;
         let mut stmt = conn
             .prepare(
                 r#"
@@ -189,7 +197,9 @@ impl DuckDbFieldRepository {
 
     /// Get count of fields
     pub fn count(&self) -> DomainResult<i64> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().map_err(|e| {
+            DomainError::Repository(format!("Failed to acquire database lock: {}", e))
+        })?;
         let mut stmt = conn
             .prepare("SELECT COUNT(*) FROM jira_fields")
             .map_err(|e| DomainError::Repository(format!("Failed to prepare query: {}", e)))?;
@@ -203,7 +213,9 @@ impl DuckDbFieldRepository {
 
     /// Delete all fields
     pub fn delete_all(&self) -> DomainResult<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().map_err(|e| {
+            DomainError::Repository(format!("Failed to acquire database lock: {}", e))
+        })?;
         conn.execute("DELETE FROM jira_fields", [])
             .map_err(|e| DomainError::Repository(format!("Failed to delete fields: {}", e)))?;
         Ok(())

@@ -17,7 +17,9 @@ impl DuckDbIssuesExpandedRepository {
 
     /// Get existing columns in issues_expanded table
     pub fn get_existing_columns(&self) -> DomainResult<HashSet<String>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().map_err(|e| {
+            DomainError::Repository(format!("Failed to acquire database lock: {}", e))
+        })?;
         let mut stmt = conn
             .prepare(
                 r#"
@@ -45,7 +47,9 @@ impl DuckDbIssuesExpandedRepository {
     /// Add columns to issues_expanded table based on field definitions
     pub fn add_field_columns(&self, fields: &[JiraField]) -> DomainResult<Vec<String>> {
         let existing_columns = self.get_existing_columns()?;
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().map_err(|e| {
+            DomainError::Repository(format!("Failed to acquire database lock: {}", e))
+        })?;
         let mut added = Vec::new();
 
         // Base columns that already exist in the table
@@ -149,7 +153,9 @@ impl DuckDbIssuesExpandedRepository {
 
     /// Expand raw_data from issues table into issues_expanded table
     pub fn expand_issues(&self, project_id: Option<&str>) -> DomainResult<usize> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().map_err(|e| {
+            DomainError::Repository(format!("Failed to acquire database lock: {}", e))
+        })?;
         let now = Utc::now().to_rfc3339();
 
         // First, check if issues table has data
@@ -343,7 +349,9 @@ impl DuckDbIssuesExpandedRepository {
 
     /// Get count of expanded issues
     pub fn count(&self, project_id: Option<&str>) -> DomainResult<i64> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().map_err(|e| {
+            DomainError::Repository(format!("Failed to acquire database lock: {}", e))
+        })?;
 
         let sql = match project_id {
             Some(_) => "SELECT COUNT(*) FROM issues_expanded WHERE project_id = ?",
@@ -365,7 +373,9 @@ impl DuckDbIssuesExpandedRepository {
 
     /// Delete all expanded issues for a project
     pub fn delete_by_project(&self, project_id: &str) -> DomainResult<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().map_err(|e| {
+            DomainError::Repository(format!("Failed to acquire database lock: {}", e))
+        })?;
         conn.execute(
             "DELETE FROM issues_expanded WHERE project_id = ?",
             [project_id],
@@ -403,7 +413,9 @@ impl DuckDbIssuesExpandedRepository {
     /// Create or replace a view with human-readable column names
     /// The view maps column names from issues_expanded to jira_fields.name
     pub fn create_readable_view(&self, fields: &[JiraField]) -> DomainResult<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().map_err(|e| {
+            DomainError::Repository(format!("Failed to acquire database lock: {}", e))
+        })?;
 
         // Get existing columns in issues_expanded
         let columns = self.get_existing_columns_internal(&conn)?;
@@ -531,7 +543,9 @@ impl DuckDbIssuesExpandedRepository {
 
     /// Create or replace a view for issue_snapshots with human-readable column names
     pub fn create_snapshots_readable_view(&self, fields: &[JiraField]) -> DomainResult<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().map_err(|e| {
+            DomainError::Repository(format!("Failed to acquire database lock: {}", e))
+        })?;
 
         // Create a map from field id (lowercase) to field name
         let field_name_map: std::collections::HashMap<String, String> = fields

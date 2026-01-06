@@ -21,7 +21,9 @@ impl SyncHistoryRepository for DuckDbSyncHistoryRepository {
         sync_type: &str,
         started_at: DateTime<Utc>,
     ) -> DomainResult<i64> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().map_err(|e| {
+            DomainError::Repository(format!("Failed to acquire database lock: {}", e))
+        })?;
 
         let id: i64 = conn
             .query_row(
@@ -46,7 +48,9 @@ impl SyncHistoryRepository for DuckDbSyncHistoryRepository {
         items_synced: usize,
         completed_at: DateTime<Utc>,
     ) -> DomainResult<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().map_err(|e| {
+            DomainError::Repository(format!("Failed to acquire database lock: {}", e))
+        })?;
         conn.execute(
             r#"
             UPDATE sync_history
@@ -65,7 +69,9 @@ impl SyncHistoryRepository for DuckDbSyncHistoryRepository {
         error_message: &str,
         completed_at: DateTime<Utc>,
     ) -> DomainResult<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().map_err(|e| {
+            DomainError::Repository(format!("Failed to acquire database lock: {}", e))
+        })?;
         conn.execute(
             r#"
             UPDATE sync_history
@@ -82,7 +88,9 @@ impl SyncHistoryRepository for DuckDbSyncHistoryRepository {
         &self,
         project_id: &str,
     ) -> DomainResult<Option<(DateTime<Utc>, String)>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().map_err(|e| {
+            DomainError::Repository(format!("Failed to acquire database lock: {}", e))
+        })?;
         let mut stmt = conn
             .prepare(
                 r#"

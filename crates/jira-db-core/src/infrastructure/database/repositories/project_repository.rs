@@ -17,7 +17,9 @@ impl DuckDbProjectRepository {
 
 impl ProjectRepository for DuckDbProjectRepository {
     fn insert(&self, project: &Project) -> DomainResult<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().map_err(|e| {
+            DomainError::Repository(format!("Failed to acquire database lock: {}", e))
+        })?;
         let now = Utc::now().to_rfc3339();
         conn.execute(
             r#"
@@ -47,7 +49,9 @@ impl ProjectRepository for DuckDbProjectRepository {
     }
 
     fn find_by_key(&self, key: &str) -> DomainResult<Option<Project>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().map_err(|e| {
+            DomainError::Repository(format!("Failed to acquire database lock: {}", e))
+        })?;
         let mut stmt = conn
             .prepare("SELECT id, key, name, description FROM projects WHERE key = ?")
             .map_err(|e| DomainError::Repository(format!("Failed to prepare query: {}", e)))?;
@@ -80,7 +84,9 @@ impl ProjectRepository for DuckDbProjectRepository {
     }
 
     fn find_all(&self) -> DomainResult<Vec<Project>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().map_err(|e| {
+            DomainError::Repository(format!("Failed to acquire database lock: {}", e))
+        })?;
         let mut stmt = conn
             .prepare("SELECT id, key, name, description FROM projects")
             .map_err(|e| DomainError::Repository(format!("Failed to prepare query: {}", e)))?;
