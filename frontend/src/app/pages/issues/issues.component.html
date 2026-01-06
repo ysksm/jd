@@ -27,6 +27,14 @@
         >
           <span class="icon-mindmap"></span>
         </button>
+        <button
+          class="view-btn"
+          [class.active]="viewMode() === 'calendar'"
+          (click)="setViewMode('calendar')"
+          title="Calendar View"
+        >
+          <span class="icon-calendar"></span>
+        </button>
       </div>
     </div>
   </div>
@@ -89,6 +97,16 @@
         }
       </select>
 
+      <select
+        [ngModel]="teamFilter()"
+        (ngModelChange)="teamFilter.set($event); search()"
+      >
+        <option value="">All Teams</option>
+        @for (team of teams(); track team) {
+          <option [value]="team">{{ team }}</option>
+        }
+      </select>
+
       <button class="btn btn-secondary" (click)="clearFilters()">Clear</button>
     </div>
   </div>
@@ -136,6 +154,12 @@
         <p>No issues found.</p>
         <p>Try adjusting your search filters.</p>
       </div>
+    } @else if (viewMode() === 'calendar') {
+      <!-- Calendar View -->
+      <app-calendar
+        [issues]="issues()"
+        (issueClick)="selectIssue($event)"
+      ></app-calendar>
     } @else if (viewMode() === 'mindmap') {
       <!-- Mindmap View -->
       <app-mindmap
@@ -151,6 +175,7 @@
           <div class="header-summary">Summary</div>
           <div class="header-status">Status</div>
           <div class="header-priority">Priority</div>
+          <div class="header-due-date">Due Date</div>
           <div class="header-assignee">Assignee</div>
         </div>
         @for (issue of issues(); track issue.key) {
@@ -173,6 +198,13 @@
               {{ issue.status }}
             </div>
             <div class="issue-priority">{{ issue.priority }}</div>
+            <div class="issue-due-date" [class.overdue]="isOverdue(issue)" [class.due-soon]="isDueSoon(issue)">
+              @if (issue.dueDate) {
+                {{ formatDueDate(issue.dueDate) }}
+              } @else {
+                -
+              }
+            </div>
             <div class="issue-assignee">{{ issue.assignee || '-' }}</div>
           </div>
         }
@@ -242,6 +274,12 @@
                               </span>
                             </div>
                             <div class="card-summary">{{ issue.summary }}</div>
+                            @if (issue.dueDate) {
+                              <div class="card-due-date" [class.overdue]="isOverdue(issue)" [class.due-soon]="isDueSoon(issue)">
+                                <span class="icon-calendar-sm"></span>
+                                {{ formatDueDate(issue.dueDate) }}
+                              </div>
+                            }
                             <div class="card-footer">
                               <span class="card-status" [attr.data-status]="issue.status.toLowerCase()">
                                 {{ issue.status }}
@@ -306,6 +344,16 @@
             <div class="detail-row">
               <span class="label">Reporter:</span>
               <span class="value">{{ selectedIssue()!.reporter || '-' }}</span>
+            </div>
+            <div class="detail-row">
+              <span class="label">Due Date:</span>
+              <span class="value" [class.overdue]="isOverdue(selectedIssue()!)" [class.due-soon]="isDueSoon(selectedIssue()!)">
+                @if (selectedIssue()!.dueDate) {
+                  {{ formatDueDate(selectedIssue()!.dueDate) }}
+                } @else {
+                  -
+                }
+              </span>
             </div>
             <div class="detail-row">
               <span class="label">Created:</span>

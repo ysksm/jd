@@ -4,10 +4,11 @@ import { FormsModule } from '@angular/forms';
 import { Issue, Project, Status, IssueType } from '../../generated/models';
 import { API_SERVICE, IApiService } from '../../api.provider';
 import { MindmapComponent } from './mindmap/mindmap.component';
+import { CalendarComponent } from './calendar/calendar.component';
 import { environment } from '../../../environments/environment';
 import { openUrl } from '@tauri-apps/plugin-opener';
 
-type ViewMode = 'list' | 'board' | 'mindmap';
+type ViewMode = 'list' | 'board' | 'mindmap' | 'calendar';
 type GroupBy = 'none' | 'assignee' | 'epic';
 
 interface StatusColumn {
@@ -25,7 +26,7 @@ interface Swimlane {
 @Component({
   selector: 'app-issues',
   standalone: true,
-  imports: [CommonModule, FormsModule, MindmapComponent],
+  imports: [CommonModule, FormsModule, MindmapComponent, CalendarComponent],
   templateUrl: './issues.component.html',
   styleUrl: './issues.component.scss'
 })
@@ -53,6 +54,7 @@ export class IssuesComponent implements OnInit, OnChanges {
   statuses = signal<Status[]>([]);
   issueTypes = signal<IssueType[]>([]);
   assignees = signal<string[]>([]);
+  teams = signal<string[]>([]);
   epics = signal<string[]>([]);
 
   // Search filters
@@ -61,6 +63,7 @@ export class IssuesComponent implements OnInit, OnChanges {
   statusFilter = signal('');
   issueTypeFilter = signal('');
   assigneeFilter = signal('');
+  teamFilter = signal('');
 
   // JIRA endpoint for external links
   jiraEndpoint = signal('');
@@ -199,7 +202,8 @@ export class IssuesComponent implements OnInit, OnChanges {
   }
 
   extractAssignees(): void {
-    const assigneeSet = new Set<string>();
+    // Merge with existing assignees to preserve options when filtering
+    const assigneeSet = new Set<string>(this.assignees());
     this.issues().forEach(issue => {
       if (issue.assignee) {
         assigneeSet.add(issue.assignee);
@@ -208,8 +212,20 @@ export class IssuesComponent implements OnInit, OnChanges {
     this.assignees.set(Array.from(assigneeSet).sort());
   }
 
+  extractTeams(): void {
+    // Merge with existing teams to preserve options when filtering
+    const teamSet = new Set<string>(this.teams());
+    this.issues().forEach(issue => {
+      if (issue.team) {
+        teamSet.add(issue.team);
+      }
+    });
+    this.teams.set(Array.from(teamSet).sort());
+  }
+
   extractEpics(): void {
-    const epicSet = new Set<string>();
+    // Merge with existing epics to preserve options when filtering
+    const epicSet = new Set<string>(this.epics());
     this.issues().forEach(issue => {
       if (issue.parentKey) {
         epicSet.add(issue.parentKey);
@@ -420,6 +436,7 @@ export class IssuesComponent implements OnInit, OnChanges {
       status: this.statusFilter() || undefined,
       issueType: this.issueTypeFilter() || undefined,
       assignee: this.assigneeFilter() || undefined,
+      team: this.teamFilter() || undefined,
       limit: 200
     }).subscribe({
       next: (response) => {
@@ -427,6 +444,7 @@ export class IssuesComponent implements OnInit, OnChanges {
         this.total.set(response.total);
         this.loading.set(false);
         this.extractAssignees();
+        this.extractTeams();
         this.extractEpics();
       },
       error: (err) => {
@@ -450,6 +468,11 @@ export class IssuesComponent implements OnInit, OnChanges {
     this.statusFilter.set('');
     this.issueTypeFilter.set('');
     this.assigneeFilter.set('');
+    this.teamFilter.set('');
+    // Reset extracted filter options to rebuild from fresh results
+    this.assignees.set([]);
+    this.teams.set([]);
+    this.epics.set([]);
     this.search();
   }
 
@@ -457,6 +480,12 @@ export class IssuesComponent implements OnInit, OnChanges {
     // Reset dependent filters when project changes
     this.statusFilter.set('');
     this.issueTypeFilter.set('');
+    this.assigneeFilter.set('');
+    this.teamFilter.set('');
+    // Reset extracted filter options to rebuild from fresh results
+    this.assignees.set([]);
+    this.teams.set([]);
+    this.epics.set([]);
 
     // Load metadata for the selected project
     const project = this.projectFilter();
@@ -474,5 +503,44 @@ export class IssuesComponent implements OnInit, OnChanges {
     if (event.key === 'Enter') {
       this.search();
     }
+  }
+
+  // Due date helper functions
+  formatDueDate(dueDate: string | undefined): string {
+    if (!dueDate) return '-';
+    const date = new Date(dueDate);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}/${month}/${day}`;
+  }
+
+  isOverdue(issue: Issue): boolean {
+    if (!issue.dueDate) return false;
+    // Don't mark completed issues as overdue
+    const status = issue.status.toLowerCase();
+    if (status === 'done' || status === 'closed' || status === 'resolved' || status === '完了') {
+      return false;
+    }
+    const dueDate = new Date(issue.dueDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return dueDate < today;
+  }
+
+  isDueSoon(issue: Issue): boolean {
+    if (!issue.dueDate) return false;
+    if (this.isOverdue(issue)) return false;
+    // Don't mark completed issues as due soon
+    const status = issue.status.toLowerCase();
+    if (status === 'done' || status === 'closed' || status === 'resolved' || status === '完了') {
+      return false;
+    }
+    const dueDate = new Date(issue.dueDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const threeDaysFromNow = new Date(today);
+    threeDaysFromNow.setDate(today.getDate() + 3);
+    return dueDate >= today && dueDate <= threeDaysFromNow;
   }
 }

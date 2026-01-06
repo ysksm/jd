@@ -1,0 +1,185 @@
+.calendar {
+  background: var(--bg-primary);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.calendar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  padding: 0 8px;
+
+  .current-month {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .today-btn {
+    font-size: 0.8rem;
+  }
+}
+
+.calendar-grid {
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.weekday-header {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+
+  .weekday {
+    padding: 8px;
+    text-align: center;
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+  }
+}
+
+.week-row {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  border-bottom: 1px solid var(--border-color);
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.day-cell {
+  min-height: 100px;
+  padding: 4px;
+  border-right: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  transition: background-color 0.2s;
+
+  &:last-child {
+    border-right: none;
+  }
+
+  &:hover {
+    background: var(--bg-hover);
+  }
+
+  &.other-month {
+    background: var(--bg-secondary);
+    opacity: 0.6;
+
+    .day-number {
+      color: var(--text-muted);
+    }
+  }
+
+  &.today {
+    background: rgba(59, 130, 246, 0.1);
+
+    .day-number {
+      background: var(--color-primary);
+      color: white;
+      border-radius: 50%;
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+  }
+
+  &.has-issues {
+    .day-number {
+      font-weight: 600;
+    }
+  }
+}
+
+.day-number {
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+  padding: 2px;
+}
+
+.day-issues {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.issue-chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  overflow: hidden;
+
+  &:hover {
+    background: var(--bg-hover);
+    transform: translateY(-1px);
+  }
+
+  &.overdue {
+    background: rgba(239, 68, 68, 0.15);
+    border-color: var(--color-danger);
+    color: var(--color-danger);
+  }
+
+  &[data-status="done"],
+  &[data-status="closed"],
+  &[data-status="resolved"],
+  &[data-status="完了"] {
+    background: rgba(34, 197, 94, 0.15);
+    border-color: var(--color-success);
+    color: var(--color-success);
+
+    .issue-summary {
+      text-decoration: line-through;
+    }
+  }
+
+  .issue-key {
+    font-weight: 600;
+    flex-shrink: 0;
+    color: #4a4ae0;
+  }
+
+  .issue-summary {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-primary);
+  }
+}
+
+.more-issues {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  padding: 2px 6px;
+  text-align: center;
+}
+
+// Icon styles
+.icon-chevron-left::before {
+  content: '\2039';
+  font-size: 1.2rem;
+}
+
+.icon-chevron-right::before {
+  content: '\203A';
+  font-size: 1.2rem;
+}

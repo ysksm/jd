@@ -191,12 +191,16 @@ export class MindmapComponent implements OnChanges, OnDestroy, AfterViewInit {
           const data = (params as { data: TreeNodeData }).data;
           if (!data.issueData) return String(data.name);
           const issue = data.issueData;
+          const dueDate = issue.dueDate ? this.formatDueDate(issue.dueDate) : '';
+          const dueDateClass = this.isOverdue(issue) ? 'color: #dc2626; font-weight: bold;' :
+                               this.isDueSoon(issue) ? 'color: #d97706; font-weight: bold;' : 'color: #666;';
           return `
             <div style="max-width: 300px;">
               <strong>${issue.key}</strong><br/>
               <span style="color: #666;">${issue.issueType}</span> ·
               <span style="color: #666;">${issue.status}</span><br/>
               ${issue.summary}<br/>
+              ${dueDate ? `<small style="${dueDateClass}">Due: ${dueDate}</small><br/>` : ''}
               ${issue.assignee ? `<small>Assignee: ${issue.assignee}</small>` : ''}
             </div>
           `;
@@ -470,5 +474,41 @@ export class MindmapComponent implements OnChanges, OnDestroy, AfterViewInit {
       this.echartsInstance.resize();
       this.resetZoom();
     }
+  }
+
+  // Due date helper methods
+  private formatDueDate(dueDate: string): string {
+    const date = new Date(dueDate);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}/${month}/${day}`;
+  }
+
+  private isOverdue(issue: Issue): boolean {
+    if (!issue.dueDate) return false;
+    const status = issue.status.toLowerCase();
+    if (status === 'done' || status === 'closed' || status === 'resolved' || status === '完了') {
+      return false;
+    }
+    const dueDate = new Date(issue.dueDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return dueDate < today;
+  }
+
+  private isDueSoon(issue: Issue): boolean {
+    if (!issue.dueDate) return false;
+    const status = issue.status.toLowerCase();
+    if (status === 'done' || status === 'closed' || status === 'resolved' || status === '完了') {
+      return false;
+    }
+    const dueDate = new Date(issue.dueDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (dueDate < today) return false; // Already overdue
+    const threeDaysLater = new Date(today);
+    threeDaysLater.setDate(threeDaysLater.getDate() + 3);
+    return dueDate <= threeDaysLater;
   }
 }

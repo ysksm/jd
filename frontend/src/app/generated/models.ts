@@ -30,6 +30,8 @@ export interface Issue {
   labels: string[];
   components: string[];
   fixVersions: string[];
+  team?: string;
+  dueDate?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -268,6 +270,7 @@ export interface IssueSearchRequest {
   assignee?: string;
   priority?: string;
   issueType?: string;
+  team?: string;
   limit?: number;
   offset?: number;
 }

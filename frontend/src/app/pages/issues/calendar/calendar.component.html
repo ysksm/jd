@@ -1,0 +1,54 @@
+<div class="calendar">
+  <div class="calendar-header">
+    <button class="btn btn-secondary btn-sm" (click)="previousMonth()">
+      <span class="icon-chevron-left"></span>
+    </button>
+    <div class="current-month">
+      <span>{{ currentMonthYear() }}</span>
+      <button class="btn btn-secondary btn-sm today-btn" (click)="goToToday()">Today</button>
+    </div>
+    <button class="btn btn-secondary btn-sm" (click)="nextMonth()">
+      <span class="icon-chevron-right"></span>
+    </button>
+  </div>
+
+  <div class="calendar-grid">
+    <div class="weekday-header">
+      @for (day of weekDays; track day) {
+        <div class="weekday">{{ day }}</div>
+      }
+    </div>
+
+    @for (week of weeks(); track $index) {
+      <div class="week-row">
+        @for (day of week.days; track day.date.getTime()) {
+          <div
+            class="day-cell"
+            [class.other-month]="!day.isCurrentMonth"
+            [class.today]="day.isToday"
+            [class.has-issues]="day.issues.length > 0"
+          >
+            <div class="day-number">{{ day.day }}</div>
+            <div class="day-issues">
+              @for (issue of day.issues.slice(0, 3); track issue.key) {
+                <div
+                  class="issue-chip"
+                  [class.overdue]="isOverdue(issue)"
+                  [attr.data-status]="issue.status.toLowerCase()"
+                  (click)="onIssueClick(issue, $event)"
+                  [title]="issue.key + ': ' + issue.summary"
+                >
+                  <span class="issue-key">{{ issue.key }}</span>
+                  <span class="issue-summary">{{ issue.summary }}</span>
+                </div>
+              }
+              @if (day.issues.length > 3) {
+                <div class="more-issues">+{{ day.issues.length - 3 }} more</div>
+              }
+            </div>
+          </div>
+        }
+      </div>
+    }
+  </div>
+</div>
