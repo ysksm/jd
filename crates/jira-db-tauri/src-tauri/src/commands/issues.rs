@@ -34,6 +34,8 @@ fn convert_issue(i: jira_db_core::Issue) -> Issue {
         labels: i.labels.unwrap_or_default(),
         components: i.components.unwrap_or_default(),
         fix_versions: i.fix_versions.unwrap_or_default(),
+        team: i.team,
+        due_date: i.due_date,
         created_at: i.created_date.unwrap_or_else(chrono::Utc::now),
         updated_at: i.updated_date.unwrap_or_else(chrono::Utc::now),
     }
@@ -45,34 +47,65 @@ pub async fn issues_search(
     state: State<'_, AppState>,
     request: IssueSearchRequest,
 ) -> Result<IssueSearchResponse, String> {
-    // Project key is required for per-project database
-    let project_key = request
-        .project
-        .as_ref()
-        .ok_or("project is required for search (per-project database)")?;
-
-    let db = state
-        .get_db(project_key)
-        .ok_or_else(|| format!("Database not initialized for project {}", project_key))?;
-
-    let issue_repo = Arc::new(DuckDbIssueRepository::new(db));
-    let use_case = SearchIssuesUseCase::new(issue_repo);
-
-    let params = SearchParams {
-        query: request.query,
-        project_key: request.project.clone(),
-        status: request.status,
-        assignee: request.assignee,
-        issue_type: request.issue_type,
-        priority: request.priority,
-        limit: request.limit.map(|l| l as usize),
-        offset: request.offset.map(|o| o as usize),
+    // Determine which projects to search
+    let projects_to_search: Vec<String> = if let Some(ref project_key) = request.project {
+        // Single project specified
+        vec![project_key.clone()]
+    } else {
+        // No project specified - search all enabled projects
+        let settings = state
+            .get_settings()
+            .ok_or("Settings not initialized")?;
+        settings
+            .sync_enabled_projects()
+            .iter()
+            .map(|p| p.key.clone())
+            .collect()
     };
 
-    let issues = use_case.execute(params).map_err(|e| e.to_string())?;
-    let total = issues.len() as i32;
+    if projects_to_search.is_empty() {
+        return Ok(IssueSearchResponse {
+            issues: vec![],
+            total: 0,
+        });
+    }
 
-    let issues = issues.into_iter().map(convert_issue).collect();
+    // Search across all projects
+    let mut all_issues = Vec::new();
+    for project_key in &projects_to_search {
+        if let Some(db) = state.get_db(project_key) {
+            let issue_repo = Arc::new(DuckDbIssueRepository::new(db));
+            let use_case = SearchIssuesUseCase::new(issue_repo);
+
+            let params = SearchParams {
+                query: request.query.clone(),
+                project_key: Some(project_key.clone()),
+                status: request.status.clone(),
+                assignee: request.assignee.clone(),
+                issue_type: request.issue_type.clone(),
+                priority: request.priority.clone(),
+                team: request.team.clone(),
+                limit: request.limit.map(|l| l as usize),
+                offset: None, // Apply offset after combining results
+            };
+
+            if let Ok(issues) = use_case.execute(params) {
+                all_issues.extend(issues);
+            }
+        }
+    }
+
+    // Apply limit and offset to combined results
+    let total = all_issues.len() as i32;
+    let offset = request.offset.unwrap_or(0) as usize;
+    let limit = request.limit.map(|l| l as usize).unwrap_or(all_issues.len());
+
+    let issues: Vec<Issue> = all_issues
+        .into_iter()
+        .skip(offset)
+        .take(limit)
+        .map(convert_issue)
+        .collect();
 
     Ok(IssueSearchResponse { issues, total })
 }
@@ -102,6 +135,7 @@ pub async fn issues_get(
         assignee: None,
         issue_type: None,
         priority: None,
+        team: None,
         limit: Some(1),
         offset: None,
     };

@@ -11,6 +11,7 @@ pub struct SearchParams {
     pub assignee: Option<String>,
     pub issue_type: Option<String>,
     pub priority: Option<String>,
+    pub team: Option<String>,
     pub limit: Option<usize>,
     pub offset: Option<usize>,
 }

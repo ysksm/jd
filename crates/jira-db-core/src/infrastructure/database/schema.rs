@@ -85,6 +85,10 @@ impl Schema {
         Self::add_column_if_not_exists(conn, "issue_snapshots", "raw_data", "JSON")?;
         // Migration: issuesテーブルにis_deletedカラムを追加（JIRA上で削除されたissueを論理削除するため）
         Self::add_column_if_not_exists(conn, "issues", "is_deleted", "BOOLEAN DEFAULT false")?;
+        // Migration: issuesテーブルにdue_dateカラムを追加（期限日）
+        Self::add_column_if_not_exists(conn, "issues", "due_date", "TIMESTAMPTZ")?;
+        // Migration: issuesテーブルにteamカラムを追加（チーム）
+        Self::add_column_if_not_exists(conn, "issues", "team", "VARCHAR")?;
         Ok(())
     }
 

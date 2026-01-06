@@ -72,6 +72,7 @@ impl ToolHandler for SearchIssuesTool {
                             assignee: params.assignee.clone(),
                             issue_type: None,
                             priority: None,
+                            team: None,
                             limit: Some(params.limit.unwrap_or(20)),
                             offset: params.offset,
                         };
@@ -99,6 +100,7 @@ impl ToolHandler for SearchIssuesTool {
             assignee: params.assignee,
             issue_type: None,
             priority: None,
+            team: None,
             limit: Some(params.limit.unwrap_or(20)),
             offset: params.offset,
         };

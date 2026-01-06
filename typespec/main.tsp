@@ -35,6 +35,8 @@ model Issue {
   labels: string[];
   components: string[];
   fixVersions: string[];
+  team?: string;
+  dueDate?: utcDateTime;
   createdAt: utcDateTime;
   updatedAt: utcDateTime;
 }
@@ -289,6 +291,7 @@ model IssueSearchRequest {
   assignee?: string;
   priority?: string;
   issueType?: string;
+  team?: string;
   limit?: int32;
   offset?: int32;
 }

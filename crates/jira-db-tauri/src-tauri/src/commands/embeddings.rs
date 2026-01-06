@@ -160,6 +160,7 @@ pub async fn embeddings_search(
             assignee: None,
             issue_type: None,
             priority: None,
+            team: None,
             limit: Some(1),
             offset: None,
         };
@@ -182,6 +183,8 @@ pub async fn embeddings_search(
                         labels: issue.labels.unwrap_or_default(),
                         components: issue.components.unwrap_or_default(),
                         fix_versions: issue.fix_versions.unwrap_or_default(),
+                        team: issue.team,
+                        due_date: issue.due_date,
                         created_at: issue.created_date.unwrap_or_else(chrono::Utc::now),
                         updated_at: issue.updated_date.unwrap_or_else(chrono::Utc::now),
                     },

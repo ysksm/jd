@@ -48,6 +48,11 @@ pub struct Issue {
     pub components: Vec<String>,
     #[serde(rename = "fixVersions")]
     pub fix_versions: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub team: Option<String>,
+    #[serde(rename = "dueDate")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub due_date: Option<DateTime<Utc>>,
     #[serde(rename = "createdAt")]
     pub created_at: DateTime<Utc>,
     #[serde(rename = "updatedAt")]
@@ -441,6 +446,8 @@ pub struct IssueSearchRequest {
     #[serde(rename = "issueType")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub issue_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub team: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub limit: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]

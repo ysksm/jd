@@ -152,6 +152,45 @@ impl JiraApiClient {
         None
     }
 
+    /// Extract team name from JIRA fields
+    /// Team is typically stored in a custom field (customfield_XXXXX)
+    /// The format can be:
+    /// - An object with "name" or "value" field
+    /// - A string directly
+    fn extract_team(fields: &serde_json::Value) -> Option<String> {
+        // Common team custom field IDs
+        let team_field_ids = [
+            "team",
+            "customfield_10001", // Common default for team
+            "customfield_10002",
+            "customfield_10100",
+            "customfield_10101",
+        ];
+
+        for field_id in team_field_ids {
+            if let Some(team_value) = fields.get(field_id) {
+                // Case 1: Object with "name" field (e.g., {"name": "Team A", "id": "123"})
+                if let Some(name) = team_value.get("name").and_then(|n| n.as_str()) {
+                    return Some(name.to_string());
+                }
+
+                // Case 2: Object with "value" field (e.g., {"value": "Team A"})
+                if let Some(value) = team_value.get("value").and_then(|v| v.as_str()) {
+                    return Some(value.to_string());
+                }
+
+                // Case 3: String directly
+                if let Some(team_str) = team_value.as_str() {
+                    if !team_str.is_empty() {
+                        return Some(team_str.to_string());
+                    }
+                }
+            }
+        }
+
+        None
+    }
+
     /// Parse a single issue from JSON response
     fn parse_issue(issue_json: &serde_json::Value) -> Option<Issue> {
         let id = issue_json["id"].as_str()?;
@@ -200,7 +239,19 @@ impl JiraApiClient {
             .filter(|v| !v.is_empty());
 
         let sprint = Self::extract_sprint(fields);
+        let team = Self::extract_team(fields);
         let parent_key = fields["parent"]["key"].as_str().map(|s| s.to_string());
+
+        // Parse due date (JIRA returns date as "YYYY-MM-DD" string)
+        let due_date = fields["duedate"]
+            .as_str()
+            .and_then(|s| {
+                // JIRA returns due date as "YYYY-MM-DD" without time
+                // Convert to DateTime by appending "T00:00:00Z"
+                let datetime_str = format!("{}T00:00:00Z", s);
+                chrono::DateTime::parse_from_rfc3339(&datetime_str).ok()
+            })
+            .map(|dt| dt.with_timezone(&chrono::Utc));
 
         let created_date = fields["created"]
             .as_str()
@@ -230,7 +281,9 @@ impl JiraApiClient {
             components,
             fix_versions,
             sprint,
+            team,
             parent_key,
+            due_date,
             created_date,
             updated_date,
             raw_json,

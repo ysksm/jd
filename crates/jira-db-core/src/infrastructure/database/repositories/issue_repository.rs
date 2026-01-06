@@ -55,10 +55,10 @@ impl IssueRepository for DuckDbIssueRepository {
                 INSERT INTO issues (
                     id, project_id, key, summary, description,
                     status, priority, assignee, reporter,
-                    issue_type, resolution, labels, components, fix_versions, sprint, parent_key,
-                    created_date, updated_date, raw_data, synced_at
+                    issue_type, resolution, labels, components, fix_versions, sprint, team, parent_key,
+                    due_date, created_date, updated_date, raw_data, synced_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (id) DO UPDATE SET
                     project_id = excluded.project_id,
                     key = excluded.key,
@@ -74,7 +74,9 @@ impl IssueRepository for DuckDbIssueRepository {
                     components = excluded.components,
                     fix_versions = excluded.fix_versions,
                     sprint = excluded.sprint,
+                    team = excluded.team,
                     parent_key = excluded.parent_key,
+                    due_date = excluded.due_date,
                     created_date = excluded.created_date,
                     updated_date = excluded.updated_date,
                     raw_data = excluded.raw_data,
@@ -96,7 +98,9 @@ impl IssueRepository for DuckDbIssueRepository {
                     &components_json,
                     &fix_versions_json,
                     &sprint,
+                    &issue.team,
                     &issue.parent_key,
+                    &issue.due_date.map(|d| d.to_rfc3339()),
                     &issue.created_date.map(|d| d.to_rfc3339()),
                     &issue.updated_date.map(|d| d.to_rfc3339()),
                     &raw_data,
@@ -119,7 +123,8 @@ impl IssueRepository for DuckDbIssueRepository {
                 r#"
             SELECT id, project_id, key, summary, description,
                    status, priority, assignee, reporter,
-                   issue_type, resolution, labels, components, fix_versions, sprint, parent_key,
+                   issue_type, resolution, labels, components, fix_versions, sprint, team, parent_key,
+                   CASE WHEN due_date IS NOT NULL THEN strftime(due_date::TIMESTAMP, '%Y-%m-%dT%H:%M:%S') || '+00:00' ELSE NULL END as due_date,
                    created_date, updated_date, raw_data
             FROM issues
             WHERE project_id = ?
@@ -155,18 +160,24 @@ impl IssueRepository for DuckDbIssueRepository {
                     components,
                     fix_versions,
                     sprint: row.get(14)?,
-                    parent_key: row.get(15)?,
-                    created_date: row.get::<_, Option<String>>(16)?.and_then(|s| {
+                    team: row.get(15)?,
+                    parent_key: row.get(16)?,
+                    due_date: row.get::<_, Option<String>>(17)?.and_then(|s| {
                         DateTime::parse_from_rfc3339(&s)
                             .ok()
                             .map(|dt| dt.with_timezone(&Utc))
                     }),
-                    updated_date: row.get::<_, Option<String>>(17)?.and_then(|s| {
+                    created_date: row.get::<_, Option<String>>(18)?.and_then(|s| {
                         DateTime::parse_from_rfc3339(&s)
                             .ok()
                             .map(|dt| dt.with_timezone(&Utc))
                     }),
-                    raw_json: row.get(18)?,
+                    updated_date: row.get::<_, Option<String>>(19)?.and_then(|s| {
+                        DateTime::parse_from_rfc3339(&s)
+                            .ok()
+                            .map(|dt| dt.with_timezone(&Utc))
+                    }),
+                    raw_json: row.get(20)?,
                 })
             })
             .map_err(|e| DomainError::Repository(format!("Failed to execute query: {}", e)))?;
@@ -203,7 +214,8 @@ impl IssueRepository for DuckDbIssueRepository {
             r#"
             SELECT i.id, i.project_id, i.key, i.summary, i.description,
                    i.status, i.priority, i.assignee, i.reporter,
-                   i.issue_type, i.resolution, i.labels, i.components, i.fix_versions, i.sprint, i.parent_key,
+                   i.issue_type, i.resolution, i.labels, i.components, i.fix_versions, i.sprint, i.team, i.parent_key,
+                   CASE WHEN i.due_date IS NOT NULL THEN strftime(i.due_date::TIMESTAMP, '%Y-%m-%dT%H:%M:%S') || '+00:00' ELSE NULL END as due_date,
                    i.created_date, i.updated_date
             FROM issues i
             LEFT JOIN projects p ON i.project_id = p.id
@@ -247,6 +259,11 @@ impl IssueRepository for DuckDbIssueRepository {
         if let Some(priority) = &params.priority {
             conditions.push("i.priority = ?");
             sql_params.push(Box::new(priority.clone()));
+        }
+
+        if let Some(team) = &params.team {
+            conditions.push("i.team = ?");
+            sql_params.push(Box::new(team.clone()));
         }
 
         for condition in conditions {
@@ -297,13 +314,19 @@ impl IssueRepository for DuckDbIssueRepository {
                     components,
                     fix_versions,
                     sprint: row.get(14)?,
-                    parent_key: row.get(15)?,
-                    created_date: row.get::<_, Option<String>>(16)?.and_then(|s| {
+                    team: row.get(15)?,
+                    parent_key: row.get(16)?,
+                    due_date: row.get::<_, Option<String>>(17)?.and_then(|s| {
                         DateTime::parse_from_rfc3339(&s)
                             .ok()
                             .map(|dt| dt.with_timezone(&Utc))
                     }),
-                    updated_date: row.get::<_, Option<String>>(17)?.and_then(|s| {
+                    created_date: row.get::<_, Option<String>>(18)?.and_then(|s| {
+                        DateTime::parse_from_rfc3339(&s)
+                            .ok()
+                            .map(|dt| dt.with_timezone(&Utc))
+                    }),
+                    updated_date: row.get::<_, Option<String>>(19)?.and_then(|s| {
                         DateTime::parse_from_rfc3339(&s)
                             .ok()
                             .map(|dt| dt.with_timezone(&Utc))

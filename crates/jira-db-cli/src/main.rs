@@ -613,6 +613,7 @@ fn handle_search(
         assignee,
         issue_type: None,
         priority: None,
+        team: None,
         limit: Some(limit),
         offset: Some(offset),
     };
