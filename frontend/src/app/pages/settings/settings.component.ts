@@ -1,7 +1,7 @@
 import { Component, OnInit, signal, computed, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Settings, JiraConfig, EmbeddingsConfig } from '../../generated/models';
+import { Settings, JiraConfig, EmbeddingsConfig, LogConfig } from '../../generated/models';
 import { API_SERVICE, IApiService } from '../../api.provider';
 
 @Component({
@@ -30,6 +30,12 @@ export class SettingsComponent implements OnInit {
   embeddingsModel = signal('');
   embeddingsEndpoint = signal('');
   embeddingsAutoGenerate = signal(false);
+
+  // Log settings
+  logFileEnabled = signal(false);
+  logFileDir = signal('');
+  logLevel = signal('info');
+  logMaxFiles = signal(10);
 
   ngOnInit(): void {
     this.loadSettings();
@@ -65,6 +71,13 @@ export class SettingsComponent implements OnInit {
       this.embeddingsModel.set(settings.embeddings.modelName || '');
       this.embeddingsEndpoint.set(settings.embeddings.endpoint || '');
       this.embeddingsAutoGenerate.set(settings.embeddings.autoGenerate);
+    }
+
+    if (settings.log) {
+      this.logFileEnabled.set(settings.log.fileEnabled);
+      this.logFileDir.set(settings.log.fileDir || '');
+      this.logLevel.set(settings.log.level);
+      this.logMaxFiles.set(settings.log.maxFiles);
     }
   }
 
@@ -131,6 +144,12 @@ export class SettingsComponent implements OnInit {
         modelName: this.embeddingsModel() || undefined,
         endpoint: this.embeddingsEndpoint() || undefined,
         autoGenerate: this.embeddingsAutoGenerate()
+      },
+      log: {
+        fileEnabled: this.logFileEnabled(),
+        fileDir: this.logFileDir() || undefined,
+        level: this.logLevel(),
+        maxFiles: this.logMaxFiles()
       }
     }).subscribe({
       next: (response) => {

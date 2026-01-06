@@ -205,15 +205,20 @@ export class ApiService {
   }
 
   // ----------------------------------------
-  // Debug (requires debug_mode in settings)
+  // Debug
   // ----------------------------------------
 
-  /** Get debug mode status */
+  /** Get debug status */
   debugStatus(request: DebugStatusRequest): Observable<DebugStatusResponse> {
     return this.http.post<DebugStatusResponse>(`${this.baseUrl}/debug.status`, request);
   }
 
-  /** Create test issues in JIRA */
+  /** Get issue types for a project */
+  debugGetIssueTypes(request: DebugGetIssueTypesRequest): Observable<DebugGetIssueTypesResponse> {
+    return this.http.post<DebugGetIssueTypesResponse>(`${this.baseUrl}/debug.get-issue-types`, request);
+  }
+
+  /** Create test issues */
   debugCreateIssues(request: DebugCreateIssuesRequest): Observable<DebugCreateIssuesResponse> {
     return this.http.post<DebugCreateIssuesResponse>(`${this.baseUrl}/debug.create-issues`, request);
   }
@@ -223,7 +228,7 @@ export class ApiService {
     return this.http.post<DebugListTransitionsResponse>(`${this.baseUrl}/debug.list-transitions`, request);
   }
 
-  /** Transition a single issue */
+  /** Transition an issue to a new status */
   debugTransitionIssue(request: DebugTransitionIssueRequest): Observable<DebugTransitionIssueResponse> {
     return this.http.post<DebugTransitionIssueResponse>(`${this.baseUrl}/debug.transition-issue`, request);
   }
@@ -231,11 +236,6 @@ export class ApiService {
   /** Bulk transition multiple issues */
   debugBulkTransition(request: DebugBulkTransitionRequest): Observable<DebugBulkTransitionResponse> {
     return this.http.post<DebugBulkTransitionResponse>(`${this.baseUrl}/debug.bulk-transition`, request);
-  }
-
-  /** Get available issue types for a project */
-  debugGetIssueTypes(request: DebugGetIssueTypesRequest): Observable<DebugGetIssueTypesResponse> {
-    return this.http.post<DebugGetIssueTypesResponse>(`${this.baseUrl}/debug.get-issue-types`, request);
   }
 
 }

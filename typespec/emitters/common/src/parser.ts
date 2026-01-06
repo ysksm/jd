@@ -34,6 +34,7 @@ const API_NAMESPACES = [
   "Embeddings",
   "Reports",
   "Sql",
+  "Debug",
 ];
 
 /**

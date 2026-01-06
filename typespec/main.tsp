@@ -176,11 +176,23 @@ model EmbeddingsConfig {
   autoGenerate: boolean;
 }
 
+model LogConfig {
+  /** Enable file logging */
+  fileEnabled: boolean;
+  /** Log file directory (defaults to database_dir/logs) */
+  fileDir?: string;
+  /** Log level: "error", "warn", "info", "debug", "trace" */
+  level: string;
+  /** Maximum number of log files to keep (0 = unlimited) */
+  maxFiles: int32;
+}
+
 model Settings {
   jira: JiraConfig;
   database: DatabaseConfig;
   projects: ProjectConfig[];
   embeddings?: EmbeddingsConfig;
+  log?: LogConfig;
 }
 
 model ProjectConfig {
@@ -203,6 +215,7 @@ model ConfigUpdateRequest {
   jira?: JiraConfig;
   database?: DatabaseConfig;
   embeddings?: EmbeddingsConfig;
+  log?: LogConfig;
 }
 
 model ConfigUpdateResponse {
@@ -348,6 +361,7 @@ model ReportGenerateResponse {
 
 // -- SQL Query --
 model SqlExecuteRequest {
+  projectKey?: string;
   query: string;
   limit?: int32;
 }
@@ -360,6 +374,7 @@ model SqlExecuteResponse {
 }
 
 model SqlGetSchemaRequest {
+  projectKey?: string;
   table?: string;
 }
 
@@ -481,4 +496,117 @@ namespace Sql {
 
   @doc("Delete a saved query")
   op deleteQuery(request: SqlQueryDeleteRequest): SqlQueryDeleteResponse;
+}
+
+// ============================================================
+// Debug Types
+// ============================================================
+
+model CreatedIssue {
+  key: string;
+  id: string;
+  selfUrl: string;
+}
+
+model Transition {
+  id: string;
+  name: string;
+  toStatus: string;
+}
+
+model BulkTransitionResult {
+  issueKey: string;
+  success: boolean;
+  error?: string;
+}
+
+model IssueTypeInfo {
+  name: string;
+  description?: string;
+  iconUrl?: string;
+  subtask: boolean;
+}
+
+// Debug Request/Response Types
+model DebugStatusRequest {}
+
+model DebugStatusResponse {
+  enabled: boolean;
+  message: string;
+}
+
+model DebugGetIssueTypesRequest {
+  project: string;
+}
+
+model DebugGetIssueTypesResponse {
+  issueTypes: IssueTypeInfo[];
+}
+
+model DebugCreateIssuesRequest {
+  project: string;
+  count?: int32;
+  issueType?: string;
+  summary?: string;
+  description?: string;
+}
+
+model DebugCreateIssuesResponse {
+  success: boolean;
+  created: CreatedIssue[];
+  error?: string;
+}
+
+model DebugListTransitionsRequest {
+  issueKey: string;
+}
+
+model DebugListTransitionsResponse {
+  transitions: Transition[];
+}
+
+model DebugTransitionIssueRequest {
+  issueKey: string;
+  transitionId: string;
+}
+
+model DebugTransitionIssueResponse {
+  success: boolean;
+  error?: string;
+}
+
+model DebugBulkTransitionRequest {
+  issues: string[];
+  transitionId: string;
+}
+
+model DebugBulkTransitionResponse {
+  results: BulkTransitionResult[];
+  successCount: int32;
+  failureCount: int32;
+}
+
+// ============================================================
+// Debug Operations
+// ============================================================
+
+@doc("Debug operations (requires debug_mode in settings)")
+namespace Debug {
+  @doc("Get debug status")
+  op status(request: DebugStatusRequest): DebugStatusResponse;
+
+  @doc("Get issue types for a project")
+  op getIssueTypes(request: DebugGetIssueTypesRequest): DebugGetIssueTypesResponse;
+
+  @doc("Create test issues")
+  op createIssues(request: DebugCreateIssuesRequest): DebugCreateIssuesResponse;
+
+  @doc("List available transitions for an issue")
+  op listTransitions(request: DebugListTransitionsRequest): DebugListTransitionsResponse;
+
+  @doc("Transition an issue to a new status")
+  op transitionIssue(request: DebugTransitionIssueRequest): DebugTransitionIssueResponse;
+
+  @doc("Bulk transition multiple issues")
+  op bulkTransition(request: DebugBulkTransitionRequest): DebugBulkTransitionResponse;
 }

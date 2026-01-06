@@ -1,5 +1,6 @@
 use crate::application::dto::SyncResult;
 use crate::application::services::JiraService;
+use crate::application::use_cases::sync_logger::{SyncLogger, SyncSummaryReport};
 use crate::application::use_cases::GenerateSnapshotsUseCase;
 use crate::domain::entities::{ChangeHistoryItem, Issue};
 use crate::domain::error::DomainResult;
@@ -9,8 +10,8 @@ use crate::domain::repositories::{
 };
 use crate::infrastructure::config::SyncCheckpoint;
 use crate::infrastructure::database::SharedRawDataRepository;
-use chrono::Utc;
-use log::{info, warn};
+use chrono::{DateTime, Utc};
+use log::warn;
 use std::sync::Arc;
 
 /// Result of resumable sync operation
@@ -74,10 +75,28 @@ where
         self
     }
 
-    pub async fn execute(&self, project_key: &str, project_id: &str) -> DomainResult<SyncResult> {
-        // Use resumable sync without checkpoint (full sync)
+    /// Execute sync for a project
+    ///
+    /// # Arguments
+    /// * `project_key` - The JIRA project key
+    /// * `project_id` - The JIRA project ID
+    /// * `after_updated_at` - Only fetch issues updated at or after this timestamp (for incremental sync)
+    pub async fn execute(
+        &self,
+        project_key: &str,
+        project_id: &str,
+        after_updated_at: Option<DateTime<Utc>>,
+    ) -> DomainResult<SyncResult> {
+        // Create a checkpoint from after_updated_at if provided
+        let checkpoint = after_updated_at.map(|ts| SyncCheckpoint {
+            last_issue_updated_at: ts,
+            last_issue_key: String::new(), // No specific key to skip
+            items_processed: 0,
+            total_items: 0,
+        });
+
         let result = self
-            .execute_resumable(project_key, project_id, None, |_| {})
+            .execute_resumable(project_key, project_id, checkpoint, |_| {})
             .await?;
         Ok(result.sync_result)
     }
@@ -102,12 +121,6 @@ where
     where
         F: FnMut(&SyncCheckpoint) + Send,
     {
-        if checkpoint.is_some() {
-            info!("Resuming sync for project: {} from checkpoint", project_key);
-        } else {
-            info!("Syncing project: {}", project_key);
-        }
-
         let started_at = Utc::now();
         let sync_type = if checkpoint.is_some() {
             "resumable"
@@ -122,7 +135,7 @@ where
             .sync_internal_resumable(project_key, project_id, checkpoint, &mut on_progress)
             .await
         {
-            Ok((issues_count, history_count)) => {
+            Ok((issues_count, history_count, last_issue_updated_at)) => {
                 let completed_at = Utc::now();
                 self.sync_history_repository.update_completed(
                     history_id,
@@ -130,15 +143,12 @@ where
                     completed_at,
                 )?;
 
-                info!(
-                    "Successfully synced {} issues for project {}",
-                    issues_count, project_key
-                );
                 Ok(ResumableSyncResult {
                     sync_result: SyncResult::success(
                         project_key.to_string(),
                         issues_count,
                         history_count,
+                        last_issue_updated_at,
                     ),
                     checkpoint: None, // Clear checkpoint on success
                 })
@@ -159,7 +169,7 @@ where
     }
 
     /// Internal sync with resumable support
-    /// Returns Ok((issues_count, history_count)) on success
+    /// Returns Ok((issues_count, history_count, last_issue_updated_at)) on success
     /// Returns Err((error, last_checkpoint)) on failure with the last successful checkpoint
     async fn sync_internal_resumable<F>(
         &self,
@@ -167,40 +177,75 @@ where
         project_id: &str,
         checkpoint: Option<SyncCheckpoint>,
         on_progress: &mut F,
-    ) -> Result<(usize, usize), (crate::domain::error::DomainError, Option<SyncCheckpoint>)>
+    ) -> Result<
+        (usize, usize, Option<DateTime<Utc>>),
+        (crate::domain::error::DomainError, Option<SyncCheckpoint>),
+    >
     where
         F: FnMut(&SyncCheckpoint) + Send,
     {
-        info!("Fetching issues for project: {}", project_key);
+        // Create logger with 4 main steps
+        let mut logger = SyncLogger::new(project_key, 4);
+        logger.start();
+
+        // Step 1: Fetch issues from JIRA
+        let step1 = logger.step("Fetching issues from JIRA");
 
         // Determine where to resume from
         let after_updated_at = checkpoint.as_ref().map(|cp| cp.last_issue_updated_at);
-        let skip_until_key = checkpoint.as_ref().map(|cp| cp.last_issue_key.clone());
+        // Only skip if we have a specific key to skip to (not empty string)
+        let skip_until_key = checkpoint
+            .as_ref()
+            .map(|cp| cp.last_issue_key.clone())
+            .filter(|key| !key.is_empty());
         let mut items_processed = checkpoint
             .as_ref()
             .map(|cp| cp.items_processed)
             .unwrap_or(0);
 
-        // Collect all issues using batch fetching
+        if let Some(ref ts) = after_updated_at {
+            step1.detail(&format!("Incremental sync from: {}", ts));
+        } else {
+            step1.detail("Full sync (no checkpoint)");
+        }
+
+        // Collect all issues using batch fetching with token-based pagination
         let mut all_issues: Vec<Issue> = Vec::new();
         let mut all_issue_keys: Vec<String> = Vec::new();
-        let mut start_at = 0;
+        let mut page_token: Option<String> = None;
         let max_results = 100;
-        let mut total_items: usize;
         let mut last_checkpoint: Option<SyncCheckpoint> = checkpoint.clone();
         let mut skipping = skip_until_key.is_some();
+        let mut batch_count = 0;
 
         loop {
+            batch_count += 1;
+            step1.detail(&format!(
+                "Batch {}: page_token={:?}",
+                batch_count,
+                page_token.as_ref().map(|t| &t[..t.len().min(20)])
+            ));
+
             // Fetch a batch of issues
             let progress = self
                 .jira_service
-                .fetch_project_issues_batch(project_key, after_updated_at, start_at, max_results)
+                .fetch_project_issues_batch(
+                    project_key,
+                    after_updated_at,
+                    page_token.as_deref(),
+                    max_results,
+                )
                 .await
                 .map_err(|e| (e, last_checkpoint.clone()))?;
 
-            total_items = progress.total;
+            step1.detail(&format!(
+                "  -> Fetched {} issues, has_more={}",
+                progress.issues.len(),
+                progress.has_more
+            ));
 
             if progress.issues.is_empty() {
+                step1.detail("  -> Empty batch, stopping pagination");
                 break;
             }
 
@@ -227,12 +272,11 @@ where
             };
 
             if !issues_to_process.is_empty() {
-                info!(
-                    "Processing batch: {} issues (total progress: {}/{})",
+                step1.detail(&format!(
+                    "  -> Processing {} issues (total so far: {})",
                     issues_to_process.len(),
-                    items_processed + issues_to_process.len(),
-                    total_items
-                );
+                    items_processed + issues_to_process.len()
+                ));
 
                 // Save issues to database
                 self.issue_repository
@@ -294,7 +338,7 @@ where
                             last_issue_updated_at: last_issue.updated_date.unwrap_or_else(Utc::now),
                             last_issue_key: last_issue.key.clone(),
                             items_processed,
-                            total_items,
+                            total_items: all_issues.len(),
                         };
 
                         // Notify progress callback
@@ -307,78 +351,136 @@ where
             if !progress.has_more {
                 break;
             }
-            start_at = progress.fetched_so_far;
+
+            // Update page token for next iteration
+            page_token = progress.next_page_token;
         }
 
         let count = all_issues.len();
-        info!("Fetched and saved {} issues total", count);
 
         // Mark issues that no longer exist in JIRA as deleted (soft delete)
         // Only do this for full sync (not resumable)
+        let mut deleted_count = 0;
         if checkpoint.is_none() && !all_issue_keys.is_empty() {
-            let deleted_count = self
+            deleted_count = self
                 .issue_repository
                 .mark_deleted_not_in_keys(project_id, &all_issue_keys)
                 .map_err(|e| (e, last_checkpoint.clone()))?;
-            if deleted_count > 0 {
-                info!(
-                    "Marked {} issues as deleted (no longer in JIRA)",
-                    deleted_count
-                );
-            }
         }
 
         // Count total history items
-        let total_history_items = all_issues
+        let total_history_items: usize = all_issues
             .iter()
             .filter_map(|i| i.raw_json.as_ref())
             .map(|json| ChangeHistoryItem::extract_from_raw_json("", "", json).len())
             .sum();
 
-        if total_history_items > 0 {
-            info!("Saved {} change history items", total_history_items);
-        }
+        step1.finish_with_detail(&format!(
+            "Saved {} issues, {} change history items{}",
+            count,
+            total_history_items,
+            if deleted_count > 0 {
+                format!(", {} deleted", deleted_count)
+            } else {
+                String::new()
+            }
+        ));
 
-        // Fetch and save metadata
-        self.sync_metadata(project_key, project_id)
+        // Step 2: Sync metadata
+        let step2 = logger.step("Syncing project metadata");
+        self.sync_metadata(project_key, project_id, &step2)
             .await
             .map_err(|e| (e, last_checkpoint.clone()))?;
+        step2.finish();
 
-        // Generate issue snapshots
-        info!("Generating issue snapshots...");
+        // Step 3: Generate issue snapshots
+        let step3 = logger.step("Generating issue snapshots");
         let snapshot_use_case = GenerateSnapshotsUseCase::new(
             Arc::clone(&self.issue_repository),
             Arc::clone(&self.change_history_repository),
             Arc::clone(&self.snapshot_repository),
         );
-        match snapshot_use_case.execute(project_key, project_id) {
+        let snapshot_count = match snapshot_use_case.execute(project_key, project_id) {
             Ok(result) => {
-                info!(
+                step3.detail(&format!(
                     "Generated {} snapshots for {} issues",
                     result.snapshots_generated, result.issues_processed
-                );
+                ));
+                result.snapshots_generated
             }
             Err(e) => {
                 warn!("Failed to generate snapshots: {}", e);
+                step3.detail(&format!("Warning: {}", e));
+                0
+            }
+        };
+        step3.finish();
+
+        // Step 4: Verify data integrity
+        let step4 = logger.step("Verifying data integrity");
+        let mut summary = SyncSummaryReport::default();
+        summary.issues_synced = count;
+        summary.success = true;
+
+        // Get JIRA total count (most reliable method)
+        step4.detail("Fetching JIRA total issue count...");
+        match self.jira_service.get_total_issue_count(project_key).await {
+            Ok(total) => {
+                summary.jira_total_count = total;
+                step4.detail(&format!("JIRA total issue count: {}", total));
+            }
+            Err(e) => {
+                step4.detail(&format!("Warning: Could not fetch JIRA total count: {}", e));
             }
         }
 
-        Ok((count, total_history_items))
+        // Get local counts by status
+        step4.detail("Fetching local issue counts by status...");
+        match self.issue_repository.count_by_status(project_id) {
+            Ok(local_counts) => {
+                summary.local_status_counts = local_counts.clone();
+                summary.local_total_count = local_counts.values().sum();
+            }
+            Err(e) => {
+                step4.detail(&format!("Warning: Could not fetch local counts: {}", e));
+            }
+        }
+
+        // Get local history and snapshot counts
+        summary.local_history_count = total_history_items;
+        summary.local_snapshot_count = snapshot_count;
+
+        // Get the last issue's updated_date for incremental sync
+        let last_issue_updated_at = all_issues.last().and_then(|issue| issue.updated_date);
+        summary.last_issue_updated_at = last_issue_updated_at;
+
+        step4.finish();
+
+        // Output summary
+        logger.summary(&summary);
+
+        Ok((count, total_history_items, last_issue_updated_at))
     }
 
-    async fn sync_metadata(&self, project_key: &str, project_id: &str) -> DomainResult<()> {
-        info!("Fetching and saving project metadata...");
-
+    async fn sync_metadata(
+        &self,
+        project_key: &str,
+        project_id: &str,
+        step: &crate::application::use_cases::sync_logger::StepLogger,
+    ) -> DomainResult<()> {
         // Fetch statuses
         match self.jira_service.fetch_project_statuses(project_key).await {
             Ok(statuses) => {
                 if !statuses.is_empty() {
                     self.metadata_repository
                         .upsert_statuses(project_id, &statuses)?;
-                    info!("Saved {} statuses", statuses.len());
+                    step.detail(&format!("Saved {} statuses", statuses.len()));
                 }
             }
-            Err(e) => warn!("Failed to fetch statuses: {}", e),
+            Err(e) => {
+                warn!("Failed to fetch statuses: {}", e);
+                step.detail(&format!("Warning: Failed to fetch statuses: {}", e));
+            }
         }
 
         // Fetch priorities
@@ -387,10 +489,13 @@ where
                 if !priorities.is_empty() {
                     self.metadata_repository
                         .upsert_priorities(project_id, &priorities)?;
-                    info!("Saved {} priorities", priorities.len());
+                    step.detail(&format!("Saved {} priorities", priorities.len()));
                 }
             }
-            Err(e) => warn!("Failed to fetch priorities: {}", e),
+            Err(e) => {
+                warn!("Failed to fetch priorities: {}", e);
+                step.detail(&format!("Warning: Failed to fetch priorities: {}", e));
+            }
         }
 
         // Fetch issue types
@@ -403,10 +508,13 @@ where
                 if !issue_types.is_empty() {
                     self.metadata_repository
                         .upsert_issue_types(project_id, &issue_types)?;
-                    info!("Saved {} issue types", issue_types.len());
+                    step.detail(&format!("Saved {} issue types", issue_types.len()));
                 }
             }
-            Err(e) => warn!("Failed to fetch issue types: {}", e),
+            Err(e) => {
+                warn!("Failed to fetch issue types: {}", e);
+                step.detail(&format!("Warning: Failed to fetch issue types: {}", e));
+            }
         }
 
         // Fetch labels
@@ -415,10 +523,13 @@ where
                 if !labels.is_empty() {
                     self.metadata_repository
                         .upsert_labels(project_id, &labels)?;
-                    info!("Saved {} labels", labels.len());
+                    step.detail(&format!("Saved {} labels", labels.len()));
                 }
             }
-            Err(e) => warn!("Failed to fetch labels: {}", e),
+            Err(e) => {
+                warn!("Failed to fetch labels: {}", e);
+                step.detail(&format!("Warning: Failed to fetch labels: {}", e));
+            }
         }
 
         // Fetch components
@@ -431,10 +542,13 @@ where
                 if !components.is_empty() {
                     self.metadata_repository
                         .upsert_components(project_id, &components)?;
-                    info!("Saved {} components", components.len());
+                    step.detail(&format!("Saved {} components", components.len()));
                 }
             }
-            Err(e) => warn!("Failed to fetch components: {}", e),
+            Err(e) => {
+                warn!("Failed to fetch components: {}", e);
+                step.detail(&format!("Warning: Failed to fetch components: {}", e));
+            }
         }
 
         // Fetch versions
@@ -443,10 +557,13 @@ where
                 if !fix_versions.is_empty() {
                     self.metadata_repository
                         .upsert_fix_versions(project_id, &fix_versions)?;
-                    info!("Saved {} fix versions", fix_versions.len());
+                    step.detail(&format!("Saved {} fix versions", fix_versions.len()));
                 }
             }
-            Err(e) => warn!("Failed to fetch versions: {}", e),
+            Err(e) => {
+                warn!("Failed to fetch versions: {}", e);
+                step.detail(&format!("Warning: Failed to fetch versions: {}", e));
+            }
         }
 
         Ok(())

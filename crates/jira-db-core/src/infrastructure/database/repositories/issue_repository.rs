@@ -4,6 +4,7 @@ use crate::domain::repositories::{IssueRepository, SearchParams};
 use chrono::{DateTime, Utc};
 use duckdb::Connection;
 use log::debug;
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 pub struct DuckDbIssueRepository {
@@ -409,5 +410,39 @@ impl IssueRepository for DuckDbIssueRepository {
         }
 
         Ok(count as usize)
+    }
+
+    fn count_by_status(&self, project_id: &str) -> DomainResult<HashMap<String, usize>> {
+        let conn = self.conn.lock().map_err(|e| {
+            DomainError::Repository(format!("Failed to acquire database lock: {}", e))
+        })?;
+
+        let mut stmt = conn
+            .prepare(
+                r#"
+                SELECT status, COUNT(*) as count
+                FROM issues
+                WHERE project_id = ? AND (is_deleted IS NULL OR is_deleted = false)
+                GROUP BY status
+                ORDER BY status
+                "#,
+            )
+            .map_err(|e| DomainError::Repository(format!("Failed to prepare query: {}", e)))?;
+
+        let rows = stmt
+            .query_map(duckdb::params![project_id], |row| {
+                let status: String = row.get(0)?;
+                let count: i64 = row.get(1)?;
+                Ok((status, count as usize))
+            })
+            .map_err(|e| DomainError::Repository(format!("Failed to execute query: {}", e)))?;
+
+        let mut result = HashMap::new();
+        for row in rows {
+            let (status, count) = row.map_err(|e| DomainError::Repository(e.to_string()))?;
+            result.insert(status, count);
+        }
+
+        Ok(result)
     }
 }

@@ -11,9 +11,47 @@ pub struct Settings {
     pub database: DatabaseConfig,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub embeddings: Option<EmbeddingsConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub log: Option<LogConfig>,
     /// Debug mode enables JIRA test data creation features and verbose logging
     #[serde(default)]
     pub debug_mode: bool,
+}
+
+/// Configuration for logging
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LogConfig {
+    /// Enable file logging
+    #[serde(default)]
+    pub file_enabled: bool,
+    /// Log file directory (defaults to database_dir/logs)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file_dir: Option<PathBuf>,
+    /// Log level for file output: "error", "warn", "info", "debug", "trace"
+    #[serde(default = "default_log_level")]
+    pub level: String,
+    /// Maximum number of log files to keep (0 = unlimited)
+    #[serde(default = "default_max_files")]
+    pub max_files: usize,
+}
+
+fn default_log_level() -> String {
+    "info".to_string()
+}
+
+fn default_max_files() -> usize {
+    10
+}
+
+impl Default for LogConfig {
+    fn default() -> Self {
+        Self {
+            file_enabled: false,
+            file_dir: None,
+            level: default_log_level(),
+            max_files: default_max_files(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -127,6 +165,7 @@ impl Settings {
                 database_dir,
             },
             embeddings: None,
+            log: None,
             debug_mode: false,
         }
     }
@@ -203,11 +242,25 @@ impl Settings {
                 database_dir: PathBuf::from("./data"),
             },
             embeddings: None,
+            log: None,
             debug_mode: false,
         };
 
         settings.save(&path)?;
         Ok(settings)
+    }
+
+    /// Get the log configuration (returns default if not set)
+    pub fn get_log_config(&self) -> LogConfig {
+        self.log.clone().unwrap_or_default()
+    }
+
+    /// Get the log directory path
+    pub fn get_log_dir(&self) -> PathBuf {
+        self.log
+            .as_ref()
+            .and_then(|l| l.file_dir.clone())
+            .unwrap_or_else(|| self.database.database_dir.join("logs"))
     }
 
     pub fn default_path() -> DomainResult<PathBuf> {
@@ -292,6 +345,7 @@ mod tests {
                 database_dir: PathBuf::from("./data"),
             },
             embeddings: None,
+            log: None,
             debug_mode: false,
         };
 
@@ -315,6 +369,7 @@ mod tests {
                 database_dir: PathBuf::from("./data"),
             },
             embeddings: None,
+            log: None,
             debug_mode: false,
         };
 
@@ -338,10 +393,54 @@ mod tests {
                 database_dir: PathBuf::from("./data"),
             },
             embeddings: None,
+            log: None,
             debug_mode: false,
         };
 
         let path = settings.get_database_path_for_project("MYPROJ");
         assert_eq!(path, PathBuf::from("./data/MYPROJ.duckdb"));
+    }
+
+    #[test]
+    fn test_log_config_defaults() {
+        let log_config = LogConfig::default();
+        assert!(!log_config.file_enabled);
+        assert_eq!(log_config.level, "info");
+        assert_eq!(log_config.max_files, 10);
+        assert!(log_config.file_dir.is_none());
+    }
+
+    #[test]
+    fn test_get_log_dir() {
+        let settings = Settings {
+            jira: JiraConfig {
+                endpoint: "https://test.atlassian.net".into(),
+                username: "test@example.com".into(),
+                api_key: "test-key".into(),
+            },
+            projects: vec![],
+            database: DatabaseConfig {
+                path: None,
+                database_dir: PathBuf::from("./data"),
+            },
+            embeddings: None,
+            log: None,
+            debug_mode: false,
+        };
+
+        // Default log dir should be database_dir/logs
+        assert_eq!(settings.get_log_dir(), PathBuf::from("./data/logs"));
+
+        // With custom log dir
+        let settings_with_log = Settings {
+            log: Some(LogConfig {
+                file_enabled: true,
+                file_dir: Some(PathBuf::from("/custom/logs")),
+                level: "debug".to_string(),
+                max_files: 5,
+            }),
+            ..settings
+        };
+        assert_eq!(settings_with_log.get_log_dir(), PathBuf::from("/custom/logs"));
     }
 }

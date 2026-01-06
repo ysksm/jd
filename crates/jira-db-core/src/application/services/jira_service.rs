@@ -11,12 +11,14 @@ use chrono::{DateTime, Utc};
 pub struct FetchProgress {
     /// Fetched issues in this batch
     pub issues: Vec<Issue>,
-    /// Total number of issues matching the query
+    /// Total number of issues matching the query (may be 0 if API doesn't provide it)
     pub total: usize,
     /// Number of issues fetched so far (including this batch)
     pub fetched_so_far: usize,
     /// Whether there are more issues to fetch
     pub has_more: bool,
+    /// Token for fetching the next page (for JIRA Cloud API)
+    pub next_page_token: Option<String>,
 }
 
 /// Service trait for JIRA API operations
@@ -35,7 +37,7 @@ pub trait JiraService: Send + Sync {
     /// # Arguments
     /// * `project_key` - The JIRA project key
     /// * `after_updated_at` - Only fetch issues updated at or after this timestamp (for resume)
-    /// * `start_at` - Pagination offset within the filtered results
+    /// * `page_token` - Token for fetching the next page (None for first page)
     /// * `max_results` - Maximum number of issues to fetch in this batch
     ///
     /// # Returns
@@ -44,7 +46,7 @@ pub trait JiraService: Send + Sync {
         &self,
         project_key: &str,
         after_updated_at: Option<DateTime<Utc>>,
-        start_at: usize,
+        page_token: Option<&str>,
         max_results: usize,
     ) -> DomainResult<FetchProgress>;
 
@@ -92,4 +94,13 @@ pub trait JiraService: Send + Sync {
 
     /// Transition an issue to a new status
     async fn transition_issue(&self, issue_key: &str, transition_id: &str) -> DomainResult<()>;
+
+    /// Get issue count by status for a project (for integrity check)
+    async fn get_issue_count_by_status(
+        &self,
+        project_key: &str,
+    ) -> DomainResult<std::collections::HashMap<String, usize>>;
+
+    /// Get total issue count for a project (simple JQL count)
+    async fn get_total_issue_count(&self, project_key: &str) -> DomainResult<usize>;
 }

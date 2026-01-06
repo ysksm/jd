@@ -1,5 +1,6 @@
 use crate::domain::entities::Issue;
 use crate::domain::error::DomainResult;
+use std::collections::HashMap;
 
 /// Search parameters for issues
 #[derive(Debug, Default, Clone)]
@@ -26,4 +27,7 @@ pub trait IssueRepository: Send + Sync {
     /// Also unmarks previously deleted issues if they appear in the keys list (restore)
     /// Returns the number of issues marked as deleted
     fn mark_deleted_not_in_keys(&self, project_id: &str, keys: &[String]) -> DomainResult<usize>;
+
+    /// Count issues by status for a project (for integrity check)
+    fn count_by_status(&self, project_id: &str) -> DomainResult<HashMap<String, usize>>;
 }

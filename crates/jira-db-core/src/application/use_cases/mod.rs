@@ -7,6 +7,7 @@ mod get_change_history;
 mod get_project_metadata;
 mod search_issues;
 mod sync_fields;
+mod sync_logger;
 mod sync_project;
 mod sync_project_list;
 mod transition_issue;

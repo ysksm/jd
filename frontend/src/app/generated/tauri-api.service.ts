@@ -201,15 +201,20 @@ export class TauriApiService {
   }
 
   // ----------------------------------------
-  // Debug (requires debug_mode in settings)
+  // Debug
   // ----------------------------------------
 
-  /** Get debug mode status */
+  /** Get debug status */
   debugStatus(request: DebugStatusRequest): Observable<DebugStatusResponse> {
     return from(invoke<DebugStatusResponse>('debug_status', { request }));
   }
 
-  /** Create test issues in JIRA */
+  /** Get issue types for a project */
+  debugGetIssueTypes(request: DebugGetIssueTypesRequest): Observable<DebugGetIssueTypesResponse> {
+    return from(invoke<DebugGetIssueTypesResponse>('debug_get_issue_types', { request }));
+  }
+
+  /** Create test issues */
   debugCreateIssues(request: DebugCreateIssuesRequest): Observable<DebugCreateIssuesResponse> {
     return from(invoke<DebugCreateIssuesResponse>('debug_create_issues', { request }));
   }
@@ -219,7 +224,7 @@ export class TauriApiService {
     return from(invoke<DebugListTransitionsResponse>('debug_list_transitions', { request }));
   }
 
-  /** Transition a single issue */
+  /** Transition an issue to a new status */
   debugTransitionIssue(request: DebugTransitionIssueRequest): Observable<DebugTransitionIssueResponse> {
     return from(invoke<DebugTransitionIssueResponse>('debug_transition_issue', { request }));
   }
@@ -227,11 +232,6 @@ export class TauriApiService {
   /** Bulk transition multiple issues */
   debugBulkTransition(request: DebugBulkTransitionRequest): Observable<DebugBulkTransitionResponse> {
     return from(invoke<DebugBulkTransitionResponse>('debug_bulk_transition', { request }));
-  }
-
-  /** Get available issue types for a project */
-  debugGetIssueTypes(request: DebugGetIssueTypesRequest): Observable<DebugGetIssueTypesResponse> {
-    return from(invoke<DebugGetIssueTypesResponse>('debug_get_issue_types', { request }));
   }
 
 }

@@ -41,6 +41,9 @@ pub struct SyncResultExtended {
     pub columns_added: i32,
     #[serde(rename = "issuesExpanded")]
     pub issues_expanded: i32,
+    /// The updated_date of the last fetched issue (for incremental sync)
+    #[serde(skip)]
+    pub last_issue_updated_at: Option<jira_db_core::chrono::DateTime<jira_db_core::chrono::Utc>>,
 }
 
 /// Extended sync response with detailed breakdown
@@ -166,9 +169,19 @@ pub async fn sync_execute(
             );
         }
 
-        // Step 3: Execute sync
+        // Step 3: Execute sync (incremental if last_synced exists)
         log_info!(log, "[{}] Fetching issues from JIRA...", project.key);
-        let result = sync_use_case.execute(&project.key, &project.id).await;
+        if project.last_synced.is_some() {
+            log_info!(
+                log,
+                "[{}] Incremental sync from {:?}",
+                project.key,
+                project.last_synced
+            );
+        }
+        let result = sync_use_case
+            .execute(&project.key, &project.id, project.last_synced)
+            .await;
 
         // Step 4: Expand issues for this project
         log_info!(log, "[{}] Expanding issues...", project.key);
@@ -225,6 +238,7 @@ pub async fn sync_execute(
                     fields_synced,
                     columns_added: total_columns_added,
                     issues_expanded,
+                    last_issue_updated_at: sync_result.last_issue_updated_at,
                 });
             }
             Err(e) => {
@@ -239,18 +253,28 @@ pub async fn sync_execute(
                     fields_synced: 0,
                     columns_added: 0,
                     issues_expanded: 0,
+                    last_issue_updated_at: None,
                 });
             }
         }
     }
 
     // Update last_synced for successful projects
+    // Use the last issue's updated_date instead of current time for reliable incremental sync
     state
         .update_settings(|s| {
             for result in &results {
                 if result.success {
                     if let Some(project) = s.find_project_mut(&result.project_key) {
-                        project.last_synced = Some(jira_db_core::chrono::Utc::now());
+                        // Only update last_synced if we fetched issues
+                        // If no issues were fetched, keep the previous value
+                        if let Some(last_updated) = result.last_issue_updated_at {
+                            project.last_synced = Some(last_updated);
+                        } else if project.last_synced.is_none() {
+                            // First sync with no issues: set to current time
+                            project.last_synced = Some(jira_db_core::chrono::Utc::now());
+                        }
+                        // Otherwise, keep the existing last_synced
                     }
                 }
             }
