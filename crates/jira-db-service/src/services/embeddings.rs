@@ -141,6 +141,7 @@ pub async fn search(
             assignee: None,
             issue_type: None,
             priority: None,
+            team: None,
             limit: Some(1),
             offset: None,
         };

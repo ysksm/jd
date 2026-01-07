@@ -401,6 +401,8 @@ pub struct IssueSearchRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub issue_type: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub team: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub limit: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub offset: Option<i32>,
