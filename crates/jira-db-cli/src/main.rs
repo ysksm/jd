@@ -283,6 +283,7 @@ async fn handle_project_init(
             sync_enabled: false,
             last_synced: None,
             sync_checkpoint: None,
+            snapshot_checkpoint: None,
         };
         settings.upsert_project(project_config);
     }

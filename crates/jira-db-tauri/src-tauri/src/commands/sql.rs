@@ -22,12 +22,9 @@ pub async fn sql_execute(
     request: SqlExecuteRequest,
 ) -> Result<SqlExecuteResponse, String> {
     let project_key = request.project_key.as_deref().unwrap_or("");
-    let db = state.get_db(project_key).ok_or_else(|| {
-        format!(
-            "Database not initialized for project {}",
-            project_key
-        )
-    })?;
+    let db = state
+        .get_db(project_key)
+        .ok_or_else(|| format!("Database not initialized for project {}", project_key))?;
 
     let start = Instant::now();
 
@@ -72,12 +69,9 @@ pub async fn sql_get_schema(
     request: SqlGetSchemaRequest,
 ) -> Result<SqlGetSchemaResponse, String> {
     let project_key = request.project_key.as_deref().unwrap_or("");
-    let db = state.get_db(project_key).ok_or_else(|| {
-        format!(
-            "Database not initialized for project {}",
-            project_key
-        )
-    })?;
+    let db = state
+        .get_db(project_key)
+        .ok_or_else(|| format!("Database not initialized for project {}", project_key))?;
 
     let conn = db
         .lock()

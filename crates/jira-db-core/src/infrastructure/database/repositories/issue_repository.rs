@@ -1,6 +1,6 @@
 use crate::domain::entities::Issue;
 use crate::domain::error::{DomainError, DomainResult};
-use crate::domain::repositories::{IssueRepository, SearchParams};
+use crate::domain::repositories::{IssuePage, IssueRepository, SearchParams};
 use chrono::{DateTime, Utc};
 use duckdb::Connection;
 use log::debug;
@@ -467,5 +467,180 @@ impl IssueRepository for DuckDbIssueRepository {
         }
 
         Ok(result)
+    }
+
+    fn find_by_project_paginated(
+        &self,
+        project_id: &str,
+        offset: usize,
+        limit: usize,
+    ) -> DomainResult<IssuePage> {
+        let conn = self.conn.lock().map_err(|e| {
+            DomainError::Repository(format!("Failed to acquire database lock: {}", e))
+        })?;
+
+        // Get total count first
+        let total_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM issues WHERE project_id = ? AND (is_deleted IS NULL OR is_deleted = false)",
+                duckdb::params![project_id],
+                |row| row.get(0),
+            )
+            .map_err(|e| DomainError::Repository(format!("Failed to count issues: {}", e)))?;
+
+        let mut stmt = conn
+            .prepare(
+                r#"
+            SELECT id, project_id, key, summary, description,
+                   status, priority, assignee, reporter,
+                   issue_type, resolution, labels, components, fix_versions, sprint, team, parent_key,
+                   CASE WHEN due_date IS NOT NULL THEN strftime(due_date::TIMESTAMP, '%Y-%m-%dT%H:%M:%S') || '+00:00' ELSE NULL END as due_date,
+                   created_date, updated_date, raw_data
+            FROM issues
+            WHERE project_id = ? AND (is_deleted IS NULL OR is_deleted = false)
+            ORDER BY id
+            LIMIT ? OFFSET ?
+            "#,
+            )
+            .map_err(|e| DomainError::Repository(format!("Failed to prepare query: {}", e)))?;
+
+        let rows = stmt
+            .query_map(
+                duckdb::params![project_id, limit as i64, offset as i64],
+                |row| Self::map_issue_row(row),
+            )
+            .map_err(|e| DomainError::Repository(format!("Failed to execute query: {}", e)))?;
+
+        let mut issues = Vec::new();
+        for issue in rows {
+            issues.push(issue.map_err(|e| DomainError::Repository(e.to_string()))?);
+        }
+
+        let has_more = offset + issues.len() < total_count as usize;
+
+        Ok(IssuePage {
+            issues,
+            total_count: total_count as usize,
+            has_more,
+        })
+    }
+
+    fn find_by_project_after_id(
+        &self,
+        project_id: &str,
+        after_issue_id: &str,
+        limit: usize,
+    ) -> DomainResult<IssuePage> {
+        let conn = self.conn.lock().map_err(|e| {
+            DomainError::Repository(format!("Failed to acquire database lock: {}", e))
+        })?;
+
+        // Get total count first
+        let total_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM issues WHERE project_id = ? AND (is_deleted IS NULL OR is_deleted = false)",
+                duckdb::params![project_id],
+                |row| row.get(0),
+            )
+            .map_err(|e| DomainError::Repository(format!("Failed to count issues: {}", e)))?;
+
+        let mut stmt = conn
+            .prepare(
+                r#"
+            SELECT id, project_id, key, summary, description,
+                   status, priority, assignee, reporter,
+                   issue_type, resolution, labels, components, fix_versions, sprint, team, parent_key,
+                   CASE WHEN due_date IS NOT NULL THEN strftime(due_date::TIMESTAMP, '%Y-%m-%dT%H:%M:%S') || '+00:00' ELSE NULL END as due_date,
+                   created_date, updated_date, raw_data
+            FROM issues
+            WHERE project_id = ? AND id > ? AND (is_deleted IS NULL OR is_deleted = false)
+            ORDER BY id
+            LIMIT ?
+            "#,
+            )
+            .map_err(|e| DomainError::Repository(format!("Failed to prepare query: {}", e)))?;
+
+        let rows = stmt
+            .query_map(
+                duckdb::params![project_id, after_issue_id, limit as i64],
+                |row| Self::map_issue_row(row),
+            )
+            .map_err(|e| DomainError::Repository(format!("Failed to execute query: {}", e)))?;
+
+        let mut issues = Vec::new();
+        for issue in rows {
+            issues.push(issue.map_err(|e| DomainError::Repository(e.to_string()))?);
+        }
+
+        // Check if there are more issues after this batch
+        let has_more = if let Some(last_issue) = issues.last() {
+            let remaining: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM issues WHERE project_id = ? AND id > ? AND (is_deleted IS NULL OR is_deleted = false)",
+                    duckdb::params![project_id, &last_issue.id],
+                    |row| row.get(0),
+                )
+                .unwrap_or(0);
+            remaining > 0
+        } else {
+            false
+        };
+
+        Ok(IssuePage {
+            issues,
+            total_count: total_count as usize,
+            has_more,
+        })
+    }
+}
+
+impl DuckDbIssueRepository {
+    /// Helper to map a row to an Issue
+    fn map_issue_row(row: &duckdb::Row<'_>) -> Result<Issue, duckdb::Error> {
+        let labels: Option<Vec<String>> = row
+            .get::<_, Option<String>>(11)?
+            .and_then(|s| serde_json::from_str(&s).ok());
+        let components: Option<Vec<String>> = row
+            .get::<_, Option<String>>(12)?
+            .and_then(|s| serde_json::from_str(&s).ok());
+        let fix_versions: Option<Vec<String>> = row
+            .get::<_, Option<String>>(13)?
+            .and_then(|s| serde_json::from_str(&s).ok());
+
+        Ok(Issue {
+            id: row.get(0)?,
+            project_id: row.get(1)?,
+            key: row.get(2)?,
+            summary: row.get(3)?,
+            description: row.get(4)?,
+            status: row.get(5)?,
+            priority: row.get(6)?,
+            assignee: row.get(7)?,
+            reporter: row.get(8)?,
+            issue_type: row.get(9)?,
+            resolution: row.get(10)?,
+            labels,
+            components,
+            fix_versions,
+            sprint: row.get(14)?,
+            team: row.get(15)?,
+            parent_key: row.get(16)?,
+            due_date: row.get::<_, Option<String>>(17)?.and_then(|s| {
+                DateTime::parse_from_rfc3339(&s)
+                    .ok()
+                    .map(|dt| dt.with_timezone(&Utc))
+            }),
+            created_date: row.get::<_, Option<String>>(18)?.and_then(|s| {
+                DateTime::parse_from_rfc3339(&s)
+                    .ok()
+                    .map(|dt| dt.with_timezone(&Utc))
+            }),
+            updated_date: row.get::<_, Option<String>>(19)?.and_then(|s| {
+                DateTime::parse_from_rfc3339(&s)
+                    .ok()
+                    .map(|dt| dt.with_timezone(&Utc))
+            }),
+            raw_json: row.get(20)?,
+        })
     }
 }

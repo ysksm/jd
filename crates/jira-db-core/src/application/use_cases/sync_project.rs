@@ -1,7 +1,7 @@
 use crate::application::dto::SyncResult;
 use crate::application::services::JiraService;
-use crate::application::use_cases::sync_logger::{SyncLogger, SyncSummaryReport};
 use crate::application::use_cases::GenerateSnapshotsUseCase;
+use crate::application::use_cases::sync_logger::{SyncLogger, SyncSummaryReport};
 use crate::domain::entities::{ChangeHistoryItem, Issue};
 use crate::domain::error::DomainResult;
 use crate::domain::repositories::{
@@ -393,14 +393,27 @@ where
             .map_err(|e| (e, last_checkpoint.clone()))?;
         step2.finish();
 
-        // Step 3: Generate issue snapshots
+        // Step 3: Generate issue snapshots (with batch processing for large datasets)
         let step3 = logger.step("Generating issue snapshots");
         let snapshot_use_case = GenerateSnapshotsUseCase::new(
             Arc::clone(&self.issue_repository),
             Arc::clone(&self.change_history_repository),
             Arc::clone(&self.snapshot_repository),
         );
-        let snapshot_count = match snapshot_use_case.execute(project_key, project_id) {
+
+        // Use progress callback to show batch progress
+        let step3_ref = &step3;
+        let snapshot_count = match snapshot_use_case.execute_with_progress(
+            project_key,
+            project_id,
+            None, // No checkpoint for now (fresh generation)
+            |progress| {
+                step3_ref.detail(&format!(
+                    "Processing: {}/{} issues ({} snapshots)",
+                    progress.issues_processed, progress.total_issues, progress.snapshots_generated
+                ));
+            },
+        ) {
             Ok(result) => {
                 step3.detail(&format!(
                     "Generated {} snapshots for {} issues",

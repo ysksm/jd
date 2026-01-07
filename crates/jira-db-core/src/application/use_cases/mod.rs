@@ -19,7 +19,10 @@ pub use generate_embeddings::{
     GenerateEmbeddingsUseCase,
 };
 pub use generate_report::{GenerateReportUseCase, ReportData};
-pub use generate_snapshots::{GenerateSnapshotsUseCase, SnapshotGenerationResult};
+pub use generate_snapshots::{
+    GenerateSnapshotsUseCase, SnapshotGenerationResult, SnapshotProgress,
+    create_snapshot_checkpoint,
+};
 pub use get_change_history::GetChangeHistoryUseCase;
 pub use get_project_metadata::GetProjectMetadataUseCase;
 pub use search_issues::SearchIssuesUseCase;
