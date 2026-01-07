@@ -16,6 +16,17 @@ pub struct SearchParams {
     pub offset: Option<usize>,
 }
 
+/// Result of paginated issue fetch
+#[derive(Debug, Clone)]
+pub struct IssuePage {
+    /// Issues in this page
+    pub issues: Vec<Issue>,
+    /// Total number of issues in the project
+    pub total_count: usize,
+    /// Whether there are more pages
+    pub has_more: bool,
+}
+
 /// Repository trait for Issue entity
 /// Infrastructure layer will implement this trait
 #[allow(dead_code)]
@@ -31,4 +42,22 @@ pub trait IssueRepository: Send + Sync {
 
     /// Count issues by status for a project (for integrity check)
     fn count_by_status(&self, project_id: &str) -> DomainResult<HashMap<String, usize>>;
+
+    /// Find issues by project with pagination, ordered by issue key
+    /// Used for batch processing in snapshot generation
+    fn find_by_project_paginated(
+        &self,
+        project_id: &str,
+        offset: usize,
+        limit: usize,
+    ) -> DomainResult<IssuePage>;
+
+    /// Find issues by project after a specific issue ID (for resumable processing)
+    /// Returns issues with ID greater than after_issue_id, ordered by ID
+    fn find_by_project_after_id(
+        &self,
+        project_id: &str,
+        after_issue_id: &str,
+        limit: usize,
+    ) -> DomainResult<IssuePage>;
 }

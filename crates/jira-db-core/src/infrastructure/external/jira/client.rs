@@ -425,7 +425,7 @@ impl JiraService for JiraApiClient {
 
         Ok(FetchProgress {
             issues,
-            total: 0, // Token-based pagination doesn't provide total
+            total: 0,          // Token-based pagination doesn't provide total
             fetched_so_far: 0, // Will be calculated by caller
             has_more,
             next_page_token,
@@ -1086,16 +1086,17 @@ impl JiraService for JiraApiClient {
 
         // Get all statuses for the project first
         let statuses = self.fetch_project_statuses(project_key).await?;
-        info!("[get_issue_count_by_status] Found {} statuses for project {}", statuses.len(), project_key);
+        info!(
+            "[get_issue_count_by_status] Found {} statuses for project {}",
+            statuses.len(),
+            project_key
+        );
 
         let mut result = std::collections::HashMap::new();
 
         // For each status, count issues using JQL
         for status in statuses {
-            let jql = format!(
-                "project = {} AND status = \"{}\"",
-                project_key, status.name
-            );
+            let jql = format!("project = {} AND status = \"{}\"", project_key, status.name);
 
             let url = format!("{}/rest/api/3/search/jql", self.base_url);
 
@@ -1131,17 +1132,27 @@ impl JiraService for JiraApiClient {
                     .or_else(|| json["issues"].as_array().map(|arr| arr.len() as i64))
                     .unwrap_or(0) as usize;
 
-                info!("[get_issue_count_by_status] Status '{}': {} issues", status.name, count);
+                info!(
+                    "[get_issue_count_by_status] Status '{}': {} issues",
+                    status.name, count
+                );
 
                 if count > 0 {
                     result.insert(status.name, count);
                 }
             } else {
-                info!("[get_issue_count_by_status] Failed to get count for status '{}': HTTP {}", status.name, response.status());
+                info!(
+                    "[get_issue_count_by_status] Failed to get count for status '{}': HTTP {}",
+                    status.name,
+                    response.status()
+                );
             }
         }
 
-        info!("[get_issue_count_by_status] Total statuses with issues: {}", result.len());
+        info!(
+            "[get_issue_count_by_status] Total statuses with issues: {}",
+            result.len()
+        );
         Ok(result)
     }
 
@@ -1153,7 +1164,10 @@ impl JiraService for JiraApiClient {
         let jql = format!("project = {}", project_key);
         let url = format!("{}/rest/api/3/search/jql", self.base_url);
 
-        info!("[get_total_issue_count] Starting count for project: {}", project_key);
+        info!(
+            "[get_total_issue_count] Starting count for project: {}",
+            project_key
+        );
 
         // Build request body for POST
         let request_body = serde_json::json!({
@@ -1192,7 +1206,10 @@ impl JiraService for JiraApiClient {
             DomainError::ExternalService(format!("Failed to parse count response: {}", e))
         })?;
 
-        info!("[get_total_issue_count] API response: total={:?}", json["total"]);
+        info!(
+            "[get_total_issue_count] API response: total={:?}",
+            json["total"]
+        );
 
         // Try to get total from response
         // Note: JIRA Cloud may not return accurate total for large datasets
@@ -1217,7 +1234,11 @@ impl JiraService for JiraApiClient {
                 .await?;
 
             count += progress.issues.len();
-            info!("[get_total_issue_count] Pagination batch: {} issues, total so far: {}", progress.issues.len(), count);
+            info!(
+                "[get_total_issue_count] Pagination batch: {} issues, total so far: {}",
+                progress.issues.len(),
+                count
+            );
 
             if !progress.has_more || progress.issues.is_empty() {
                 break;
@@ -1226,7 +1247,10 @@ impl JiraService for JiraApiClient {
             page_token = progress.next_page_token;
         }
 
-        info!("[get_total_issue_count] Final count via pagination: {}", count);
+        info!(
+            "[get_total_issue_count] Final count via pagination: {}",
+            count
+        );
         Ok(count)
     }
 }

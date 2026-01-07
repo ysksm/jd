@@ -7,6 +7,10 @@ pub trait IssueSnapshotRepository: Send + Sync {
     /// Insert multiple snapshots in batch
     fn batch_insert(&self, snapshots: &[IssueSnapshot]) -> DomainResult<()>;
 
+    /// Insert multiple snapshots in bulk (optimized for large datasets)
+    /// Uses database-specific bulk insert mechanisms (e.g., DuckDB Appender)
+    fn bulk_insert(&self, snapshots: &[IssueSnapshot]) -> DomainResult<()>;
+
     /// Delete all snapshots for a specific issue
     fn delete_by_issue_id(&self, issue_id: &str) -> DomainResult<()>;
 
@@ -34,4 +38,13 @@ pub trait IssueSnapshotRepository: Send + Sync {
 
     /// Count total snapshots for a project
     fn count_by_project_id(&self, project_id: &str) -> DomainResult<usize>;
+
+    /// Begin a transaction for batch operations
+    fn begin_transaction(&self) -> DomainResult<()>;
+
+    /// Commit the current transaction
+    fn commit_transaction(&self) -> DomainResult<()>;
+
+    /// Rollback the current transaction
+    fn rollback_transaction(&self) -> DomainResult<()>;
 }

@@ -432,4 +432,119 @@ impl IssueSnapshotRepository for DuckDbIssueSnapshotRepository {
 
         Ok(count as usize)
     }
+
+    fn bulk_insert(&self, snapshots: &[IssueSnapshot]) -> DomainResult<()> {
+        if snapshots.is_empty() {
+            return Ok(());
+        }
+
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| DomainError::Repository(format!("Failed to lock connection: {}", e)))?;
+
+        // Use prepared statement with batched execution for better performance
+        // DuckDB doesn't have an Appender API in the Rust bindings, so we use
+        // a prepared statement with explicit transaction for bulk inserts
+        let mut stmt = conn
+            .prepare(
+                r#"
+                INSERT INTO issue_snapshots (
+                    issue_id, issue_key, project_id, version,
+                    valid_from, valid_to,
+                    summary, description, status, priority,
+                    assignee, reporter, issue_type, resolution,
+                    labels, components, fix_versions, sprint, parent_key,
+                    raw_data, created_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT (issue_id, version) DO UPDATE SET
+                    valid_to = EXCLUDED.valid_to,
+                    summary = EXCLUDED.summary,
+                    description = EXCLUDED.description,
+                    status = EXCLUDED.status,
+                    priority = EXCLUDED.priority,
+                    assignee = EXCLUDED.assignee,
+                    reporter = EXCLUDED.reporter,
+                    issue_type = EXCLUDED.issue_type,
+                    resolution = EXCLUDED.resolution,
+                    labels = EXCLUDED.labels,
+                    components = EXCLUDED.components,
+                    fix_versions = EXCLUDED.fix_versions,
+                    sprint = EXCLUDED.sprint,
+                    parent_key = EXCLUDED.parent_key,
+                    raw_data = EXCLUDED.raw_data
+                "#,
+            )
+            .map_err(|e| DomainError::Repository(format!("Failed to prepare statement: {}", e)))?;
+
+        for snapshot in snapshots {
+            let labels_json = Self::serialize_json_array(&snapshot.labels);
+            let components_json = Self::serialize_json_array(&snapshot.components);
+            let fix_versions_json = Self::serialize_json_array(&snapshot.fix_versions);
+            let valid_to_str = snapshot.valid_to.map(|dt| dt.to_rfc3339());
+            let raw_data_str = snapshot
+                .raw_data
+                .as_ref()
+                .map(|v| serde_json::to_string(v).unwrap_or_default());
+
+            stmt.execute(duckdb::params![
+                &snapshot.issue_id,
+                &snapshot.issue_key,
+                &snapshot.project_id,
+                &snapshot.version,
+                &snapshot.valid_from.to_rfc3339(),
+                &valid_to_str,
+                &snapshot.summary,
+                &snapshot.description,
+                &snapshot.status,
+                &snapshot.priority,
+                &snapshot.assignee,
+                &snapshot.reporter,
+                &snapshot.issue_type,
+                &snapshot.resolution,
+                &labels_json,
+                &components_json,
+                &fix_versions_json,
+                &snapshot.sprint,
+                &snapshot.parent_key,
+                &raw_data_str,
+                &snapshot.created_at.to_rfc3339(),
+            ])
+            .map_err(|e| DomainError::Repository(format!("Failed to insert snapshot: {}", e)))?;
+        }
+
+        Ok(())
+    }
+
+    fn begin_transaction(&self) -> DomainResult<()> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| DomainError::Repository(format!("Failed to lock connection: {}", e)))?;
+        conn.execute("BEGIN TRANSACTION", [])
+            .map_err(|e| DomainError::Repository(format!("Failed to begin transaction: {}", e)))?;
+        Ok(())
+    }
+
+    fn commit_transaction(&self) -> DomainResult<()> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| DomainError::Repository(format!("Failed to lock connection: {}", e)))?;
+        conn.execute("COMMIT", [])
+            .map_err(|e| DomainError::Repository(format!("Failed to commit transaction: {}", e)))?;
+        Ok(())
+    }
+
+    fn rollback_transaction(&self) -> DomainResult<()> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| DomainError::Repository(format!("Failed to lock connection: {}", e)))?;
+        conn.execute("ROLLBACK", []).map_err(|e| {
+            DomainError::Repository(format!("Failed to rollback transaction: {}", e))
+        })?;
+        Ok(())
+    }
 }

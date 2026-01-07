@@ -53,9 +53,7 @@ pub async fn issues_search(
         vec![project_key.clone()]
     } else {
         // No project specified - search all enabled projects
-        let settings = state
-            .get_settings()
-            .ok_or("Settings not initialized")?;
+        let settings = state.get_settings().ok_or("Settings not initialized")?;
         settings
             .sync_enabled_projects()
             .iter()
@@ -98,7 +96,10 @@ pub async fn issues_search(
     // Apply limit and offset to combined results
     let total = all_issues.len() as i32;
     let offset = request.offset.unwrap_or(0) as usize;
-    let limit = request.limit.map(|l| l as usize).unwrap_or(all_issues.len());
+    let limit = request
+        .limit
+        .map(|l| l as usize)
+        .unwrap_or(all_issues.len());
 
     let issues: Vec<Issue> = all_issues
         .into_iter()

@@ -33,10 +33,7 @@ impl SyncLogger {
 
     pub fn step(&mut self, name: &str) -> StepLogger {
         self.current_step += 1;
-        info!(
-            "[Step {}/{}] {}",
-            self.current_step, self.total_steps, name
-        );
+        info!("[Step {}/{}] {}", self.current_step, self.total_steps, name);
         StepLogger::new()
     }
 
@@ -81,7 +78,10 @@ impl SyncLogger {
         if let Some(last_updated) = report.last_issue_updated_at {
             info!("    Last issue updated_at: {}", last_updated);
         }
-        info!("    Duration: {:.1}s", self.start_time.elapsed().as_secs_f64());
+        info!(
+            "    Duration: {:.1}s",
+            self.start_time.elapsed().as_secs_f64()
+        );
         info!("");
         info!("===============================================================");
         info!("");

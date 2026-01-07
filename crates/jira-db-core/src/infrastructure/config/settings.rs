@@ -75,6 +75,22 @@ pub struct SyncCheckpoint {
     pub total_items: usize,
 }
 
+/// Checkpoint for resumable snapshot generation
+/// Allows snapshot generation to resume after interruption
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SnapshotCheckpoint {
+    /// ID of the last successfully processed issue
+    pub last_issue_id: String,
+    /// Key of the last successfully processed issue
+    pub last_issue_key: String,
+    /// Number of issues processed so far
+    pub issues_processed: usize,
+    /// Total number of issues to process
+    pub total_issues: usize,
+    /// Number of snapshots generated so far
+    pub snapshots_generated: usize,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProjectConfig {
     pub id: String,
@@ -85,6 +101,9 @@ pub struct ProjectConfig {
     /// Checkpoint for resuming interrupted sync
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sync_checkpoint: Option<SyncCheckpoint>,
+    /// Checkpoint for resuming interrupted snapshot generation
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub snapshot_checkpoint: Option<SnapshotCheckpoint>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -441,6 +460,9 @@ mod tests {
             }),
             ..settings
         };
-        assert_eq!(settings_with_log.get_log_dir(), PathBuf::from("/custom/logs"));
+        assert_eq!(
+            settings_with_log.get_log_dir(),
+            PathBuf::from("/custom/logs")
+        );
     }
 }

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
-use log::info;
+use log::{debug, info, warn};
 use serde_json::Value as JsonValue;
 
 use crate::domain::entities::{ChangeHistoryItem, Issue, IssueSnapshot};
@@ -10,6 +10,10 @@ use crate::domain::error::DomainResult;
 use crate::domain::repositories::{
     ChangeHistoryRepository, IssueRepository, IssueSnapshotRepository,
 };
+use crate::infrastructure::config::SnapshotCheckpoint;
+
+/// Default batch size for processing issues
+const DEFAULT_BATCH_SIZE: usize = 500;
 
 /// Result of snapshot generation
 #[derive(Debug, Clone)]
@@ -17,6 +21,10 @@ pub struct SnapshotGenerationResult {
     pub project_key: String,
     pub issues_processed: usize,
     pub snapshots_generated: usize,
+    /// Checkpoint for resuming (None if completed successfully)
+    pub checkpoint: Option<SnapshotCheckpoint>,
+    /// Whether the generation completed fully
+    pub completed: bool,
 }
 
 impl SnapshotGenerationResult {
@@ -25,8 +33,25 @@ impl SnapshotGenerationResult {
             project_key,
             issues_processed,
             snapshots_generated,
+            checkpoint: None,
+            completed: true,
         }
     }
+
+    pub fn with_checkpoint(mut self, checkpoint: SnapshotCheckpoint) -> Self {
+        self.checkpoint = Some(checkpoint);
+        self.completed = false;
+        self
+    }
+}
+
+/// Progress information for snapshot generation
+#[derive(Debug, Clone)]
+pub struct SnapshotProgress {
+    pub issues_processed: usize,
+    pub total_issues: usize,
+    pub snapshots_generated: usize,
+    pub current_issue_key: String,
 }
 
 pub struct GenerateSnapshotsUseCase<I, C, S>
@@ -38,6 +63,7 @@ where
     issue_repository: Arc<I>,
     change_history_repository: Arc<C>,
     snapshot_repository: Arc<S>,
+    batch_size: usize,
 }
 
 impl<I, C, S> GenerateSnapshotsUseCase<I, C, S>
@@ -55,42 +81,199 @@ where
             issue_repository,
             change_history_repository,
             snapshot_repository,
+            batch_size: DEFAULT_BATCH_SIZE,
         }
     }
 
-    /// Generate snapshots for all issues in a project
+    /// Set custom batch size
+    pub fn with_batch_size(mut self, batch_size: usize) -> Self {
+        self.batch_size = batch_size;
+        self
+    }
+
+    /// Generate snapshots for all issues in a project (simple API, no resume)
     pub fn execute(
         &self,
         project_key: &str,
         project_id: &str,
     ) -> DomainResult<SnapshotGenerationResult> {
+        self.execute_with_progress(project_key, project_id, None, |_| {})
+    }
+
+    /// Generate snapshots with checkpoint support and progress callback
+    ///
+    /// # Arguments
+    /// * `project_key` - The JIRA project key
+    /// * `project_id` - The JIRA project ID
+    /// * `checkpoint` - Optional checkpoint to resume from
+    /// * `on_progress` - Callback called after each batch with progress info
+    pub fn execute_with_progress<F>(
+        &self,
+        project_key: &str,
+        project_id: &str,
+        checkpoint: Option<SnapshotCheckpoint>,
+        mut on_progress: F,
+    ) -> DomainResult<SnapshotGenerationResult>
+    where
+        F: FnMut(&SnapshotProgress),
+    {
         info!("Generating snapshots for project: {}", project_key);
 
-        let issues = self.issue_repository.find_by_project(project_id)?;
-        let mut total_snapshots = 0;
+        // Get total count for progress reporting
+        let total_issues = self.issue_repository.count_by_project(project_id)?;
 
-        for issue in &issues {
-            let snapshots = self.generate_snapshots_for_issue(issue)?;
-            if !snapshots.is_empty() {
-                // Delete existing snapshots and insert new ones
+        if total_issues == 0 {
+            info!("No issues found for project {}", project_key);
+            return Ok(SnapshotGenerationResult::new(project_key.to_string(), 0, 0));
+        }
+
+        // Determine starting point
+        let (start_after_id, mut issues_processed, mut total_snapshots) =
+            if let Some(ref cp) = checkpoint {
+                info!(
+                    "Resuming from checkpoint: {} issues processed, {} snapshots generated",
+                    cp.issues_processed, cp.snapshots_generated
+                );
+                (
+                    Some(cp.last_issue_id.clone()),
+                    cp.issues_processed,
+                    cp.snapshots_generated,
+                )
+            } else {
+                (None, 0, 0)
+            };
+
+        // Begin transaction for the entire operation
+        self.snapshot_repository.begin_transaction()?;
+
+        let result = self.process_batches(
+            project_key,
+            project_id,
+            total_issues,
+            start_after_id,
+            &mut issues_processed,
+            &mut total_snapshots,
+            &mut on_progress,
+        );
+
+        match result {
+            Ok(()) => {
+                // Commit on success
+                self.snapshot_repository.commit_transaction()?;
+                info!(
+                    "Generated {} snapshots for {} issues in project {}",
+                    total_snapshots, issues_processed, project_key
+                );
+                Ok(SnapshotGenerationResult::new(
+                    project_key.to_string(),
+                    issues_processed,
+                    total_snapshots,
+                ))
+            }
+            Err(e) => {
+                // Rollback and return checkpoint for resume
+                if let Err(rollback_err) = self.snapshot_repository.rollback_transaction() {
+                    warn!("Failed to rollback transaction: {}", rollback_err);
+                }
+                Err(e)
+            }
+        }
+    }
+
+    /// Process issues in batches
+    fn process_batches<F>(
+        &self,
+        _project_key: &str,
+        project_id: &str,
+        total_issues: usize,
+        start_after_id: Option<String>,
+        issues_processed: &mut usize,
+        total_snapshots: &mut usize,
+        on_progress: &mut F,
+    ) -> DomainResult<()>
+    where
+        F: FnMut(&SnapshotProgress),
+    {
+        let mut last_issue_id = start_after_id;
+        let mut batch_num = 0;
+
+        loop {
+            batch_num += 1;
+
+            // Fetch a batch of issues
+            let page = if let Some(ref after_id) = last_issue_id {
+                self.issue_repository.find_by_project_after_id(
+                    project_id,
+                    after_id,
+                    self.batch_size,
+                )?
+            } else {
+                self.issue_repository
+                    .find_by_project_paginated(project_id, 0, self.batch_size)?
+            };
+
+            if page.issues.is_empty() {
+                debug!("No more issues to process");
+                break;
+            }
+
+            debug!(
+                "Processing batch {}: {} issues (total processed: {})",
+                batch_num,
+                page.issues.len(),
+                *issues_processed
+            );
+
+            // Collect all snapshots for this batch
+            let mut batch_snapshots = Vec::new();
+            let mut current_issue_key = String::new();
+
+            for issue in &page.issues {
+                current_issue_key = issue.key.clone();
+
+                // Delete existing snapshots for this issue
                 self.snapshot_repository.delete_by_issue_id(&issue.id)?;
-                self.snapshot_repository.batch_insert(&snapshots)?;
-                total_snapshots += snapshots.len();
+
+                // Generate snapshots for this issue
+                let snapshots = self.generate_snapshots_for_issue(issue)?;
+                batch_snapshots.extend(snapshots);
+            }
+
+            // Bulk insert all snapshots for this batch
+            let batch_snapshot_count = batch_snapshots.len();
+            if !batch_snapshots.is_empty() {
+                self.snapshot_repository.bulk_insert(&batch_snapshots)?;
+            }
+
+            // Update counters
+            *issues_processed += page.issues.len();
+            *total_snapshots += batch_snapshot_count;
+
+            // Update last_issue_id for next batch
+            if let Some(last_issue) = page.issues.last() {
+                last_issue_id = Some(last_issue.id.clone());
+            }
+
+            // Report progress
+            let progress = SnapshotProgress {
+                issues_processed: *issues_processed,
+                total_issues,
+                snapshots_generated: *total_snapshots,
+                current_issue_key,
+            };
+            on_progress(&progress);
+
+            debug!(
+                "Batch {} complete: {} snapshots generated (total: {})",
+                batch_num, batch_snapshot_count, *total_snapshots
+            );
+
+            if !page.has_more {
+                break;
             }
         }
 
-        info!(
-            "Generated {} snapshots for {} issues in project {}",
-            total_snapshots,
-            issues.len(),
-            project_key
-        );
-
-        Ok(SnapshotGenerationResult::new(
-            project_key.to_string(),
-            issues.len(),
-            total_snapshots,
-        ))
+        Ok(())
     }
 
     /// Generate snapshots for a single issue
@@ -381,5 +564,22 @@ where
     /// Parse raw_json string to JsonValue
     fn parse_raw_json(raw_json: &Option<String>) -> Option<JsonValue> {
         raw_json.as_ref().and_then(|s| serde_json::from_str(s).ok())
+    }
+}
+
+/// Create a checkpoint from the current state
+pub fn create_snapshot_checkpoint(
+    last_issue_id: &str,
+    last_issue_key: &str,
+    issues_processed: usize,
+    total_issues: usize,
+    snapshots_generated: usize,
+) -> SnapshotCheckpoint {
+    SnapshotCheckpoint {
+        last_issue_id: last_issue_id.to_string(),
+        last_issue_key: last_issue_key.to_string(),
+        issues_processed,
+        total_issues,
+        snapshots_generated,
     }
 }

@@ -11,7 +11,7 @@ use state::AppState;
 use std::path::PathBuf;
 use tauri::{Manager, RunEvent};
 use tracing_appender::non_blocking::WorkerGuard;
-use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
 /// Default settings file path (relative, will be resolved to absolute)
 const DEFAULT_SETTINGS_FILE: &str = "./data/settings.json";
@@ -71,9 +71,7 @@ fn init_logging(settings_path: &PathBuf) -> Option<WorkerGuard> {
     use jira_db_core::Settings;
 
     // Try to load settings to get log config
-    let log_config = Settings::load(settings_path)
-        .ok()
-        .and_then(|s| s.log);
+    let log_config = Settings::load(settings_path).ok().and_then(|s| s.log);
 
     // Determine log level from config or default
     let log_level = log_config
@@ -82,14 +80,11 @@ fn init_logging(settings_path: &PathBuf) -> Option<WorkerGuard> {
         .unwrap_or("info");
 
     // Create env filter
-    let env_filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new(log_level));
+    let env_filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(log_level));
 
     // Check if file logging is enabled
-    let file_enabled = log_config
-        .as_ref()
-        .map(|c| c.file_enabled)
-        .unwrap_or(false);
+    let file_enabled = log_config.as_ref().map(|c| c.file_enabled).unwrap_or(false);
 
     if file_enabled {
         // Get log directory
@@ -107,9 +102,7 @@ fn init_logging(settings_path: &PathBuf) -> Option<WorkerGuard> {
         if let Err(e) = std::fs::create_dir_all(&log_dir) {
             eprintln!("Failed to create log directory {:?}: {}", log_dir, e);
             // Fall back to console only
-            tracing_subscriber::fmt()
-                .with_env_filter(env_filter)
-                .init();
+            tracing_subscriber::fmt().with_env_filter(env_filter).init();
             return None;
         }
 
@@ -121,19 +114,13 @@ fn init_logging(settings_path: &PathBuf) -> Option<WorkerGuard> {
         tracing_subscriber::registry()
             .with(env_filter)
             .with(fmt::layer().with_ansi(true)) // Console layer with colors
-            .with(
-                fmt::layer()
-                    .with_ansi(false)
-                    .with_writer(non_blocking)
-            ) // File layer without colors
+            .with(fmt::layer().with_ansi(false).with_writer(non_blocking)) // File layer without colors
             .init();
 
         Some(guard)
     } else {
         // Console only
-        tracing_subscriber::fmt()
-            .with_env_filter(env_filter)
-            .init();
+        tracing_subscriber::fmt().with_env_filter(env_filter).init();
         None
     }
 }
