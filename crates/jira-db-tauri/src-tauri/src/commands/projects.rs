@@ -68,6 +68,7 @@ pub async fn projects_initialize(
                         sync_enabled: false,
                         last_synced: None,
                         sync_checkpoint: None,
+                        snapshot_checkpoint: None,
                     });
                 }
             }
