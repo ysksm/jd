@@ -104,6 +104,7 @@ impl StepLogger {
         info!("  ├─ {}", message);
     }
 
+    #[allow(dead_code)]
     pub fn last_detail(&self, message: &str) {
         info!("  └─ {}", message);
     }
@@ -127,6 +128,7 @@ impl StepLogger {
 #[derive(Debug, Default)]
 pub struct SyncSummaryReport {
     pub jira_total_count: usize,
+    #[allow(dead_code)]
     pub jira_status_counts: HashMap<String, usize>,
     pub local_total_count: usize,
     pub local_status_counts: HashMap<String, usize>,
@@ -137,6 +139,7 @@ pub struct SyncSummaryReport {
     pub success: bool,
 }
 
+#[allow(dead_code)]
 fn truncate_str(s: &str, max_len: usize) -> String {
     if s.len() <= max_len {
         format!("{:width$}", s, width = max_len)

@@ -129,6 +129,7 @@ impl AppState {
     }
 
     /// Get raw database connection for a specific project
+    #[allow(dead_code)]
     pub fn get_raw_db(&self, project_key: &str) -> Option<DbConnection> {
         let factory = self.db_factory.lock().unwrap();
         factory
