@@ -81,6 +81,14 @@ where
     /// * `project_key` - The JIRA project key
     /// * `project_id` - The JIRA project ID
     /// * `after_updated_at` - Only fetch issues updated at or after this timestamp (for incremental sync)
+    ///
+    /// # Deprecated
+    /// Use `execute_resumable()` instead for checkpoint support and interruption safety.
+    /// This method does not save progress during sync, so if interrupted, sync will restart from the beginning.
+    #[deprecated(
+        since = "0.1.0",
+        note = "Use execute_resumable() instead for checkpoint support and interruption safety"
+    )]
     pub async fn execute(
         &self,
         project_key: &str,

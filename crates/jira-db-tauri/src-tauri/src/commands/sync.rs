@@ -6,8 +6,8 @@ use tauri::State;
 use jira_db_core::{
     DuckDbChangeHistoryRepository, DuckDbFieldRepository, DuckDbIssueRepository,
     DuckDbIssueSnapshotRepository, DuckDbIssuesExpandedRepository, DuckDbMetadataRepository,
-    DuckDbSyncHistoryRepository, JiraApiClient, JiraConfig, RawDataRepository, SyncFieldsUseCase,
-    SyncProjectUseCase,
+    DuckDbSyncHistoryRepository, JiraApiClient, JiraConfig, RawDataRepository, Settings,
+    SyncCheckpoint, SyncFieldsUseCase, SyncProjectUseCase,
 };
 use serde::{Deserialize, Serialize};
 
@@ -65,6 +65,9 @@ pub async fn sync_execute(
     let log = Logger::new("sync");
 
     let settings = state.get_settings().ok_or("Not initialized")?;
+    let settings_path = state
+        .get_settings_path()
+        .ok_or("Settings path not initialized")?;
     let db_factory = state
         .get_db_factory()
         .ok_or("Database factory not initialized")?;
@@ -77,20 +80,24 @@ pub async fn sync_execute(
     };
     let jira_client = Arc::new(JiraApiClient::new(&jira_config).map_err(|e| e.to_string())?);
 
-    // Get projects to sync
-    let projects_to_sync: Vec<_> = if let Some(ref project_key) = request.project_key {
-        settings
-            .projects
-            .iter()
-            .filter(|p| &p.key == project_key)
-            .collect()
-    } else {
-        settings
-            .projects
-            .iter()
-            .filter(|p| p.sync_enabled)
-            .collect()
-    };
+    // Get projects to sync with their checkpoint information
+    // Clone the data we need so we don't hold reference to settings
+    let projects_to_sync: Vec<(String, String, Option<SyncCheckpoint>)> =
+        if let Some(ref project_key) = request.project_key {
+            settings
+                .projects
+                .iter()
+                .filter(|p| &p.key == project_key)
+                .map(|p| (p.key.clone(), p.id.clone(), p.sync_checkpoint.clone()))
+                .collect()
+        } else {
+            settings
+                .projects
+                .iter()
+                .filter(|p| p.sync_enabled)
+                .map(|p| (p.key.clone(), p.id.clone(), p.sync_checkpoint.clone()))
+                .collect()
+        };
 
     if projects_to_sync.is_empty() {
         return Err("No projects to sync".to_string());
@@ -106,19 +113,31 @@ pub async fn sync_execute(
     let mut results = Vec::new();
     let mut total_fields_synced = 0i32;
 
-    for project in &projects_to_sync {
+    for (key, id, checkpoint) in &projects_to_sync {
         let start_time = std::time::Instant::now();
-        log_info!(log, "[{}] Starting sync...", project.key);
+
+        // Show resuming message if we have a checkpoint
+        if let Some(ref cp) = checkpoint {
+            log_info!(
+                log,
+                "[{}] Resuming sync from checkpoint ({}/{} issues processed)",
+                key,
+                cp.items_processed,
+                cp.total_items
+            );
+        } else {
+            log_info!(log, "[{}] Starting sync...", key);
+        }
 
         // Get database connection for this project
         let db = db_factory
-            .get_connection(&project.key)
-            .map_err(|e| format!("Failed to get database for {}: {}", project.key, e))?;
+            .get_connection(key)
+            .map_err(|e| format!("Failed to get database for {}: {}", key, e))?;
 
         // Get raw database connection for this project
         let raw_db = db_factory
-            .get_raw_connection(&project.key)
-            .map_err(|e| format!("Failed to get raw database for {}: {}", project.key, e))?;
+            .get_raw_connection(key)
+            .map_err(|e| format!("Failed to get raw database for {}: {}", key, e))?;
 
         // Create repositories for sync
         let issue_repo = Arc::new(DuckDbIssueRepository::new(db.clone()));
@@ -147,71 +166,71 @@ pub async fn sync_execute(
             SyncFieldsUseCase::new(jira_client.clone(), field_repo, expanded_repo);
 
         // Step 1: Sync fields from JIRA
-        log_info!(log, "[{}] Fetching JIRA fields...", project.key);
+        log_info!(log, "[{}] Fetching JIRA fields...", key);
         let fields_synced = fields_use_case
             .sync_fields()
             .await
             .map_err(|e| e.to_string())? as i32;
-        log_info!(log, "[{}] Synced {} fields", project.key, fields_synced);
+        log_info!(log, "[{}] Synced {} fields", key, fields_synced);
         total_fields_synced = fields_synced;
 
         // Step 2: Add columns based on fields
-        log_info!(log, "[{}] Adding database columns...", project.key);
+        log_info!(log, "[{}] Adding database columns...", key);
         let added_columns = fields_use_case.add_columns().map_err(|e| e.to_string())?;
         let total_columns_added = added_columns.len() as i32;
         if total_columns_added > 0 {
             log_info!(
                 log,
                 "[{}] Added {} new columns: {:?}",
-                project.key,
+                key,
                 total_columns_added,
                 added_columns
             );
         }
 
-        // Step 3: Execute sync (incremental if last_synced exists)
-        log_info!(log, "[{}] Fetching issues from JIRA...", project.key);
-        if project.last_synced.is_some() {
-            log_info!(
-                log,
-                "[{}] Incremental sync from {:?}",
-                project.key,
-                project.last_synced
-            );
-        }
+        // Step 3: Execute resumable sync with checkpoint support
+        log_info!(log, "[{}] Fetching issues from JIRA...", key);
+
+        // Clone values for the checkpoint callback
+        let settings_path_clone = settings_path.clone();
+        let key_clone = key.clone();
+
+        // Use resumable sync with checkpoint saving callback
         let result = sync_use_case
-            .execute(&project.key, &project.id, project.last_synced)
+            .execute_resumable(key, id, checkpoint.clone(), move |new_checkpoint| {
+                // Save checkpoint to settings after each batch
+                if let Ok(mut s) = Settings::load(&settings_path_clone) {
+                    if let Some(p) = s.find_project_mut(&key_clone) {
+                        p.sync_checkpoint = Some(new_checkpoint.clone());
+                    }
+                    let _ = s.save(&settings_path_clone);
+                }
+            })
             .await;
 
         // Step 4: Expand issues for this project
-        log_info!(log, "[{}] Expanding issues...", project.key);
-        let (issues_expanded, expand_error) = match fields_use_case.expand_issues(Some(&project.id))
-        {
+        log_info!(log, "[{}] Expanding issues...", key);
+        let (issues_expanded, expand_error) = match fields_use_case.expand_issues(Some(id)) {
             Ok(count) => {
-                log_info!(log, "[{}] Expanded {} issues", project.key, count);
+                log_info!(log, "[{}] Expanded {} issues", key, count);
                 (count as i32, None)
             }
             Err(e) => {
-                log_warn!(log, "[{}] Failed to expand issues: {}", project.key, e);
+                log_warn!(log, "[{}] Failed to expand issues: {}", key, e);
                 (0, Some(e.to_string()))
             }
         };
 
         // Step 5: Create readable views
-        log_info!(log, "[{}] Creating readable views...", project.key);
+        log_info!(log, "[{}] Creating readable views...", key);
         if let Err(e) = fields_use_case.create_readable_view() {
-            log_warn!(
-                log,
-                "[{}] Failed to create readable view: {}",
-                project.key,
-                e
-            );
+            log_warn!(log, "[{}] Failed to create readable view: {}", key, e);
         }
         if let Err(e) = fields_use_case.create_snapshots_readable_view() {
             log_warn!(
                 log,
                 "[{}] Failed to create snapshot readable views: {}",
-                project.key,
+                key,
                 e
             );
         }
@@ -219,21 +238,52 @@ pub async fn sync_execute(
         let duration = start_time.elapsed().as_secs_f64();
 
         match result {
-            Ok(sync_result) => {
-                let error = sync_result.error_message.or(expand_error);
-                log_info!(
-                    log,
-                    "[{}] Sync completed: {} issues in {:.1}s",
-                    project.key,
-                    sync_result.issues_synced,
-                    duration
-                );
+            Ok(resumable_result) => {
+                let sync_result = resumable_result.sync_result;
+                let error = sync_result.error_message.clone().or(expand_error);
+                let success = sync_result.success && error.is_none();
+
+                if success {
+                    log_info!(
+                        log,
+                        "[{}] Sync completed: {} issues in {:.1}s",
+                        key,
+                        sync_result.issues_synced,
+                        duration
+                    );
+
+                    // Clear checkpoint on success
+                    if let Ok(mut s) = Settings::load(&settings_path) {
+                        if let Some(p) = s.find_project_mut(key) {
+                            p.sync_checkpoint = None;
+                        }
+                        let _ = s.save(&settings_path);
+                    }
+                } else {
+                    log_warn!(
+                        log,
+                        "[{}] Sync completed with errors: {}",
+                        key,
+                        error.as_deref().unwrap_or("unknown error")
+                    );
+
+                    // Save checkpoint for resume on failure
+                    if let Some(checkpoint) = resumable_result.checkpoint {
+                        if let Ok(mut s) = Settings::load(&settings_path) {
+                            if let Some(p) = s.find_project_mut(key) {
+                                p.sync_checkpoint = Some(checkpoint);
+                            }
+                            let _ = s.save(&settings_path);
+                        }
+                    }
+                }
+
                 results.push(SyncResultExtended {
                     project_key: sync_result.project_key,
                     issue_count: sync_result.issues_synced as i32,
                     metadata_updated: true,
                     duration,
-                    success: sync_result.success && error.is_none(),
+                    success,
                     error,
                     fields_synced,
                     columns_added: total_columns_added,
@@ -242,9 +292,9 @@ pub async fn sync_execute(
                 });
             }
             Err(e) => {
-                log_warn!(log, "[{}] Sync failed: {}", project.key, e);
+                log_warn!(log, "[{}] Sync failed: {}", key, e);
                 results.push(SyncResultExtended {
-                    project_key: project.key.clone(),
+                    project_key: key.clone(),
                     issue_count: 0,
                     metadata_updated: false,
                     duration,
@@ -289,9 +339,9 @@ pub async fn sync_execute(
     );
 
     // Close database connections after sync to free resources
-    for project in &projects_to_sync {
-        if let Err(e) = state.close_db(&project.key) {
-            log_warn!(log, "Failed to close database for {}: {}", project.key, e);
+    for (key, _, _) in &projects_to_sync {
+        if let Err(e) = state.close_db(key) {
+            log_warn!(log, "Failed to close database for {}: {}", key, e);
         }
     }
     log_debug!(
