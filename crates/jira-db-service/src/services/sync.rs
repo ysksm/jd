@@ -5,7 +5,8 @@ use std::sync::Arc;
 use jira_db_core::{
     DuckDbChangeHistoryRepository, DuckDbFieldRepository, DuckDbIssueRepository,
     DuckDbIssueSnapshotRepository, DuckDbIssuesExpandedRepository, DuckDbMetadataRepository,
-    DuckDbSyncHistoryRepository, JiraApiClient, JiraConfig, SyncFieldsUseCase, SyncProjectUseCase,
+    DuckDbSyncHistoryRepository, JiraApiClient, JiraConfig, Settings, SyncCheckpoint,
+    SyncFieldsUseCase, SyncProjectUseCase,
 };
 
 use crate::error::{ServiceError, ServiceResult};
@@ -18,6 +19,9 @@ pub async fn execute(
     request: SyncExecuteRequest,
 ) -> ServiceResult<SyncExecuteResponse> {
     let settings = state.get_settings().ok_or(ServiceError::NotInitialized)?;
+    let settings_path = state
+        .get_settings_path()
+        .ok_or(ServiceError::NotInitialized)?;
     let db = state.get_db().ok_or(ServiceError::NotInitialized)?;
 
     // Create JIRA config and client
@@ -53,20 +57,23 @@ pub async fn execute(
 
     let fields_use_case = SyncFieldsUseCase::new(jira_client, field_repo, expanded_repo);
 
-    // Get projects to sync
-    let projects_to_sync: Vec<_> = if let Some(ref project_key) = request.project_key {
-        settings
-            .projects
-            .iter()
-            .filter(|p| &p.key == project_key)
-            .collect()
-    } else {
-        settings
-            .projects
-            .iter()
-            .filter(|p| p.sync_enabled)
-            .collect()
-    };
+    // Get projects to sync with their checkpoint information
+    let projects_to_sync: Vec<(String, String, Option<SyncCheckpoint>)> =
+        if let Some(ref project_key) = request.project_key {
+            settings
+                .projects
+                .iter()
+                .filter(|p| &p.key == project_key)
+                .map(|p| (p.key.clone(), p.id.clone(), p.sync_checkpoint.clone()))
+                .collect()
+        } else {
+            settings
+                .projects
+                .iter()
+                .filter(|p| p.sync_enabled)
+                .map(|p| (p.key.clone(), p.id.clone(), p.sync_checkpoint.clone()))
+                .collect()
+        };
 
     if projects_to_sync.is_empty() {
         return Err(ServiceError::InvalidRequest(
@@ -87,33 +94,80 @@ pub async fn execute(
         .add_columns()
         .map_err(|e| ServiceError::Database(e.to_string()))?;
 
-    // Step 3: Execute sync for each project (incremental if last_synced exists)
+    // Step 3: Execute resumable sync for each project with checkpoint support
     let mut results = Vec::new();
-    for project in &projects_to_sync {
+    for (key, id, checkpoint) in &projects_to_sync {
         let start_time = std::time::Instant::now();
+
+        // Show resuming message if we have a checkpoint
+        if let Some(cp) = checkpoint {
+            tracing::info!(
+                "[{}] Resuming sync from checkpoint ({}/{} issues processed)",
+                key,
+                cp.items_processed,
+                cp.total_items
+            );
+        }
+
+        // Clone values for the checkpoint callback
+        let settings_path_clone = settings_path.clone();
+        let key_clone = key.clone();
+
+        // Use resumable sync with checkpoint saving callback
         let result = sync_use_case
-            .execute(&project.key, &project.id, project.last_synced)
+            .execute_resumable(key, id, checkpoint.clone(), move |new_checkpoint| {
+                // Save checkpoint to settings after each batch
+                if let Ok(mut s) = Settings::load(&settings_path_clone) {
+                    if let Some(p) = s.find_project_mut(&key_clone) {
+                        p.sync_checkpoint = Some(new_checkpoint.clone());
+                    }
+                    let _ = s.save(&settings_path_clone);
+                }
+            })
             .await;
 
         // Step 4: Expand issues for this project
-        let _ = fields_use_case.expand_issues(Some(&project.id));
+        let _ = fields_use_case.expand_issues(Some(id));
 
         let duration = start_time.elapsed().as_secs_f64();
 
         match result {
-            Ok(sync_result) => {
+            Ok(resumable_result) => {
+                let sync_result = resumable_result.sync_result;
+                let success = sync_result.success;
+
+                if success {
+                    // Clear checkpoint on success
+                    if let Ok(mut s) = Settings::load(&settings_path) {
+                        if let Some(p) = s.find_project_mut(key) {
+                            p.sync_checkpoint = None;
+                        }
+                        let _ = s.save(&settings_path);
+                    }
+                } else {
+                    // Save checkpoint for resume on failure
+                    if let Some(checkpoint) = resumable_result.checkpoint {
+                        if let Ok(mut s) = Settings::load(&settings_path) {
+                            if let Some(p) = s.find_project_mut(key) {
+                                p.sync_checkpoint = Some(checkpoint);
+                            }
+                            let _ = s.save(&settings_path);
+                        }
+                    }
+                }
+
                 results.push(SyncResult {
                     project_key: sync_result.project_key,
                     issue_count: sync_result.issues_synced as i32,
                     metadata_updated: true,
                     duration,
-                    success: sync_result.success,
+                    success,
                     error: sync_result.error_message,
                 });
             }
             Err(e) => {
                 results.push(SyncResult {
-                    project_key: project.key.clone(),
+                    project_key: key.clone(),
                     issue_count: 0,
                     metadata_updated: false,
                     duration,
