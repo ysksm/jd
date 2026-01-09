@@ -1253,4 +1253,99 @@ impl JiraService for JiraApiClient {
         );
         Ok(count)
     }
+
+    async fn create_issue_link(
+        &self,
+        link_type: &str,
+        inward_issue: &str,
+        outward_issue: &str,
+    ) -> DomainResult<()> {
+        let url = format!("{}/rest/api/3/issueLink", self.base_url);
+
+        let body = serde_json::json!({
+            "type": {
+                "name": link_type
+            },
+            "inwardIssue": {
+                "key": inward_issue
+            },
+            "outwardIssue": {
+                "key": outward_issue
+            }
+        });
+
+        debug!(
+            "[JIRA API] POST {} (creating link: {} -> {} [{}])",
+            url, outward_issue, inward_issue, link_type
+        );
+
+        let response = self
+            .http_client
+            .post(&url)
+            .header("Authorization", &self.auth_header)
+            .header("Content-Type", "application/json")
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| {
+                DomainError::ExternalService(format!("Failed to create issue link: {}", e))
+            })?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(DomainError::ExternalService(format!(
+                "Failed to create issue link: {} - {}",
+                status, error_text
+            )));
+        }
+
+        info!(
+            "Created issue link: {} -> {} [{}]",
+            outward_issue, inward_issue, link_type
+        );
+        Ok(())
+    }
+
+    async fn update_issue_due_date(&self, issue_key: &str, due_date: &str) -> DomainResult<()> {
+        let url = format!("{}/rest/api/3/issue/{}", self.base_url, issue_key);
+
+        let body = serde_json::json!({
+            "fields": {
+                "duedate": due_date
+            }
+        });
+
+        debug!("[JIRA API] PUT {} (updating due date to {})", url, due_date);
+
+        let response = self
+            .http_client
+            .put(&url)
+            .header("Authorization", &self.auth_header)
+            .header("Content-Type", "application/json")
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| {
+                DomainError::ExternalService(format!("Failed to update issue due date: {}", e))
+            })?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(DomainError::ExternalService(format!(
+                "Failed to update issue due date: {} - {}",
+                status, error_text
+            )));
+        }
+
+        info!("Updated due date for {}: {}", issue_key, due_date);
+        Ok(())
+    }
 }

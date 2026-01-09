@@ -516,6 +516,8 @@ export interface AiGenerationStats {
   tasksCreated: number;
   bugsCreated: number;
   transitionsApplied: number;
+  linksCreated: number;
+  dueDatesSet: number;
 }
 
 export interface DebugAiStatusRequest {}

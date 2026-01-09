@@ -261,6 +261,15 @@ pub struct GeneratedIssue {
     pub completed_day_offset: Option<i32>,
     /// Assignee name (optional)
     pub assignee: Option<String>,
+    /// Due date as days from sprint start (optional)
+    #[serde(default)]
+    pub due_day_offset: Option<i32>,
+    /// Related issues - list of indices in the same array that this issue blocks
+    #[serde(default)]
+    pub blocks: Vec<usize>,
+    /// Related issues - list of indices in the same array that this issue relates to
+    #[serde(default)]
+    pub relates_to: Vec<usize>,
 }
 
 /// Sprint scenario configuration
@@ -339,7 +348,10 @@ Generate a JSON object with this exact structure:
       "created_day_offset": 0,
       "started_day_offset": null|number,
       "completed_day_offset": null|number,
-      "assignee": "Developer Name"|null
+      "assignee": "Developer Name"|null,
+      "due_day_offset": number|null,
+      "blocks": [array of issue indices],
+      "relates_to": [array of issue indices]
     }}
   ]
 }}
@@ -357,6 +369,13 @@ Requirements:
    - Bugs appear mid-sprint (created_day_offset: 3-{})
 6. Assign work to team members realistically
 7. Use the project context to create relevant issue content
+8. Set due_day_offset for most issues (typically 2-3 days after started_day_offset for tasks, sprint end for stories)
+9. Create realistic issue relationships:
+   - Use "blocks" to indicate when one issue must be completed before another can start (use array index of the blocked issue)
+   - Use "relates_to" for issues that are related but not blocking (use array index)
+   - Stories should often block related Tasks
+   - Bugs may be blocked by the fix Task
+   - Example: if issue at index 2 blocks issue at index 5, then issue[2].blocks = [5]
 
 Generate Japanese issue titles and descriptions if the project context is in Japanese."#,
             project_context,
@@ -616,7 +635,10 @@ Generate a JSON object with this exact structure:
       "created_day_offset": 0,
       "started_day_offset": null|number,
       "completed_day_offset": null|number,
-      "assignee": "Developer Name"|null
+      "assignee": "Developer Name"|null,
+      "due_day_offset": number|null,
+      "blocks": [array of issue indices],
+      "relates_to": [array of issue indices]
     }}
   ]
 }}
@@ -634,6 +656,13 @@ Requirements:
    - Bugs appear mid-sprint (created_day_offset: 3-{})
 6. Assign work to team members realistically
 7. Use the project context to create relevant issue content
+8. Set due_day_offset for most issues (typically 2-3 days after started_day_offset for tasks, sprint end for stories)
+9. Create realistic issue relationships:
+   - Use "blocks" to indicate when one issue must be completed before another can start (use array index of the blocked issue)
+   - Use "relates_to" for issues that are related but not blocking (use array index)
+   - Stories should often block related Tasks
+   - Bugs may be blocked by the fix Task
+   - Example: if issue at index 2 blocks issue at index 5, then issue[2].blocks = [5]
 
 Generate Japanese issue titles and descriptions if the project context is in Japanese.
 

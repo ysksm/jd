@@ -267,6 +267,8 @@ pub struct AiGenerationStats {
     pub tasks_created: usize,
     pub bugs_created: usize,
     pub transitions_applied: usize,
+    pub links_created: usize,
+    pub due_dates_set: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -765,6 +767,8 @@ pub async fn debug_ai_generate(
                 tasks_created: data.stats.tasks_created,
                 bugs_created: data.stats.bugs_created,
                 transitions_applied: data.stats.transitions_applied,
+                links_created: data.stats.links_created,
+                due_dates_set: data.stats.due_dates_set,
             };
 
             Ok(DebugAiGenerateResponse {
@@ -790,6 +794,8 @@ pub async fn debug_ai_generate(
                 tasks_created: 0,
                 bugs_created: 0,
                 transitions_applied: 0,
+                links_created: 0,
+                due_dates_set: 0,
             },
             error: Some(e.to_string()),
         }),

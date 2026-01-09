@@ -8,6 +8,8 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use chrono::{Duration, Utc};
+
 use crate::application::dto::CreatedIssueDto;
 use crate::application::services::JiraService;
 use crate::domain::entities::IssueType;
@@ -150,6 +152,10 @@ pub struct GenerationStats {
     pub bugs_created: usize,
     /// Transitions applied
     pub transitions_applied: usize,
+    /// Links created between issues
+    pub links_created: usize,
+    /// Due dates set
+    pub due_dates_set: usize,
 }
 
 /// Configuration for AI test data generation
@@ -262,6 +268,9 @@ impl<J: JiraService> GenerateAiTestDataUseCase<J> {
         let mut stats = GenerationStats::default();
         stats.total_generated = scenario.issues.len();
 
+        // Map from original index to created issue key
+        let mut index_to_key: HashMap<usize, String> = HashMap::new();
+
         // First pass: Create epics and get their keys
         let mut epic_key_map: HashMap<usize, String> = HashMap::new();
 
@@ -273,6 +282,7 @@ impl<J: JiraService> GenerateAiTestDataUseCase<J> {
                 {
                     Ok(created) => {
                         epic_key_map.insert(idx, created.key.clone());
+                        index_to_key.insert(idx, created.key.clone());
                         stats.epics_created += 1;
                         stats.successfully_created += 1;
                         created_issues.push(CreatedIssueInfo {
@@ -300,7 +310,7 @@ impl<J: JiraService> GenerateAiTestDataUseCase<J> {
         let first_epic_key = epic_key_map.values().next().cloned();
 
         // Second pass: Create stories, tasks, and bugs
-        for issue in &scenario.issues {
+        for (idx, issue) in scenario.issues.iter().enumerate() {
             if issue.issue_type == "Epic" {
                 continue; // Already created
             }
@@ -317,6 +327,7 @@ impl<J: JiraService> GenerateAiTestDataUseCase<J> {
                 .await
             {
                 Ok(created) => {
+                    index_to_key.insert(idx, created.key.clone());
                     stats.successfully_created += 1;
                     match issue.issue_type.as_str() {
                         "Story" => stats.stories_created += 1,
@@ -353,6 +364,61 @@ impl<J: JiraService> GenerateAiTestDataUseCase<J> {
                         summary: issue.summary.clone(),
                         error: e.to_string(),
                     });
+                }
+            }
+        }
+
+        // Third pass: Set due dates and create issue links
+        let sprint_start = Utc::now();
+
+        for (idx, issue) in scenario.issues.iter().enumerate() {
+            let Some(issue_key) = index_to_key.get(&idx) else {
+                continue; // Issue wasn't created
+            };
+
+            // Set due date if specified
+            if let Some(due_offset) = issue.due_day_offset {
+                let due_date = sprint_start + Duration::days(due_offset as i64);
+                let due_date_str = due_date.format("%Y-%m-%d").to_string();
+
+                if self
+                    .jira_service
+                    .update_issue_due_date(issue_key, &due_date_str)
+                    .await
+                    .is_ok()
+                {
+                    stats.due_dates_set += 1;
+                }
+            }
+
+            // Create "Blocks" links
+            for &blocked_idx in &issue.blocks {
+                if let Some(blocked_key) = index_to_key.get(&blocked_idx) {
+                    if self
+                        .jira_service
+                        .create_issue_link("Blocks", blocked_key, issue_key)
+                        .await
+                        .is_ok()
+                    {
+                        stats.links_created += 1;
+                    }
+                }
+            }
+
+            // Create "Relates" links
+            for &related_idx in &issue.relates_to {
+                if let Some(related_key) = index_to_key.get(&related_idx) {
+                    // Only create link once (avoid duplicate if both sides reference each other)
+                    if idx < related_idx {
+                        if self
+                            .jira_service
+                            .create_issue_link("Relates", related_key, issue_key)
+                            .await
+                            .is_ok()
+                        {
+                            stats.links_created += 1;
+                        }
+                    }
                 }
             }
         }
