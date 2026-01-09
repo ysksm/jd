@@ -117,7 +117,7 @@ pub async fn sync_execute(
         let start_time = std::time::Instant::now();
 
         // Show resuming message if we have a checkpoint
-        if let Some(ref cp) = checkpoint {
+        if let Some(cp) = checkpoint {
             log_info!(
                 log,
                 "[{}] Resuming sync from checkpoint ({}/{} issues processed)",
