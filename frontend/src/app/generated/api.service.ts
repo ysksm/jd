@@ -11,6 +11,10 @@ import {
   ConfigInitResponse,
   ConfigUpdateRequest,
   ConfigUpdateResponse,
+  DebugAiGenerateRequest,
+  DebugAiGenerateResponse,
+  DebugAiStatusRequest,
+  DebugAiStatusResponse,
   DebugBulkTransitionRequest,
   DebugBulkTransitionResponse,
   DebugCreateIssuesRequest,
@@ -236,6 +240,20 @@ export class ApiService {
   /** Bulk transition multiple issues */
   debugBulkTransition(request: DebugBulkTransitionRequest): Observable<DebugBulkTransitionResponse> {
     return this.http.post<DebugBulkTransitionResponse>(`${this.baseUrl}/debug.bulk-transition`, request);
+  }
+
+  // ----------------------------------------
+  // AI Test Data Generation
+  // ----------------------------------------
+
+  /** Check AI test data generation status */
+  debugAiStatus(request: DebugAiStatusRequest): Observable<DebugAiStatusResponse> {
+    return this.http.post<DebugAiStatusResponse>(`${this.baseUrl}/debug.ai-status`, request);
+  }
+
+  /** Generate test data using AI (Claude) */
+  debugAiGenerate(request: DebugAiGenerateRequest): Observable<DebugAiGenerateResponse> {
+    return this.http.post<DebugAiGenerateResponse>(`${this.baseUrl}/debug.ai-generate`, request);
   }
 
 }

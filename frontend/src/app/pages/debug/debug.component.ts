@@ -10,6 +10,8 @@ import {
   AiCreatedIssueInfo,
   AiFailedIssueInfo,
   AiGenerationStats,
+  DebugAiStatusResponse,
+  DebugAiGenerateResponse,
 } from '../../generated/models';
 import { API_SERVICE, IApiService } from '../../api.provider';
 
@@ -287,12 +289,12 @@ export class DebugComponent implements OnInit {
   loadAiStatus(): void {
     this.aiLoadingStatus.set(true);
     this.api.debugAiStatus({}).subscribe({
-      next: (response) => {
+      next: (response: DebugAiStatusResponse) => {
         this.aiLoadingStatus.set(false);
         this.aiConfigured.set(response.configured);
         this.aiStatusMessage.set(response.message);
       },
-      error: (err) => {
+      error: (err: unknown) => {
         this.aiLoadingStatus.set(false);
         this.aiConfigured.set(false);
         this.aiStatusMessage.set('Failed to check AI status: ' + err);
@@ -335,7 +337,7 @@ export class DebugComponent implements OnInit {
         useFastModel: this.aiUseFastModel(),
       })
       .subscribe({
-        next: (response) => {
+        next: (response: DebugAiGenerateResponse) => {
           this.aiGenerating.set(false);
           if (response.success) {
             this.aiCreatedIssues.set(response.createdIssues);
@@ -349,7 +351,7 @@ export class DebugComponent implements OnInit {
             this.error.set(response.error || 'AI generation failed');
           }
         },
-        error: (err) => {
+        error: (err: unknown) => {
           this.aiGenerating.set(false);
           this.error.set('AI generation failed: ' + err);
         },
