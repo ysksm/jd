@@ -85,24 +85,24 @@
 
         @if (aiMode() === 'sprint') {
           <div class="form-group">
-            <label for="aiTeamSize">Team Size</label>
+            <label for="aiTeamSize">Team Size <span class="hint">(1-50)</span></label>
             <input
               type="number"
               id="aiTeamSize"
               min="1"
-              max="20"
+              max="50"
               [ngModel]="aiTeamSize()"
               (ngModelChange)="aiTeamSize.set($event)"
             />
           </div>
 
           <div class="form-group">
-            <label for="aiSprintDuration">Sprint Duration (days)</label>
+            <label for="aiSprintDuration">Sprint Duration <span class="hint">(7-90 days)</span></label>
             <input
               type="number"
               id="aiSprintDuration"
               min="7"
-              max="30"
+              max="90"
               [ngModel]="aiSprintDuration()"
               (ngModelChange)="aiSprintDuration.set($event)"
             />
@@ -124,12 +124,12 @@
 
         @if (aiMode() === 'bugs') {
           <div class="form-group">
-            <label for="aiBugCount">Number of Bugs</label>
+            <label for="aiBugCount">Number of Bugs <span class="hint">(1-50)</span></label>
             <input
               type="number"
               id="aiBugCount"
               min="1"
-              max="20"
+              max="50"
               [ngModel]="aiBugCount()"
               (ngModelChange)="aiBugCount.set($event)"
             />
@@ -329,7 +329,7 @@
         </div>
 
         <div class="form-group">
-          <label for="count">Count</label>
+          <label for="count">Count <span class="hint">(1-100)</span></label>
           <input
             type="number"
             id="count"
