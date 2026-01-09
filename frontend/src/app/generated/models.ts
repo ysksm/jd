@@ -523,6 +523,8 @@ export interface DebugAiStatusRequest {}
 export interface DebugAiStatusResponse {
   configured: boolean;
   message: string;
+  cliAvailable?: boolean;
+  apiKeyConfigured?: boolean;
 }
 
 export interface DebugAiGenerateRequest {
@@ -535,6 +537,7 @@ export interface DebugAiGenerateRequest {
   epicTheme?: string;
   bugCount?: number;
   useFastModel?: boolean;
+  useClaudeCli?: boolean;
 }
 
 export interface DebugAiGenerateResponse {

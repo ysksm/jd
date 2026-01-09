@@ -2,11 +2,17 @@
 //!
 //! Provides integration with Anthropic's Claude API for generating
 //! realistic JIRA test data including epics, stories, tasks, and bugs.
+//!
+//! Supports two modes:
+//! - API mode: Uses ANTHROPIC_API_KEY to call the Claude API directly
+//! - CLI mode: Uses the `claude` command (Claude Code) with `-p` flag
 
 use async_trait::async_trait;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use std::process::Stdio;
 use std::time::Duration;
+use tokio::process::Command;
 
 use crate::domain::error::{DomainError, DomainResult};
 
@@ -471,6 +477,287 @@ Requirements:
     }
 }
 
+/// Claude CLI client - uses the `claude` command with `-p` flag
+///
+/// This allows using Claude Code subscription instead of a separate API key.
+/// Requires the `claude` CLI to be installed and authenticated.
+pub struct ClaudeCliClient {
+    /// Use --dangerously-skip-permissions to bypass permission prompts
+    skip_permissions: bool,
+}
+
+impl ClaudeCliClient {
+    /// Create a new Claude CLI client
+    pub fn new() -> Self {
+        Self {
+            skip_permissions: true,
+        }
+    }
+
+    /// Check if the claude CLI is available
+    pub async fn is_available() -> bool {
+        Command::new("claude")
+            .arg("--version")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .await
+            .map(|s| s.success())
+            .unwrap_or(false)
+    }
+
+    /// Execute a prompt using the claude CLI
+    async fn execute_prompt(&self, prompt: &str) -> DomainResult<String> {
+        let mut cmd = Command::new("claude");
+        cmd.arg("-p").arg(prompt);
+
+        if self.skip_permissions {
+            cmd.arg("--dangerously-skip-permissions");
+        }
+
+        // Set output format to plain text
+        cmd.arg("--output-format").arg("text");
+
+        let output = cmd
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .await
+            .map_err(|e| {
+                DomainError::ExternalService(format!(
+                    "Failed to execute claude command: {}. Is claude CLI installed?",
+                    e
+                ))
+            })?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(DomainError::ExternalService(format!(
+                "Claude CLI failed: {}",
+                stderr
+            )));
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        Ok(stdout)
+    }
+
+    /// Generate structured JSON response using the CLI
+    async fn generate_json<T: for<'de> Deserialize<'de>>(&self, prompt: &str) -> DomainResult<T> {
+        let json_prompt = format!(
+            "{}\n\nIMPORTANT: Respond with valid JSON only. No markdown code blocks, no explanation, just the JSON.",
+            prompt
+        );
+
+        let response = self.execute_prompt(&json_prompt).await?;
+
+        // Try to parse directly
+        let trimmed = response.trim();
+
+        // Remove markdown code blocks if present
+        let json_str = if trimmed.starts_with("```") {
+            let lines: Vec<&str> = trimmed.lines().collect();
+            if lines.len() > 2 {
+                lines[1..lines.len() - 1].join("\n")
+            } else {
+                trimmed.to_string()
+            }
+        } else {
+            trimmed.to_string()
+        };
+
+        serde_json::from_str(&json_str).map_err(|e| {
+            DomainError::ExternalService(format!(
+                "Failed to parse Claude CLI JSON response: {}. Response was: {}",
+                e,
+                &json_str[..json_str.len().min(500)]
+            ))
+        })
+    }
+}
+
+impl Default for ClaudeCliClient {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl AiTestDataGenerator for ClaudeCliClient {
+    async fn generate_sprint_scenario(
+        &self,
+        project_context: &str,
+        team_size: usize,
+        sprint_duration_days: i32,
+    ) -> DomainResult<SprintScenario> {
+        let prompt = format!(
+            r#"You are a JIRA test data generator. Generate realistic sprint data for software development projects.
+
+Generate a realistic sprint scenario for the following project:
+
+Project Context: {}
+Team Size: {} developers
+Sprint Duration: {} days
+
+Generate a JSON object with this exact structure:
+{{
+  "sprint_name": "Sprint N",
+  "duration_days": {},
+  "team_members": ["Developer Name 1", "Developer Name 2", ...],
+  "issues": [
+    {{
+      "issue_type": "Epic|Story|Task|Bug",
+      "summary": "Brief issue title",
+      "description": "Detailed description of the issue",
+      "priority": "Highest|High|Medium|Low|Lowest",
+      "labels": ["label1", "label2"],
+      "story_points": 1|2|3|5|8|13|null,
+      "parent_key": null,
+      "created_day_offset": 0,
+      "started_day_offset": null|number,
+      "completed_day_offset": null|number,
+      "assignee": "Developer Name"|null
+    }}
+  ]
+}}
+
+Requirements:
+1. Create 1-2 Epics as containers for the work
+2. Create 5-8 Stories under the epics (story_points: 1-8)
+3. Create 3-5 Tasks for infrastructure/support work
+4. Create 2-4 Bugs that get discovered during the sprint
+5. Use realistic day offsets to create a burndown chart pattern:
+   - Issues created_day_offset should be 0-3 (sprint planning)
+   - started_day_offset should progressively increase (1-{})
+   - completed_day_offset should be after started (2-{})
+   - Some issues should NOT be completed (completed_day_offset: null)
+   - Bugs appear mid-sprint (created_day_offset: 3-{})
+6. Assign work to team members realistically
+7. Use the project context to create relevant issue content
+
+Generate Japanese issue titles and descriptions if the project context is in Japanese.
+
+Respond with valid JSON only."#,
+            project_context,
+            team_size,
+            sprint_duration_days,
+            sprint_duration_days,
+            sprint_duration_days,
+            sprint_duration_days,
+            sprint_duration_days / 2
+        );
+
+        self.generate_json(&prompt).await
+    }
+
+    async fn generate_epic(
+        &self,
+        project_context: &str,
+        epic_theme: &str,
+    ) -> DomainResult<Vec<GeneratedIssue>> {
+        let prompt = format!(
+            r#"You are a JIRA test data generator. Generate realistic epic hierarchies for software development projects.
+
+Generate an epic with related stories and tasks for:
+
+Project Context: {}
+Epic Theme: {}
+
+Generate a JSON array with this structure:
+[
+  {{
+    "issue_type": "Epic",
+    "summary": "Epic title",
+    "description": "Epic description",
+    "priority": "High",
+    "labels": ["epic-label"],
+    "story_points": null,
+    "parent_key": null,
+    "created_day_offset": 0,
+    "started_day_offset": null,
+    "completed_day_offset": null,
+    "assignee": null
+  }},
+  {{
+    "issue_type": "Story",
+    "summary": "Story title",
+    "description": "User story description",
+    "priority": "Medium",
+    "labels": ["feature"],
+    "story_points": 5,
+    "parent_key": "EPIC",
+    "created_day_offset": 0,
+    "started_day_offset": 1,
+    "completed_day_offset": 5,
+    "assignee": "Developer"
+  }}
+]
+
+Requirements:
+1. Create 1 Epic
+2. Create 3-5 Stories under the epic
+3. Create 1-2 Tasks for each story (technical tasks)
+4. Set parent_key to "EPIC" for stories (will be replaced with actual key)
+5. Use realistic story points (1, 2, 3, 5, 8)
+6. Generate Japanese content if the project context is in Japanese
+
+Respond with valid JSON only."#,
+            project_context, epic_theme
+        );
+
+        self.generate_json(&prompt).await
+    }
+
+    async fn generate_bugs(
+        &self,
+        project_context: &str,
+        count: usize,
+        sprint_duration_days: i32,
+    ) -> DomainResult<Vec<GeneratedIssue>> {
+        let prompt = format!(
+            r#"You are a JIRA test data generator. Generate realistic bugs for software development projects.
+
+Generate {} realistic bugs for:
+
+Project Context: {}
+Sprint Duration: {} days
+
+Generate a JSON array of bugs:
+[
+  {{
+    "issue_type": "Bug",
+    "summary": "Bug title describing the issue",
+    "description": "Steps to reproduce, expected vs actual behavior",
+    "priority": "Highest|High|Medium|Low",
+    "labels": ["bug", "category"],
+    "story_points": null,
+    "parent_key": null,
+    "created_day_offset": number (3-{}),
+    "started_day_offset": number|null,
+    "completed_day_offset": number|null,
+    "assignee": "Developer"|null
+  }}
+]
+
+Requirements:
+1. Bugs appear mid-sprint (day 3+)
+2. Mix of priorities (some critical, some minor)
+3. Some bugs fixed quickly, some take longer
+4. Some bugs not yet fixed (completed_day_offset: null)
+5. Realistic bug descriptions with reproduction steps
+6. Generate Japanese content if the project context is in Japanese
+
+Respond with valid JSON only."#,
+            count,
+            project_context,
+            sprint_duration_days,
+            sprint_duration_days - 2
+        );
+
+        self.generate_json(&prompt).await
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -486,5 +773,11 @@ mod tests {
     fn test_config_with_haiku() {
         let config = ClaudeConfig::new("test-key").with_haiku();
         assert_eq!(config.model, models::CLAUDE_HAIKU);
+    }
+
+    #[test]
+    fn test_cli_client_default() {
+        let client = ClaudeCliClient::new();
+        assert!(client.skip_permissions);
     }
 }

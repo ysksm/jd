@@ -46,7 +46,8 @@ pub use infrastructure::database::{
     checkpoint_connection,
 };
 pub use infrastructure::external::claude::{
-    AiTestDataGenerator, ClaudeClient, ClaudeConfig, GeneratedIssue, SprintScenario,
+    AiTestDataGenerator, ClaudeCliClient, ClaudeClient, ClaudeConfig, GeneratedIssue,
+    SprintScenario,
 };
 pub use infrastructure::external::embeddings::{
     CohereConfig, CohereEmbeddingClient, EmbeddingConfig, EmbeddingProvider, EmbeddingProviderType,

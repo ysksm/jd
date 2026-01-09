@@ -11,7 +11,8 @@ use crate::application::dto::CreatedIssueDto;
 use crate::application::services::JiraService;
 use crate::domain::error::DomainResult;
 use crate::infrastructure::external::claude::{
-    AiTestDataGenerator, ClaudeClient, ClaudeConfig, GeneratedIssue, SprintScenario,
+    AiTestDataGenerator, ClaudeCliClient, ClaudeClient, ClaudeConfig, GeneratedIssue,
+    SprintScenario,
 };
 
 /// Result of AI test data generation
@@ -91,6 +92,8 @@ pub struct AiTestDataConfig {
     pub anthropic_api_key: String,
     /// Use faster/cheaper model (Haiku)
     pub use_fast_model: bool,
+    /// Use Claude CLI (claude -p) instead of API
+    pub use_claude_cli: bool,
 }
 
 impl Default for AiTestDataConfig {
@@ -103,6 +106,7 @@ impl Default for AiTestDataConfig {
             apply_transitions: true,
             anthropic_api_key: String::new(),
             use_fast_model: false,
+            use_claude_cli: false,
         }
     }
 }
@@ -124,27 +128,39 @@ impl<J: JiraService> GenerateAiTestDataUseCase<J> {
         project_key: &str,
         config: &AiTestDataConfig,
     ) -> DomainResult<AiTestDataResult> {
-        // Create Claude client
-        let claude_config = if config.use_fast_model {
-            ClaudeConfig::new(&config.anthropic_api_key).with_haiku()
-        } else {
-            ClaudeConfig::new(&config.anthropic_api_key)
-        };
-
-        let claude_client = ClaudeClient::new(claude_config)?;
-
         // Generate sprint scenario using AI
         log::info!(
             "Generating sprint scenario with AI for project {}...",
             project_key
         );
-        let scenario = claude_client
-            .generate_sprint_scenario(
-                &config.project_context,
-                config.team_size,
-                config.sprint_duration_days,
-            )
-            .await?;
+
+        let scenario = if config.use_claude_cli {
+            // Use Claude CLI
+            log::info!("Using Claude CLI for generation");
+            let client = ClaudeCliClient::new();
+            client
+                .generate_sprint_scenario(
+                    &config.project_context,
+                    config.team_size,
+                    config.sprint_duration_days,
+                )
+                .await?
+        } else {
+            // Use Claude API
+            let claude_config = if config.use_fast_model {
+                ClaudeConfig::new(&config.anthropic_api_key).with_haiku()
+            } else {
+                ClaudeConfig::new(&config.anthropic_api_key)
+            };
+            let claude_client = ClaudeClient::new(claude_config)?;
+            claude_client
+                .generate_sprint_scenario(
+                    &config.project_context,
+                    config.team_size,
+                    config.sprint_duration_days,
+                )
+                .await?
+        };
 
         log::info!(
             "AI generated {} issues for sprint '{}'",
@@ -263,20 +279,28 @@ impl<J: JiraService> GenerateAiTestDataUseCase<J> {
         config: &AiTestDataConfig,
         epic_theme: &str,
     ) -> DomainResult<AiTestDataResult> {
-        // Create Claude client
-        let claude_config = if config.use_fast_model {
-            ClaudeConfig::new(&config.anthropic_api_key).with_haiku()
-        } else {
-            ClaudeConfig::new(&config.anthropic_api_key)
-        };
-
-        let claude_client = ClaudeClient::new(claude_config)?;
-
         // Generate epic
         log::info!("Generating epic '{}' with AI...", epic_theme);
-        let issues = claude_client
-            .generate_epic(&config.project_context, epic_theme)
-            .await?;
+
+        let issues = if config.use_claude_cli {
+            // Use Claude CLI
+            log::info!("Using Claude CLI for generation");
+            let client = ClaudeCliClient::new();
+            client
+                .generate_epic(&config.project_context, epic_theme)
+                .await?
+        } else {
+            // Use Claude API
+            let claude_config = if config.use_fast_model {
+                ClaudeConfig::new(&config.anthropic_api_key).with_haiku()
+            } else {
+                ClaudeConfig::new(&config.anthropic_api_key)
+            };
+            let claude_client = ClaudeClient::new(claude_config)?;
+            claude_client
+                .generate_epic(&config.project_context, epic_theme)
+                .await?
+        };
 
         let scenario = SprintScenario {
             sprint_name: format!("Epic: {}", epic_theme),
@@ -377,20 +401,28 @@ impl<J: JiraService> GenerateAiTestDataUseCase<J> {
         config: &AiTestDataConfig,
         count: usize,
     ) -> DomainResult<AiTestDataResult> {
-        // Create Claude client
-        let claude_config = if config.use_fast_model {
-            ClaudeConfig::new(&config.anthropic_api_key).with_haiku()
-        } else {
-            ClaudeConfig::new(&config.anthropic_api_key)
-        };
-
-        let claude_client = ClaudeClient::new(claude_config)?;
-
         // Generate bugs
         log::info!("Generating {} bugs with AI...", count);
-        let issues = claude_client
-            .generate_bugs(&config.project_context, count, config.sprint_duration_days)
-            .await?;
+
+        let issues = if config.use_claude_cli {
+            // Use Claude CLI
+            log::info!("Using Claude CLI for generation");
+            let client = ClaudeCliClient::new();
+            client
+                .generate_bugs(&config.project_context, count, config.sprint_duration_days)
+                .await?
+        } else {
+            // Use Claude API
+            let claude_config = if config.use_fast_model {
+                ClaudeConfig::new(&config.anthropic_api_key).with_haiku()
+            } else {
+                ClaudeConfig::new(&config.anthropic_api_key)
+            };
+            let claude_client = ClaudeClient::new(claude_config)?;
+            claude_client
+                .generate_bugs(&config.project_context, count, config.sprint_duration_days)
+                .await?
+        };
 
         let scenario = SprintScenario {
             sprint_name: "Bug Generation".to_string(),

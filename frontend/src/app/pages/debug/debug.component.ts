@@ -72,6 +72,9 @@ export class DebugComponent implements OnInit {
   aiEpicTheme = signal('New Feature');
   aiBugCount = signal(5);
   aiUseFastModel = signal(false);
+  aiUseClaudeCli = signal(false);
+  aiCliAvailable = signal(false);
+  aiApiKeyConfigured = signal(false);
   aiCreatedIssues = signal<AiCreatedIssueInfo[]>([]);
   aiFailedIssues = signal<AiFailedIssueInfo[]>([]);
   aiStats = signal<AiGenerationStats | null>(null);
@@ -293,6 +296,12 @@ export class DebugComponent implements OnInit {
         this.aiLoadingStatus.set(false);
         this.aiConfigured.set(response.configured);
         this.aiStatusMessage.set(response.message);
+        this.aiCliAvailable.set(response.cliAvailable ?? false);
+        this.aiApiKeyConfigured.set(response.apiKeyConfigured ?? false);
+        // Default to CLI if available but no API key
+        if (response.cliAvailable && !response.apiKeyConfigured) {
+          this.aiUseClaudeCli.set(true);
+        }
       },
       error: (err: unknown) => {
         this.aiLoadingStatus.set(false);
@@ -335,6 +344,7 @@ export class DebugComponent implements OnInit {
         epicTheme: this.aiEpicTheme(),
         bugCount: this.aiBugCount(),
         useFastModel: this.aiUseFastModel(),
+        useClaudeCli: this.aiUseClaudeCli(),
       })
       .subscribe({
         next: (response: DebugAiGenerateResponse) => {

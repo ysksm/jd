@@ -153,10 +153,24 @@
               type="checkbox"
               [ngModel]="aiUseFastModel()"
               (ngModelChange)="aiUseFastModel.set($event)"
+              [disabled]="aiUseClaudeCli()"
             />
             Use fast model (Haiku - cheaper/faster)
           </label>
         </div>
+
+        @if (aiCliAvailable()) {
+          <div class="form-group checkbox-group">
+            <label>
+              <input
+                type="checkbox"
+                [ngModel]="aiUseClaudeCli()"
+                (ngModelChange)="aiUseClaudeCli.set($event)"
+              />
+              Use Claude CLI (uses your Claude Code subscription)
+            </label>
+          </div>
+        }
       </div>
 
       <button

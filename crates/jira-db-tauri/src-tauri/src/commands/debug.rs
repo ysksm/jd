@@ -4,7 +4,7 @@ use std::sync::Arc;
 use tauri::State;
 
 use jira_db_core::{
-    AiTestDataConfig, GenerateAiTestDataUseCase, JiraApiClient, JiraConfig,
+    AiTestDataConfig, ClaudeCliClient, GenerateAiTestDataUseCase, JiraApiClient, JiraConfig,
     application::use_cases::{CreateTestTicketUseCase, TransitionIssueUseCase},
 };
 use serde::{Deserialize, Serialize};
@@ -174,6 +174,12 @@ pub struct DebugAiStatusRequest {}
 pub struct DebugAiStatusResponse {
     pub configured: bool,
     pub message: String,
+    /// Claude CLI is available (claude command installed)
+    #[serde(default)]
+    pub cli_available: bool,
+    /// API key is configured
+    #[serde(default)]
+    pub api_key_configured: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -195,6 +201,9 @@ pub struct DebugAiGenerateRequest {
     pub bug_count: Option<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub use_fast_model: Option<bool>,
+    /// Use Claude CLI (claude -p) instead of API
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub use_claude_cli: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -572,24 +581,46 @@ pub async fn debug_ai_status(
             configured: false,
             message: "Debug mode is not enabled. Set debug_mode: true in settings.json."
                 .to_string(),
+            cli_available: false,
+            api_key_configured: false,
         });
     }
 
     // Check for Anthropic API key
     let api_key = std::env::var("ANTHROPIC_API_KEY").ok();
+    let api_key_configured = api_key.is_some() && !api_key.as_ref().unwrap().is_empty();
 
-    if api_key.is_some() && !api_key.as_ref().unwrap().is_empty() {
-        Ok(DebugAiStatusResponse {
-            configured: true,
-            message: "AI test data generation is ready. ANTHROPIC_API_KEY is configured."
-                .to_string(),
-        })
+    // Check for Claude CLI
+    let cli_available = ClaudeCliClient::is_available().await;
+
+    let (configured, message) = if cli_available && api_key_configured {
+        (
+            true,
+            "AI ready: Both Claude CLI and API key are available.".to_string(),
+        )
+    } else if cli_available {
+        (
+            true,
+            "AI ready: Claude CLI is available. Use 'Use Claude CLI' option.".to_string(),
+        )
+    } else if api_key_configured {
+        (
+            true,
+            "AI ready: ANTHROPIC_API_KEY is configured.".to_string(),
+        )
     } else {
-        Ok(DebugAiStatusResponse {
-            configured: false,
-            message: "ANTHROPIC_API_KEY environment variable is not set. Set it to enable AI test data generation.".to_string(),
-        })
-    }
+        (
+            false,
+            "AI not configured. Either install Claude CLI or set ANTHROPIC_API_KEY.".to_string(),
+        )
+    };
+
+    Ok(DebugAiStatusResponse {
+        configured,
+        message,
+        cli_available,
+        api_key_configured,
+    })
 }
 
 /// Generate test data using AI (Claude)
@@ -608,13 +639,23 @@ pub async fn debug_ai_generate(
         );
     }
 
-    // Get API key
-    let api_key = std::env::var("ANTHROPIC_API_KEY")
-        .map_err(|_| "ANTHROPIC_API_KEY environment variable is not set")?;
+    let use_cli = request.use_claude_cli.unwrap_or(false);
 
-    if api_key.is_empty() {
-        return Err("ANTHROPIC_API_KEY is empty".to_string());
-    }
+    // Get API key (only required if not using CLI)
+    let api_key = if use_cli {
+        // Check if CLI is available
+        if !ClaudeCliClient::is_available().await {
+            return Err("Claude CLI is not available. Please install it first.".to_string());
+        }
+        String::new() // Empty API key when using CLI
+    } else {
+        let key = std::env::var("ANTHROPIC_API_KEY")
+            .map_err(|_| "ANTHROPIC_API_KEY environment variable is not set")?;
+        if key.is_empty() {
+            return Err("ANTHROPIC_API_KEY is empty".to_string());
+        }
+        key
+    };
 
     // Create JIRA client
     let jira_config = JiraConfig {
@@ -637,6 +678,7 @@ pub async fn debug_ai_generate(
         apply_transitions: request.apply_transitions.unwrap_or(true),
         anthropic_api_key: api_key,
         use_fast_model: request.use_fast_model.unwrap_or(false),
+        use_claude_cli: use_cli,
     };
 
     // Execute based on mode
