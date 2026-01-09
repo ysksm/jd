@@ -5,15 +5,90 @@
 //! - Bugs with realistic lifecycle
 //! - Time-series data suitable for burndown charts
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::application::dto::CreatedIssueDto;
 use crate::application::services::JiraService;
-use crate::domain::error::DomainResult;
+use crate::domain::entities::IssueType;
+use crate::domain::error::{DomainError, DomainResult};
 use crate::infrastructure::external::claude::{
     AiTestDataGenerator, ClaudeCliClient, ClaudeClient, ClaudeConfig, GeneratedIssue,
     SprintScenario,
 };
+
+/// Issue type mapper for mapping AI-generated types to actual project types
+struct IssueTypeMapper {
+    /// Map from canonical type (Epic, Story, Task, Bug) to actual project issue type name
+    type_map: HashMap<String, String>,
+}
+
+impl IssueTypeMapper {
+    /// Create a new mapper from project issue types
+    fn new(issue_types: &[IssueType]) -> Self {
+        let mut type_map = HashMap::new();
+
+        // Canonical types we look for (case-insensitive matching)
+        let canonical_types = ["Epic", "Story", "Task", "Bug"];
+
+        for canonical in &canonical_types {
+            let canonical_lower = canonical.to_lowercase();
+
+            // Try exact match first
+            if let Some(it) = issue_types
+                .iter()
+                .find(|it| it.name.to_lowercase() == canonical_lower)
+            {
+                type_map.insert(canonical.to_string(), it.name.clone());
+                continue;
+            }
+
+            // Try partial match (e.g., "User Story" matches "Story")
+            if let Some(it) = issue_types
+                .iter()
+                .find(|it| it.name.to_lowercase().contains(&canonical_lower))
+            {
+                type_map.insert(canonical.to_string(), it.name.clone());
+                continue;
+            }
+
+            // Special cases for common Japanese JIRA setups
+            let alternatives: &[&str] = match *canonical {
+                "Epic" => &["エピック"],
+                "Story" => &["ストーリー", "User Story", "ユーザーストーリー"],
+                "Task" => &["タスク", "Sub-task", "サブタスク"],
+                "Bug" => &["バグ", "不具合", "Defect"],
+                _ => &[],
+            };
+
+            for alt in alternatives {
+                let alt_lower = alt.to_lowercase();
+                if let Some(it) = issue_types
+                    .iter()
+                    .find(|it| it.name.to_lowercase() == alt_lower)
+                {
+                    type_map.insert(canonical.to_string(), it.name.clone());
+                    break;
+                }
+            }
+        }
+
+        Self { type_map }
+    }
+
+    /// Map a canonical issue type to the actual project issue type
+    fn map_type(&self, canonical_type: &str) -> Option<&str> {
+        self.type_map.get(canonical_type).map(|s| s.as_str())
+    }
+
+    /// Get all available mapped types for logging
+    fn available_types(&self) -> Vec<(&str, &str)> {
+        self.type_map
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect()
+    }
+}
 
 /// Result of AI test data generation
 #[derive(Debug, Clone)]
@@ -128,6 +203,19 @@ impl<J: JiraService> GenerateAiTestDataUseCase<J> {
         project_key: &str,
         config: &AiTestDataConfig,
     ) -> DomainResult<AiTestDataResult> {
+        // Fetch available issue types for the project
+        log::info!("Fetching issue types for project {}...", project_key);
+        let issue_types = self
+            .jira_service
+            .fetch_issue_types_by_project_key(project_key)
+            .await?;
+
+        let type_mapper = IssueTypeMapper::new(&issue_types);
+        log::info!(
+            "Available issue type mappings: {:?}",
+            type_mapper.available_types()
+        );
+
         // Generate sprint scenario using AI
         log::info!(
             "Generating sprint scenario with AI for project {}...",
@@ -175,12 +263,14 @@ impl<J: JiraService> GenerateAiTestDataUseCase<J> {
         stats.total_generated = scenario.issues.len();
 
         // First pass: Create epics and get their keys
-        let mut epic_key_map: std::collections::HashMap<usize, String> =
-            std::collections::HashMap::new();
+        let mut epic_key_map: HashMap<usize, String> = HashMap::new();
 
         for (idx, issue) in scenario.issues.iter().enumerate() {
             if issue.issue_type == "Epic" {
-                match self.create_issue(project_key, issue, None).await {
+                match self
+                    .create_issue_with_mapper(project_key, issue, None, &type_mapper)
+                    .await
+                {
                     Ok(created) => {
                         epic_key_map.insert(idx, created.key.clone());
                         stats.epics_created += 1;
@@ -222,7 +312,10 @@ impl<J: JiraService> GenerateAiTestDataUseCase<J> {
                 None
             };
 
-            match self.create_issue(project_key, issue, parent_key).await {
+            match self
+                .create_issue_with_mapper(project_key, issue, parent_key, &type_mapper)
+                .await
+            {
                 Ok(created) => {
                     stats.successfully_created += 1;
                     match issue.issue_type.as_str() {
@@ -279,6 +372,19 @@ impl<J: JiraService> GenerateAiTestDataUseCase<J> {
         config: &AiTestDataConfig,
         epic_theme: &str,
     ) -> DomainResult<AiTestDataResult> {
+        // Fetch available issue types for the project
+        log::info!("Fetching issue types for project {}...", project_key);
+        let issue_types = self
+            .jira_service
+            .fetch_issue_types_by_project_key(project_key)
+            .await?;
+
+        let type_mapper = IssueTypeMapper::new(&issue_types);
+        log::info!(
+            "Available issue type mappings: {:?}",
+            type_mapper.available_types()
+        );
+
         // Generate epic
         log::info!("Generating epic '{}' with AI...", epic_theme);
 
@@ -319,7 +425,10 @@ impl<J: JiraService> GenerateAiTestDataUseCase<J> {
         let mut epic_key: Option<String> = None;
         for issue in &scenario.issues {
             if issue.issue_type == "Epic" {
-                match self.create_issue(project_key, issue, None).await {
+                match self
+                    .create_issue_with_mapper(project_key, issue, None, &type_mapper)
+                    .await
+                {
                     Ok(created) => {
                         epic_key = Some(created.key.clone());
                         stats.epics_created += 1;
@@ -358,7 +467,10 @@ impl<J: JiraService> GenerateAiTestDataUseCase<J> {
                 None
             };
 
-            match self.create_issue(project_key, issue, parent).await {
+            match self
+                .create_issue_with_mapper(project_key, issue, parent, &type_mapper)
+                .await
+            {
                 Ok(created) => {
                     stats.successfully_created += 1;
                     match issue.issue_type.as_str() {
@@ -401,6 +513,19 @@ impl<J: JiraService> GenerateAiTestDataUseCase<J> {
         config: &AiTestDataConfig,
         count: usize,
     ) -> DomainResult<AiTestDataResult> {
+        // Fetch available issue types for the project
+        log::info!("Fetching issue types for project {}...", project_key);
+        let issue_types = self
+            .jira_service
+            .fetch_issue_types_by_project_key(project_key)
+            .await?;
+
+        let type_mapper = IssueTypeMapper::new(&issue_types);
+        log::info!(
+            "Available issue type mappings: {:?}",
+            type_mapper.available_types()
+        );
+
         // Generate bugs
         log::info!("Generating {} bugs with AI...", count);
 
@@ -438,7 +563,10 @@ impl<J: JiraService> GenerateAiTestDataUseCase<J> {
         stats.total_generated = scenario.issues.len();
 
         for issue in &scenario.issues {
-            match self.create_issue(project_key, issue, None).await {
+            match self
+                .create_issue_with_mapper(project_key, issue, None, &type_mapper)
+                .await
+            {
                 Ok(created) => {
                     stats.successfully_created += 1;
                     stats.bugs_created += 1;
@@ -483,13 +611,30 @@ impl<J: JiraService> GenerateAiTestDataUseCase<J> {
         })
     }
 
-    /// Create a single issue in JIRA
-    async fn create_issue(
+    /// Create a single issue in JIRA with issue type mapping
+    async fn create_issue_with_mapper(
         &self,
         project_key: &str,
         issue: &GeneratedIssue,
         parent_key: Option<&str>,
+        type_mapper: &IssueTypeMapper,
     ) -> DomainResult<CreatedIssueDto> {
+        // Map the AI-generated issue type to the actual project issue type
+        let actual_type = type_mapper.map_type(&issue.issue_type).ok_or_else(|| {
+            DomainError::Validation(format!(
+                "No matching issue type found for '{}'. Available types: {:?}",
+                issue.issue_type,
+                type_mapper.available_types()
+            ))
+        })?;
+
+        log::info!(
+            "Creating issue type '{}' (mapped from '{}'): {}",
+            actual_type,
+            issue.issue_type,
+            issue.summary
+        );
+
         // Build description with additional context
         let description = if let Some(parent) = parent_key {
             format!("{}\n\n---\nParent Epic: {}", issue.description, parent)
@@ -498,12 +643,7 @@ impl<J: JiraService> GenerateAiTestDataUseCase<J> {
         };
 
         self.jira_service
-            .create_issue(
-                project_key,
-                &issue.summary,
-                Some(&description),
-                &issue.issue_type,
-            )
+            .create_issue(project_key, &issue.summary, Some(&description), actual_type)
             .await
     }
 
