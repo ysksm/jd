@@ -166,7 +166,7 @@ ORDER BY date`;
     this.error.set(null);
     this.successMessage.set(null);
 
-    this.api.sqlExecute({ projectKey: this.projectKey || undefined, query: this.queryText(), limit: 100 }).subscribe({
+    this.api.sqlExecute({ projectKey: this.projectKey || undefined, query: this.queryText(), limit: 500 }).subscribe({
       next: (response) => {
         this.columns.set(response.columns);
         this.rows.set(response.rows as Record<string, unknown>[]);

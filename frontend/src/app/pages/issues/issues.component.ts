@@ -437,7 +437,7 @@ export class IssuesComponent implements OnInit, OnChanges {
       issueType: this.issueTypeFilter() || undefined,
       assignee: this.assigneeFilter() || undefined,
       team: this.teamFilter() || undefined,
-      limit: 200
+      limit: 1000
     }).subscribe({
       next: (response) => {
         this.issues.set(response.issues);
