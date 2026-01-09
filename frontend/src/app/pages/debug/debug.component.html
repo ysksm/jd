@@ -31,10 +31,248 @@
   }
 
   @if (debugEnabled()) {
+    <!-- AI Test Data Generation Section -->
+    <section class="card ai-section">
+      <h2>AI Test Data Generation (Claude)</h2>
+      <p class="description">Use Claude AI to generate realistic test data with hierarchical structure and time-series for burndown charts.</p>
+
+      <!-- AI Status -->
+      <div class="ai-status" [class.configured]="aiConfigured()" [class.not-configured]="!aiConfigured()">
+        @if (aiLoadingStatus()) {
+          <span>Checking AI configuration...</span>
+        } @else {
+          <span>{{ aiStatusMessage() }}</span>
+        }
+      </div>
+
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="aiProject">Project</label>
+          <select
+            id="aiProject"
+            [ngModel]="selectedProject()"
+            (ngModelChange)="onProjectChange($event)"
+          >
+            @for (project of projects(); track project.key) {
+              <option [value]="project.key">{{ project.key }} - {{ project.name }}</option>
+            }
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="aiMode">Generation Mode</label>
+          <select
+            id="aiMode"
+            [ngModel]="aiMode()"
+            (ngModelChange)="onAiModeChange($event)"
+          >
+            <option value="sprint">Sprint (Epic + Stories + Tasks + Bugs)</option>
+            <option value="epic">Epic Only (Epic + Stories)</option>
+            <option value="bugs">Bugs Only</option>
+          </select>
+        </div>
+
+        <div class="form-group full-width">
+          <label for="aiContext">Project Context (for AI)</label>
+          <textarea
+            id="aiContext"
+            rows="2"
+            placeholder="Describe your project for more realistic test data..."
+            [ngModel]="aiProjectContext()"
+            (ngModelChange)="aiProjectContext.set($event)"
+          ></textarea>
+        </div>
+
+        @if (aiMode() === 'sprint') {
+          <div class="form-group">
+            <label for="aiTeamSize">Team Size</label>
+            <input
+              type="number"
+              id="aiTeamSize"
+              min="1"
+              max="20"
+              [ngModel]="aiTeamSize()"
+              (ngModelChange)="aiTeamSize.set($event)"
+            />
+          </div>
+
+          <div class="form-group">
+            <label for="aiSprintDuration">Sprint Duration (days)</label>
+            <input
+              type="number"
+              id="aiSprintDuration"
+              min="7"
+              max="30"
+              [ngModel]="aiSprintDuration()"
+              (ngModelChange)="aiSprintDuration.set($event)"
+            />
+          </div>
+        }
+
+        @if (aiMode() === 'epic') {
+          <div class="form-group full-width">
+            <label for="aiEpicTheme">Epic Theme</label>
+            <input
+              type="text"
+              id="aiEpicTheme"
+              placeholder="e.g., User Authentication, Payment Integration"
+              [ngModel]="aiEpicTheme()"
+              (ngModelChange)="aiEpicTheme.set($event)"
+            />
+          </div>
+        }
+
+        @if (aiMode() === 'bugs') {
+          <div class="form-group">
+            <label for="aiBugCount">Number of Bugs</label>
+            <input
+              type="number"
+              id="aiBugCount"
+              min="1"
+              max="20"
+              [ngModel]="aiBugCount()"
+              (ngModelChange)="aiBugCount.set($event)"
+            />
+          </div>
+        }
+
+        <div class="form-group checkbox-group">
+          <label>
+            <input
+              type="checkbox"
+              [ngModel]="aiApplyTransitions()"
+              (ngModelChange)="aiApplyTransitions.set($event)"
+            />
+            Apply status transitions (simulate progress)
+          </label>
+        </div>
+
+        <div class="form-group checkbox-group">
+          <label>
+            <input
+              type="checkbox"
+              [ngModel]="aiUseFastModel()"
+              (ngModelChange)="aiUseFastModel.set($event)"
+            />
+            Use fast model (Haiku - cheaper/faster)
+          </label>
+        </div>
+      </div>
+
+      <button
+        class="btn primary ai-btn"
+        [disabled]="aiGenerating() || !selectedProject() || !aiConfigured()"
+        (click)="generateAiTestData()"
+      >
+        @if (aiGenerating()) {
+          <span class="spinner"></span>
+          Generating with AI...
+        } @else {
+          Generate Test Data with Claude
+        }
+      </button>
+
+      @if (aiStats()) {
+        <div class="ai-results">
+          <h4>Generation Results</h4>
+          <div class="stats-grid">
+            <div class="stat">
+              <span class="label">Total Generated</span>
+              <span class="value">{{ aiStats()!.totalGenerated }}</span>
+            </div>
+            <div class="stat success">
+              <span class="label">Created</span>
+              <span class="value">{{ aiStats()!.successfullyCreated }}</span>
+            </div>
+            <div class="stat" [class.error]="aiStats()!.failedToCreate > 0">
+              <span class="label">Failed</span>
+              <span class="value">{{ aiStats()!.failedToCreate }}</span>
+            </div>
+            <div class="stat">
+              <span class="label">Epics</span>
+              <span class="value">{{ aiStats()!.epicsCreated }}</span>
+            </div>
+            <div class="stat">
+              <span class="label">Stories</span>
+              <span class="value">{{ aiStats()!.storiesCreated }}</span>
+            </div>
+            <div class="stat">
+              <span class="label">Tasks</span>
+              <span class="value">{{ aiStats()!.tasksCreated }}</span>
+            </div>
+            <div class="stat">
+              <span class="label">Bugs</span>
+              <span class="value">{{ aiStats()!.bugsCreated }}</span>
+            </div>
+            <div class="stat">
+              <span class="label">Transitions</span>
+              <span class="value">{{ aiStats()!.transitionsApplied }}</span>
+            </div>
+          </div>
+        </div>
+      }
+
+      @if (aiCreatedIssues().length > 0) {
+        <div class="results">
+          <h4>Created Issues ({{ aiCreatedIssues().length }})</h4>
+          <table class="results-table">
+            <thead>
+              <tr>
+                <th>Key</th>
+                <th>Type</th>
+                <th>Summary</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (issue of aiCreatedIssues(); track issue.key) {
+                <tr>
+                  <td>
+                    @if (issue.selfUrl) {
+                      <a [href]="issue.selfUrl" target="_blank">{{ issue.key }}</a>
+                    } @else {
+                      {{ issue.key }}
+                    }
+                  </td>
+                  <td>{{ issue.issueType }}</td>
+                  <td class="summary">{{ issue.summary }}</td>
+                  <td>{{ issue.status }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+
+      @if (aiFailedIssues().length > 0) {
+        <div class="results error-results">
+          <h4>Failed Issues ({{ aiFailedIssues().length }})</h4>
+          <table class="results-table">
+            <thead>
+              <tr>
+                <th>Type</th>
+                <th>Summary</th>
+                <th>Error</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (issue of aiFailedIssues(); track issue.summary) {
+                <tr class="error">
+                  <td>{{ issue.issueType }}</td>
+                  <td class="summary">{{ issue.summary }}</td>
+                  <td class="error-msg">{{ issue.error }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    </section>
+
     <!-- Create Issues Section -->
     <section class="card">
-      <h2>Create Test Issues</h2>
-      <p class="description">Create test issues in JIRA for debugging purposes.</p>
+      <h2>Create Test Issues (Manual)</h2>
+      <p class="description">Create simple test issues in JIRA for debugging purposes.</p>
 
       <div class="form-grid">
         <div class="form-group">

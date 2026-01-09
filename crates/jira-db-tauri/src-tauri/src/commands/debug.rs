@@ -4,7 +4,7 @@ use std::sync::Arc;
 use tauri::State;
 
 use jira_db_core::{
-    JiraApiClient, JiraConfig,
+    AiTestDataConfig, GenerateAiTestDataUseCase, JiraApiClient, JiraConfig,
     application::use_cases::{CreateTestTicketUseCase, TransitionIssueUseCase},
 };
 use serde::{Deserialize, Serialize};
@@ -159,6 +159,118 @@ pub struct IssueTypeInfo {
 #[serde(rename_all = "camelCase")]
 pub struct DebugGetIssueTypesResponse {
     pub issue_types: Vec<IssueTypeInfo>,
+}
+
+// ============================================================
+// AI Test Data Generation Types
+// ============================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DebugAiStatusRequest {}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DebugAiStatusResponse {
+    pub configured: bool,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DebugAiGenerateRequest {
+    pub project: String,
+    pub mode: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub project_context: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub team_size: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sprint_duration_days: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub apply_transitions: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub epic_theme: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bug_count: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub use_fast_model: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GeneratedIssue {
+    pub issue_type: String,
+    pub summary: String,
+    pub description: String,
+    pub priority: String,
+    pub labels: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub story_points: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_key: Option<String>,
+    pub created_day_offset: i32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub started_day_offset: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub completed_day_offset: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub assignee: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SprintScenario {
+    pub sprint_name: String,
+    pub duration_days: i32,
+    pub team_members: Vec<String>,
+    pub issues: Vec<GeneratedIssue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiCreatedIssueInfo {
+    pub key: String,
+    pub id: String,
+    pub issue_type: String,
+    pub summary: String,
+    pub status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub self_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiFailedIssueInfo {
+    pub issue_type: String,
+    pub summary: String,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiGenerationStats {
+    pub total_generated: usize,
+    pub successfully_created: usize,
+    pub failed_to_create: usize,
+    pub epics_created: usize,
+    pub stories_created: usize,
+    pub tasks_created: usize,
+    pub bugs_created: usize,
+    pub transitions_applied: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DebugAiGenerateResponse {
+    pub success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scenario: Option<SprintScenario>,
+    pub created_issues: Vec<AiCreatedIssueInfo>,
+    pub failed_issues: Vec<AiFailedIssueInfo>,
+    pub stats: AiGenerationStats,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
 }
 
 // ============================================================
@@ -444,4 +556,200 @@ pub async fn debug_get_issue_types(
             })
             .collect(),
     })
+}
+
+/// Check AI test data generation status
+#[tauri::command]
+pub async fn debug_ai_status(
+    state: State<'_, AppState>,
+    _request: DebugAiStatusRequest,
+) -> Result<DebugAiStatusResponse, String> {
+    let settings = state.get_settings().ok_or("Not initialized")?;
+
+    // Check debug mode
+    if !settings.debug_mode {
+        return Ok(DebugAiStatusResponse {
+            configured: false,
+            message: "Debug mode is not enabled. Set debug_mode: true in settings.json."
+                .to_string(),
+        });
+    }
+
+    // Check for Anthropic API key
+    let api_key = std::env::var("ANTHROPIC_API_KEY").ok();
+
+    if api_key.is_some() && !api_key.as_ref().unwrap().is_empty() {
+        Ok(DebugAiStatusResponse {
+            configured: true,
+            message: "AI test data generation is ready. ANTHROPIC_API_KEY is configured."
+                .to_string(),
+        })
+    } else {
+        Ok(DebugAiStatusResponse {
+            configured: false,
+            message: "ANTHROPIC_API_KEY environment variable is not set. Set it to enable AI test data generation.".to_string(),
+        })
+    }
+}
+
+/// Generate test data using AI (Claude)
+#[tauri::command]
+pub async fn debug_ai_generate(
+    state: State<'_, AppState>,
+    request: DebugAiGenerateRequest,
+) -> Result<DebugAiGenerateResponse, String> {
+    let settings = state.get_settings().ok_or("Not initialized")?;
+
+    // Check debug mode
+    if !settings.debug_mode {
+        return Err(
+            "Debug mode is not enabled. Set debug_mode: true in settings.json to enable."
+                .to_string(),
+        );
+    }
+
+    // Get API key
+    let api_key = std::env::var("ANTHROPIC_API_KEY")
+        .map_err(|_| "ANTHROPIC_API_KEY environment variable is not set")?;
+
+    if api_key.is_empty() {
+        return Err("ANTHROPIC_API_KEY is empty".to_string());
+    }
+
+    // Create JIRA client
+    let jira_config = JiraConfig {
+        endpoint: settings.jira.endpoint.clone(),
+        username: settings.jira.username.clone(),
+        api_key: settings.jira.api_key.clone(),
+    };
+    let jira_client = Arc::new(JiraApiClient::new(&jira_config).map_err(|e| e.to_string())?);
+
+    // Create use case
+    let use_case = GenerateAiTestDataUseCase::new(jira_client);
+
+    // Build config
+    let config = AiTestDataConfig {
+        project_context: request.project_context.unwrap_or_else(|| {
+            "A software development project with web application components".to_string()
+        }),
+        team_size: request.team_size.unwrap_or(4),
+        sprint_duration_days: request.sprint_duration_days.unwrap_or(14),
+        apply_transitions: request.apply_transitions.unwrap_or(true),
+        anthropic_api_key: api_key,
+        use_fast_model: request.use_fast_model.unwrap_or(false),
+    };
+
+    // Execute based on mode
+    let result = match request.mode.as_str() {
+        "sprint" => use_case.execute(&request.project, &config).await,
+        "epic" => {
+            let theme = request
+                .epic_theme
+                .unwrap_or_else(|| "New Feature".to_string());
+            use_case
+                .generate_epic(&request.project, &config, &theme)
+                .await
+        }
+        "bugs" => {
+            let count = request.bug_count.unwrap_or(5);
+            use_case
+                .generate_bugs(&request.project, &config, count)
+                .await
+        }
+        _ => {
+            return Err(format!(
+                "Unknown mode: {}. Use 'sprint', 'epic', or 'bugs'.",
+                request.mode
+            ));
+        }
+    };
+
+    match result {
+        Ok(data) => {
+            // Convert to response types
+            let scenario = Some(SprintScenario {
+                sprint_name: data.scenario.sprint_name,
+                duration_days: data.scenario.duration_days,
+                team_members: data.scenario.team_members,
+                issues: data
+                    .scenario
+                    .issues
+                    .into_iter()
+                    .map(|i| GeneratedIssue {
+                        issue_type: i.issue_type,
+                        summary: i.summary,
+                        description: i.description,
+                        priority: i.priority,
+                        labels: i.labels,
+                        story_points: i.story_points,
+                        parent_key: i.parent_key,
+                        created_day_offset: i.created_day_offset,
+                        started_day_offset: i.started_day_offset,
+                        completed_day_offset: i.completed_day_offset,
+                        assignee: i.assignee,
+                    })
+                    .collect(),
+            });
+
+            let created_issues = data
+                .created_issues
+                .into_iter()
+                .map(|i| AiCreatedIssueInfo {
+                    key: i.key,
+                    id: i.id,
+                    issue_type: i.issue_type,
+                    summary: i.summary,
+                    status: i.status,
+                    self_url: i.self_url,
+                })
+                .collect();
+
+            let failed_issues = data
+                .failed_issues
+                .into_iter()
+                .map(|i| AiFailedIssueInfo {
+                    issue_type: i.issue_type,
+                    summary: i.summary,
+                    error: i.error,
+                })
+                .collect();
+
+            let stats = AiGenerationStats {
+                total_generated: data.stats.total_generated,
+                successfully_created: data.stats.successfully_created,
+                failed_to_create: data.stats.failed_to_create,
+                epics_created: data.stats.epics_created,
+                stories_created: data.stats.stories_created,
+                tasks_created: data.stats.tasks_created,
+                bugs_created: data.stats.bugs_created,
+                transitions_applied: data.stats.transitions_applied,
+            };
+
+            Ok(DebugAiGenerateResponse {
+                success: true,
+                scenario,
+                created_issues,
+                failed_issues,
+                stats,
+                error: None,
+            })
+        }
+        Err(e) => Ok(DebugAiGenerateResponse {
+            success: false,
+            scenario: None,
+            created_issues: vec![],
+            failed_issues: vec![],
+            stats: AiGenerationStats {
+                total_generated: 0,
+                successfully_created: 0,
+                failed_to_create: 0,
+                epics_created: 0,
+                stories_created: 0,
+                tasks_created: 0,
+                bugs_created: 0,
+                transitions_applied: 0,
+            },
+            error: Some(e.to_string()),
+        }),
+    }
 }

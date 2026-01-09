@@ -224,6 +224,9 @@ pub fn run() {
             commands::debug::debug_transition_issue,
             commands::debug::debug_bulk_transition,
             commands::debug::debug_get_issue_types,
+            // AI Test Data Generation
+            commands::debug::debug_ai_status,
+            commands::debug::debug_ai_generate,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

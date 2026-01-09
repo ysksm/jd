@@ -1,4 +1,4 @@
-import { Component, OnInit, signal, inject, effect } from '@angular/core';
+import { Component, OnInit, signal, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import {
@@ -7,6 +7,9 @@ import {
   Transition,
   BulkTransitionResult,
   IssueTypeInfo,
+  AiCreatedIssueInfo,
+  AiFailedIssueInfo,
+  AiGenerationStats,
 } from '../../generated/models';
 import { API_SERVICE, IApiService } from '../../api.provider';
 
@@ -54,9 +57,27 @@ export class DebugComponent implements OnInit {
   bulkTransitioning = signal(false);
   bulkResults = signal<BulkTransitionResult[]>([]);
 
+  // AI Test Data Generation
+  aiConfigured = signal(false);
+  aiStatusMessage = signal('');
+  aiLoadingStatus = signal(false);
+  aiGenerating = signal(false);
+  aiMode = signal<'sprint' | 'epic' | 'bugs'>('sprint');
+  aiProjectContext = signal('Web application with frontend and backend components');
+  aiTeamSize = signal(4);
+  aiSprintDuration = signal(14);
+  aiApplyTransitions = signal(true);
+  aiEpicTheme = signal('New Feature');
+  aiBugCount = signal(5);
+  aiUseFastModel = signal(false);
+  aiCreatedIssues = signal<AiCreatedIssueInfo[]>([]);
+  aiFailedIssues = signal<AiFailedIssueInfo[]>([]);
+  aiStats = signal<AiGenerationStats | null>(null);
+
   ngOnInit(): void {
     this.loadStatus();
     this.loadProjects();
+    this.loadAiStatus();
   }
 
   loadStatus(): void {
@@ -258,6 +279,79 @@ export class DebugComponent implements OnInit {
         error: (err) => {
           this.bulkTransitioning.set(false);
           this.error.set('Failed to bulk transition: ' + err);
+        },
+      });
+  }
+
+  // AI Test Data Generation Methods
+  loadAiStatus(): void {
+    this.aiLoadingStatus.set(true);
+    this.api.debugAiStatus({}).subscribe({
+      next: (response) => {
+        this.aiLoadingStatus.set(false);
+        this.aiConfigured.set(response.configured);
+        this.aiStatusMessage.set(response.message);
+      },
+      error: (err) => {
+        this.aiLoadingStatus.set(false);
+        this.aiConfigured.set(false);
+        this.aiStatusMessage.set('Failed to check AI status: ' + err);
+      },
+    });
+  }
+
+  onAiModeChange(mode: string): void {
+    this.aiMode.set(mode as 'sprint' | 'epic' | 'bugs');
+  }
+
+  generateAiTestData(): void {
+    if (!this.selectedProject()) {
+      this.error.set('Please select a project');
+      return;
+    }
+
+    if (!this.aiConfigured()) {
+      this.error.set('AI is not configured. Please set ANTHROPIC_API_KEY environment variable.');
+      return;
+    }
+
+    this.aiGenerating.set(true);
+    this.error.set(null);
+    this.success.set(null);
+    this.aiCreatedIssues.set([]);
+    this.aiFailedIssues.set([]);
+    this.aiStats.set(null);
+
+    this.api
+      .debugAiGenerate({
+        project: this.selectedProject(),
+        mode: this.aiMode(),
+        projectContext: this.aiProjectContext(),
+        teamSize: this.aiTeamSize(),
+        sprintDurationDays: this.aiSprintDuration(),
+        applyTransitions: this.aiApplyTransitions(),
+        epicTheme: this.aiEpicTheme(),
+        bugCount: this.aiBugCount(),
+        useFastModel: this.aiUseFastModel(),
+      })
+      .subscribe({
+        next: (response) => {
+          this.aiGenerating.set(false);
+          if (response.success) {
+            this.aiCreatedIssues.set(response.createdIssues);
+            this.aiFailedIssues.set(response.failedIssues);
+            this.aiStats.set(response.stats);
+            this.success.set(
+              `AI generated ${response.stats.totalGenerated} issues. ` +
+              `Created: ${response.stats.successfullyCreated}, Failed: ${response.stats.failedToCreate}`
+            );
+          } else {
+            this.error.set(response.error || 'AI generation failed');
+          }
+        },
+        error: (err) => {
+          this.aiGenerating.set(false);
+          this.error.set('AI generation failed: ' + err);
         },
       });
   }

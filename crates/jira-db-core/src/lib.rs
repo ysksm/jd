@@ -15,11 +15,13 @@ pub mod report;
 pub use application::dto::{CreatedIssueDto, SyncResult, TransitionDto};
 pub use application::services::{FetchProgress, JiraService};
 pub use application::use_cases::{
-    CreateTestTicketUseCase, EmbeddingGenerationConfig, EmbeddingGenerationResult, EmbeddingTiming,
-    ExecuteSqlUseCase, GenerateEmbeddingsUseCase, GenerateReportUseCase, GenerateSnapshotsUseCase,
-    GetChangeHistoryUseCase, GetProjectMetadataUseCase, ReportData, ResumableSyncResult,
-    SearchIssuesUseCase, SnapshotGenerationResult, SqlResult, SyncFieldsResult, SyncFieldsUseCase,
-    SyncProjectListUseCase, SyncProjectUseCase, TransitionIssueUseCase, TransitionResult,
+    AiTestDataConfig, AiTestDataResult, CreateTestTicketUseCase, CreatedIssueInfo,
+    EmbeddingGenerationConfig, EmbeddingGenerationResult, EmbeddingTiming, ExecuteSqlUseCase,
+    FailedIssueInfo, GenerateAiTestDataUseCase, GenerateEmbeddingsUseCase, GenerateReportUseCase,
+    GenerateSnapshotsUseCase, GenerationStats, GetChangeHistoryUseCase, GetProjectMetadataUseCase,
+    ReportData, ResumableSyncResult, SearchIssuesUseCase, SnapshotGenerationResult, SqlResult,
+    SyncFieldsResult, SyncFieldsUseCase, SyncProjectListUseCase, SyncProjectUseCase,
+    TransitionIssueUseCase, TransitionResult,
 };
 
 pub use domain::entities::{
@@ -42,6 +44,9 @@ pub use infrastructure::database::{
     DuckDbMetadataRepository, DuckDbProjectRepository, DuckDbSyncHistoryRepository,
     EmbeddingsRepository, RawDataRepository, SemanticSearchResult, SharedRawDataRepository,
     checkpoint_connection,
+};
+pub use infrastructure::external::claude::{
+    AiTestDataGenerator, ClaudeClient, ClaudeConfig, GeneratedIssue, SprintScenario,
 };
 pub use infrastructure::external::embeddings::{
     CohereConfig, CohereEmbeddingClient, EmbeddingConfig, EmbeddingProvider, EmbeddingProviderType,

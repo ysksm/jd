@@ -470,3 +470,79 @@ export interface DebugBulkTransitionResponse {
   failureCount: number;
 }
 
+// AI Test Data Generation Types
+export interface GeneratedIssue {
+  issueType: string;
+  summary: string;
+  description: string;
+  priority: string;
+  labels: string[];
+  storyPoints?: number;
+  parentKey?: string;
+  createdDayOffset: number;
+  startedDayOffset?: number;
+  completedDayOffset?: number;
+  assignee?: string;
+}
+
+export interface SprintScenario {
+  sprintName: string;
+  durationDays: number;
+  teamMembers: string[];
+  issues: GeneratedIssue[];
+}
+
+export interface AiCreatedIssueInfo {
+  key: string;
+  id: string;
+  issueType: string;
+  summary: string;
+  status: string;
+  selfUrl?: string;
+}
+
+export interface AiFailedIssueInfo {
+  issueType: string;
+  summary: string;
+  error: string;
+}
+
+export interface AiGenerationStats {
+  totalGenerated: number;
+  successfullyCreated: number;
+  failedToCreate: number;
+  epicsCreated: number;
+  storiesCreated: number;
+  tasksCreated: number;
+  bugsCreated: number;
+  transitionsApplied: number;
+}
+
+export interface DebugAiStatusRequest {}
+
+export interface DebugAiStatusResponse {
+  configured: boolean;
+  message: string;
+}
+
+export interface DebugAiGenerateRequest {
+  project: string;
+  mode: string;
+  projectContext?: string;
+  teamSize?: number;
+  sprintDurationDays?: number;
+  applyTransitions?: boolean;
+  epicTheme?: string;
+  bugCount?: number;
+  useFastModel?: boolean;
+}
+
+export interface DebugAiGenerateResponse {
+  success: boolean;
+  scenario?: SprintScenario;
+  createdIssues: AiCreatedIssueInfo[];
+  failedIssues: AiFailedIssueInfo[];
+  stats: AiGenerationStats;
+  error?: string;
+}
+
