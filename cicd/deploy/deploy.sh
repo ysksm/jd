@@ -148,9 +148,9 @@ if [[ "$BUILD" == true ]]; then
 
     # Navigate to project root
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+    PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-    run_command "cd $PROJECT_ROOT && docker build -t $IMAGE -f crates/jira-mock-server/Dockerfile ."
+    run_command "cd $PROJECT_ROOT && docker build -t $IMAGE -f cicd/deploy/Dockerfile ."
 
     if [[ "$DRY_RUN" != true ]]; then
         log_success "Docker image built successfully"

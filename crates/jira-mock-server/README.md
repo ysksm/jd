@@ -250,7 +250,7 @@ curl "http://localhost:8080/rest/api/3/search/jql?jql=project=TEST&maxResults=10
 ### イメージのビルド
 
 ```bash
-docker build -t jira-mock-server -f crates/jira-mock-server/Dockerfile .
+docker build -t jira-mock-server -f cicd/deploy/Dockerfile .
 ```
 
 ### コンテナの実行
@@ -266,11 +266,13 @@ docker run -d \
 ### Docker Compose
 
 ```bash
-cd crates/jira-mock-server
+cd cicd/deploy
 docker-compose up -d
 ```
 
 ## CI/CDデプロイ
+
+デプロイ関連ファイルは `cicd/deploy/` に配置されています。詳細は [cicd/deploy/README.md](../../cicd/deploy/README.md) を参照してください。
 
 ### GitHub Actions
 
@@ -285,13 +287,13 @@ docker-compose up -d
 
 ```bash
 # ステージング環境へデプロイ
-./scripts/deploy.sh --host staging.example.com --user deploy --env staging
+./cicd/deploy/deploy.sh --host staging.example.com --user deploy --env staging
 
 # プロダクション環境へデプロイ
-./scripts/deploy.sh --host prod.example.com --user deploy --env production
+./cicd/deploy/deploy.sh --host prod.example.com --user deploy --env production
 
 # ドライラン（実行せずにコマンドを表示）
-./scripts/deploy.sh --dry-run --host example.com --user deploy
+./cicd/deploy/deploy.sh --dry-run --host example.com --user deploy
 ```
 
 ## 制限事項
@@ -309,14 +311,16 @@ docker-compose up -d
 crates/jira-mock-server/
 ├── Cargo.toml
 ├── README.md
-├── Dockerfile
-├── docker-compose.yml
-├── scripts/
-│   └── deploy.sh
 └── src/
     ├── main.rs      # エントリーポイント、CLI、ルーティング
     ├── handlers.rs  # APIエンドポイントハンドラー
     └── data.rs      # データモデルとストレージ
+
+cicd/deploy/           # デプロイメント関連ファイル
+├── README.md          # デプロイメントガイド
+├── Dockerfile         # Dockerイメージビルド用
+├── docker-compose.yml # ローカル開発用
+└── deploy.sh          # 手動デプロイスクリプト
 ```
 
 ### 新しいエンドポイントの追加

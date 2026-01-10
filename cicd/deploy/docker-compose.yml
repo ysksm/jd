@@ -4,7 +4,7 @@ services:
   jira-mock-server:
     build:
       context: ../..
-      dockerfile: crates/jira-mock-server/Dockerfile
+      dockerfile: cicd/deploy/Dockerfile
     container_name: jira-mock-server
     ports:
       - "8080:8080"
