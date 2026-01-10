@@ -75,6 +75,7 @@ export class DebugComponent implements OnInit {
   aiUseClaudeCli = signal(false);
   aiCliAvailable = signal(false);
   aiApiKeyConfigured = signal(false);
+  aiLanguage = signal<'auto' | 'ja' | 'en'>('auto');
   aiCreatedIssues = signal<AiCreatedIssueInfo[]>([]);
   aiFailedIssues = signal<AiFailedIssueInfo[]>([]);
   aiStats = signal<AiGenerationStats | null>(null);
@@ -333,6 +334,7 @@ export class DebugComponent implements OnInit {
     this.aiFailedIssues.set([]);
     this.aiStats.set(null);
 
+    const language = this.aiLanguage();
     this.api
       .debugAiGenerate({
         project: this.selectedProject(),
@@ -345,6 +347,7 @@ export class DebugComponent implements OnInit {
         bugCount: this.aiBugCount(),
         useFastModel: this.aiUseFastModel(),
         useClaudeCli: this.aiUseClaudeCli(),
+        language: language === 'auto' ? undefined : language,
       })
       .subscribe({
         next: (response: DebugAiGenerateResponse) => {

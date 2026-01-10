@@ -204,6 +204,9 @@ pub struct DebugAiGenerateRequest {
     /// Use Claude CLI (claude -p) instead of API
     #[serde(skip_serializing_if = "Option::is_none")]
     pub use_claude_cli: Option<bool>,
+    /// Language for generated content (e.g., "ja" for Japanese, "en" for English)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub language: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -681,6 +684,7 @@ pub async fn debug_ai_generate(
         anthropic_api_key: api_key,
         use_fast_model: request.use_fast_model.unwrap_or(false),
         use_claude_cli: use_cli,
+        language: request.language,
     };
 
     // Execute based on mode

@@ -540,6 +540,8 @@ export interface DebugAiGenerateRequest {
   bugCount?: number;
   useFastModel?: boolean;
   useClaudeCli?: boolean;
+  /** Language for generated content (e.g., "ja" for Japanese, "en" for English) */
+  language?: string;
 }
 
 export interface DebugAiGenerateResponse {

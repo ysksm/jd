@@ -175,6 +175,8 @@ pub struct AiTestDataConfig {
     pub use_fast_model: bool,
     /// Use Claude CLI (claude -p) instead of API
     pub use_claude_cli: bool,
+    /// Language for generated content (e.g., "ja" for Japanese, "en" for English)
+    pub language: Option<String>,
 }
 
 impl Default for AiTestDataConfig {
@@ -188,6 +190,7 @@ impl Default for AiTestDataConfig {
             anthropic_api_key: String::new(),
             use_fast_model: false,
             use_claude_cli: false,
+            language: None,
         }
     }
 }
@@ -237,6 +240,7 @@ impl<J: JiraService> GenerateAiTestDataUseCase<J> {
                     &config.project_context,
                     config.team_size,
                     config.sprint_duration_days,
+                    config.language.as_deref(),
                 )
                 .await?
         } else {
@@ -252,6 +256,7 @@ impl<J: JiraService> GenerateAiTestDataUseCase<J> {
                     &config.project_context,
                     config.team_size,
                     config.sprint_duration_days,
+                    config.language.as_deref(),
                 )
                 .await?
         };
@@ -459,7 +464,11 @@ impl<J: JiraService> GenerateAiTestDataUseCase<J> {
             log::info!("Using Claude CLI for generation");
             let client = ClaudeCliClient::new();
             client
-                .generate_epic(&config.project_context, epic_theme)
+                .generate_epic(
+                    &config.project_context,
+                    epic_theme,
+                    config.language.as_deref(),
+                )
                 .await?
         } else {
             // Use Claude API
@@ -470,7 +479,11 @@ impl<J: JiraService> GenerateAiTestDataUseCase<J> {
             };
             let claude_client = ClaudeClient::new(claude_config)?;
             claude_client
-                .generate_epic(&config.project_context, epic_theme)
+                .generate_epic(
+                    &config.project_context,
+                    epic_theme,
+                    config.language.as_deref(),
+                )
                 .await?
         };
 
@@ -600,7 +613,12 @@ impl<J: JiraService> GenerateAiTestDataUseCase<J> {
             log::info!("Using Claude CLI for generation");
             let client = ClaudeCliClient::new();
             client
-                .generate_bugs(&config.project_context, count, config.sprint_duration_days)
+                .generate_bugs(
+                    &config.project_context,
+                    count,
+                    config.sprint_duration_days,
+                    config.language.as_deref(),
+                )
                 .await?
         } else {
             // Use Claude API
@@ -611,7 +629,12 @@ impl<J: JiraService> GenerateAiTestDataUseCase<J> {
             };
             let claude_client = ClaudeClient::new(claude_config)?;
             claude_client
-                .generate_bugs(&config.project_context, count, config.sprint_duration_days)
+                .generate_bugs(
+                    &config.project_context,
+                    count,
+                    config.sprint_duration_days,
+                    config.language.as_deref(),
+                )
                 .await?
         };
 

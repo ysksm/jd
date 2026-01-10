@@ -83,6 +83,19 @@
           ></textarea>
         </div>
 
+        <div class="form-group">
+          <label for="aiLanguage">Language</label>
+          <select
+            id="aiLanguage"
+            [ngModel]="aiLanguage()"
+            (ngModelChange)="aiLanguage.set($event)"
+          >
+            <option value="auto">Auto (detect from context)</option>
+            <option value="ja">日本語 (Japanese)</option>
+            <option value="en">English</option>
+          </select>
+        </div>
+
         @if (aiMode() === 'sprint') {
           <div class="form-group">
             <label for="aiTeamSize">Team Size <span class="hint">(1-50)</span></label>

@@ -294,6 +294,7 @@ pub trait AiTestDataGenerator: Send + Sync {
         project_context: &str,
         team_size: usize,
         sprint_duration_days: i32,
+        language: Option<&str>,
     ) -> DomainResult<SprintScenario>;
 
     /// Generate a single epic with stories and tasks
@@ -301,6 +302,7 @@ pub trait AiTestDataGenerator: Send + Sync {
         &self,
         project_context: &str,
         epic_theme: &str,
+        language: Option<&str>,
     ) -> DomainResult<Vec<GeneratedIssue>>;
 
     /// Generate bugs with realistic lifecycle
@@ -309,7 +311,26 @@ pub trait AiTestDataGenerator: Send + Sync {
         project_context: &str,
         count: usize,
         sprint_duration_days: i32,
+        language: Option<&str>,
     ) -> DomainResult<Vec<GeneratedIssue>>;
+}
+
+/// Helper function to get language instruction for prompts
+fn get_language_instruction(language: Option<&str>) -> String {
+    match language {
+        Some("ja") | Some("japanese") => {
+            "IMPORTANT: Generate ALL issue titles, descriptions, and content in Japanese (日本語). Use Japanese developer names for team members.".to_string()
+        }
+        Some("en") | Some("english") => {
+            "Generate all content in English.".to_string()
+        }
+        Some(lang) => {
+            format!("Generate all content in {}.", lang)
+        }
+        None => {
+            "Generate content in the same language as the project context. If the project context is in Japanese, generate Japanese content.".to_string()
+        }
+    }
 }
 
 #[async_trait]
@@ -319,10 +340,13 @@ impl AiTestDataGenerator for ClaudeClient {
         project_context: &str,
         team_size: usize,
         sprint_duration_days: i32,
+        language: Option<&str>,
     ) -> DomainResult<SprintScenario> {
         let system = r#"You are a JIRA test data generator. Generate realistic sprint data for software development projects.
 Your response must be valid JSON matching the expected schema exactly.
 Use realistic software development terminology and create believable issue hierarchies."#;
+
+        let language_instruction = get_language_instruction(language);
 
         let prompt = format!(
             r#"Generate a realistic sprint scenario for the following project:
@@ -330,6 +354,8 @@ Use realistic software development terminology and create believable issue hiera
 Project Context: {}
 Team Size: {} developers
 Sprint Duration: {} days
+
+{}
 
 Generate a JSON object with this exact structure:
 {{
@@ -375,12 +401,11 @@ Requirements:
    - Use "relates_to" for issues that are related but not blocking (use array index)
    - Stories should often block related Tasks
    - Bugs may be blocked by the fix Task
-   - Example: if issue at index 2 blocks issue at index 5, then issue[2].blocks = [5]
-
-Generate Japanese issue titles and descriptions if the project context is in Japanese."#,
+   - Example: if issue at index 2 blocks issue at index 5, then issue[2].blocks = [5]"#,
             project_context,
             team_size,
             sprint_duration_days,
+            language_instruction,
             sprint_duration_days,
             sprint_duration_days,
             sprint_duration_days,
@@ -394,15 +419,20 @@ Generate Japanese issue titles and descriptions if the project context is in Jap
         &self,
         project_context: &str,
         epic_theme: &str,
+        language: Option<&str>,
     ) -> DomainResult<Vec<GeneratedIssue>> {
         let system = r#"You are a JIRA test data generator. Generate realistic epic hierarchies for software development projects.
 Your response must be valid JSON array matching the expected schema exactly."#;
+
+        let language_instruction = get_language_instruction(language);
 
         let prompt = format!(
             r#"Generate an epic with related stories and tasks for:
 
 Project Context: {}
 Epic Theme: {}
+
+{}
 
 Generate a JSON array with this structure:
 [
@@ -439,9 +469,8 @@ Requirements:
 2. Create 3-5 Stories under the epic
 3. Create 1-2 Tasks for each story (technical tasks)
 4. Set parent_key to "EPIC" for stories (will be replaced with actual key)
-5. Use realistic story points (1, 2, 3, 5, 8)
-6. Generate Japanese content if the project context is in Japanese"#,
-            project_context, epic_theme
+5. Use realistic story points (1, 2, 3, 5, 8)"#,
+            project_context, epic_theme, language_instruction
         );
 
         self.generate_json(&prompt, Some(system)).await
@@ -452,15 +481,20 @@ Requirements:
         project_context: &str,
         count: usize,
         sprint_duration_days: i32,
+        language: Option<&str>,
     ) -> DomainResult<Vec<GeneratedIssue>> {
         let system = r#"You are a JIRA test data generator. Generate realistic bugs for software development projects.
 Your response must be valid JSON array matching the expected schema exactly."#;
+
+        let language_instruction = get_language_instruction(language);
 
         let prompt = format!(
             r#"Generate {} realistic bugs for:
 
 Project Context: {}
 Sprint Duration: {} days
+
+{}
 
 Generate a JSON array of bugs:
 [
@@ -484,11 +518,11 @@ Requirements:
 2. Mix of priorities (some critical, some minor)
 3. Some bugs fixed quickly, some take longer
 4. Some bugs not yet fixed (completed_day_offset: null)
-5. Realistic bug descriptions with reproduction steps
-6. Generate Japanese content if the project context is in Japanese"#,
+5. Realistic bug descriptions with reproduction steps"#,
             count,
             project_context,
             sprint_duration_days,
+            language_instruction,
             sprint_duration_days - 2
         );
 
@@ -608,7 +642,10 @@ impl AiTestDataGenerator for ClaudeCliClient {
         project_context: &str,
         team_size: usize,
         sprint_duration_days: i32,
+        language: Option<&str>,
     ) -> DomainResult<SprintScenario> {
+        let language_instruction = get_language_instruction(language);
+
         let prompt = format!(
             r#"You are a JIRA test data generator. Generate realistic sprint data for software development projects.
 
@@ -617,6 +654,8 @@ Generate a realistic sprint scenario for the following project:
 Project Context: {}
 Team Size: {} developers
 Sprint Duration: {} days
+
+{}
 
 Generate a JSON object with this exact structure:
 {{
@@ -664,12 +703,11 @@ Requirements:
    - Bugs may be blocked by the fix Task
    - Example: if issue at index 2 blocks issue at index 5, then issue[2].blocks = [5]
 
-Generate Japanese issue titles and descriptions if the project context is in Japanese.
-
 Respond with valid JSON only."#,
             project_context,
             team_size,
             sprint_duration_days,
+            language_instruction,
             sprint_duration_days,
             sprint_duration_days,
             sprint_duration_days,
@@ -683,7 +721,10 @@ Respond with valid JSON only."#,
         &self,
         project_context: &str,
         epic_theme: &str,
+        language: Option<&str>,
     ) -> DomainResult<Vec<GeneratedIssue>> {
+        let language_instruction = get_language_instruction(language);
+
         let prompt = format!(
             r#"You are a JIRA test data generator. Generate realistic epic hierarchies for software development projects.
 
@@ -691,6 +732,8 @@ Generate an epic with related stories and tasks for:
 
 Project Context: {}
 Epic Theme: {}
+
+{}
 
 Generate a JSON array with this structure:
 [
@@ -728,10 +771,9 @@ Requirements:
 3. Create 1-2 Tasks for each story (technical tasks)
 4. Set parent_key to "EPIC" for stories (will be replaced with actual key)
 5. Use realistic story points (1, 2, 3, 5, 8)
-6. Generate Japanese content if the project context is in Japanese
 
 Respond with valid JSON only."#,
-            project_context, epic_theme
+            project_context, epic_theme, language_instruction
         );
 
         self.generate_json(&prompt).await
@@ -742,7 +784,10 @@ Respond with valid JSON only."#,
         project_context: &str,
         count: usize,
         sprint_duration_days: i32,
+        language: Option<&str>,
     ) -> DomainResult<Vec<GeneratedIssue>> {
+        let language_instruction = get_language_instruction(language);
+
         let prompt = format!(
             r#"You are a JIRA test data generator. Generate realistic bugs for software development projects.
 
@@ -750,6 +795,8 @@ Generate {} realistic bugs for:
 
 Project Context: {}
 Sprint Duration: {} days
+
+{}
 
 Generate a JSON array of bugs:
 [
@@ -774,12 +821,12 @@ Requirements:
 3. Some bugs fixed quickly, some take longer
 4. Some bugs not yet fixed (completed_day_offset: null)
 5. Realistic bug descriptions with reproduction steps
-6. Generate Japanese content if the project context is in Japanese
 
 Respond with valid JSON only."#,
             count,
             project_context,
             sprint_duration_days,
+            language_instruction,
             sprint_duration_days - 2
         );
 
