@@ -30,6 +30,7 @@ export class SyncComponent implements OnInit, OnDestroy {
   // Progress tracking
   currentProgress = signal<SyncProgress | null>(null);
   progressHistory = signal<SyncProgress[]>([]);
+  showProgressPanel = signal(false);
 
   ngOnInit(): void {
     this.loadProjects();
@@ -84,6 +85,7 @@ export class SyncComponent implements OnInit, OnDestroy {
     this.syncResults.set([]);
     this.currentProgress.set(null);
     this.progressHistory.set([]);
+    this.showProgressPanel.set(true);
 
     const useForce = force ?? this.forceFullSync();
     const request = {
@@ -95,7 +97,7 @@ export class SyncComponent implements OnInit, OnDestroy {
       next: (response) => {
         this.syncResults.set(response.results);
         this.syncing.set(false);
-        this.currentProgress.set(null);
+        // Keep currentProgress and progressHistory visible after completion
         // Reset force checkbox after sync
         this.forceFullSync.set(false);
         // Refresh projects to update last_synced
@@ -104,9 +106,15 @@ export class SyncComponent implements OnInit, OnDestroy {
       error: (err) => {
         this.error.set('Sync failed: ' + err);
         this.syncing.set(false);
-        this.currentProgress.set(null);
+        // Keep progress panel visible on error too
       }
     });
+  }
+
+  dismissProgressPanel(): void {
+    this.showProgressPanel.set(false);
+    this.currentProgress.set(null);
+    this.progressHistory.set([]);
   }
 
   toggleForceSync(): void {
