@@ -550,10 +550,17 @@ async fn handle_sync(
                 result.sync_result.issues_synced, result.sync_result.history_items_synced, key
             );
 
-            // Clear checkpoint on success
+            // Clear checkpoint on success and update last_synced with last issue's updated date
             let mut settings = Settings::load(&settings_path)?;
             if let Some(p) = settings.find_project_mut(&key) {
-                p.last_synced = Some(Utc::now());
+                // Use the last issue's updated_at for reliable incremental sync
+                if let Some(last_updated) = result.sync_result.last_issue_updated_at {
+                    p.last_synced = Some(last_updated);
+                } else if p.last_synced.is_none() {
+                    // First sync with no issues: set to current time
+                    p.last_synced = Some(Utc::now());
+                }
+                // Otherwise, keep the existing last_synced
                 p.sync_checkpoint = None;
             }
             settings.save(&settings_path)?;
@@ -679,7 +686,14 @@ async fn handle_sync(
                         );
                         let mut settings = Settings::load(&settings_path)?;
                         if let Some(p) = settings.find_project_mut(&key) {
-                            p.last_synced = Some(Utc::now());
+                            // Use the last issue's updated_at for reliable incremental sync
+                            if let Some(last_updated) = result.sync_result.last_issue_updated_at {
+                                p.last_synced = Some(last_updated);
+                            } else if p.last_synced.is_none() {
+                                // First sync with no issues: set to current time
+                                p.last_synced = Some(Utc::now());
+                            }
+                            // Otherwise, keep the existing last_synced
                             p.sync_checkpoint = None;
                         }
                         settings.save(&settings_path)?;
