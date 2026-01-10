@@ -1,8 +1,11 @@
-import { Component, OnInit, signal, inject } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, OnInit, OnDestroy, signal, inject, PLATFORM_ID } from '@angular/core';
+import { CommonModule, isPlatformBrowser } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Project, SyncResult } from '../../generated/models';
+import { Project, SyncResult, SyncProgress } from '../../generated/models';
 import { API_SERVICE, IApiService } from '../../api.provider';
+
+// Tauri event types
+type UnlistenFn = () => void;
 
 @Component({
   selector: 'app-sync',
@@ -11,8 +14,10 @@ import { API_SERVICE, IApiService } from '../../api.provider';
   templateUrl: './sync.component.html',
   styleUrl: './sync.component.scss'
 })
-export class SyncComponent implements OnInit {
+export class SyncComponent implements OnInit, OnDestroy {
   private api = inject<IApiService>(API_SERVICE);
+  private platformId = inject(PLATFORM_ID);
+  private unlisten: UnlistenFn | null = null;
 
   projects = signal<Project[]>([]);
   loading = signal(true);
@@ -22,8 +27,41 @@ export class SyncComponent implements OnInit {
   syncResults = signal<SyncResult[]>([]);
   error = signal<string | null>(null);
 
+  // Progress tracking
+  currentProgress = signal<SyncProgress | null>(null);
+  progressHistory = signal<SyncProgress[]>([]);
+
   ngOnInit(): void {
     this.loadProjects();
+    this.setupProgressListener();
+  }
+
+  ngOnDestroy(): void {
+    if (this.unlisten) {
+      this.unlisten();
+    }
+  }
+
+  private async setupProgressListener(): Promise<void> {
+    // Only setup listener in browser (Tauri) environment
+    if (!isPlatformBrowser(this.platformId)) {
+      return;
+    }
+
+    try {
+      // Dynamic import to avoid SSR issues
+      const { listen } = await import('@tauri-apps/api/event');
+      this.unlisten = await listen<SyncProgress>('sync-progress', (event) => {
+        const progress = event.payload;
+        this.currentProgress.set(progress);
+
+        // Add to history
+        this.progressHistory.update(history => [...history, progress]);
+      });
+    } catch (e) {
+      // Not running in Tauri, ignore
+      console.debug('Tauri event listener not available:', e);
+    }
   }
 
   loadProjects(): void {
@@ -44,6 +82,8 @@ export class SyncComponent implements OnInit {
     this.syncing.set(true);
     this.error.set(null);
     this.syncResults.set([]);
+    this.currentProgress.set(null);
+    this.progressHistory.set([]);
 
     const useForce = force ?? this.forceFullSync();
     const request = {
@@ -55,6 +95,7 @@ export class SyncComponent implements OnInit {
       next: (response) => {
         this.syncResults.set(response.results);
         this.syncing.set(false);
+        this.currentProgress.set(null);
         // Reset force checkbox after sync
         this.forceFullSync.set(false);
         // Refresh projects to update last_synced
@@ -63,6 +104,7 @@ export class SyncComponent implements OnInit {
       error: (err) => {
         this.error.set('Sync failed: ' + err);
         this.syncing.set(false);
+        this.currentProgress.set(null);
       }
     });
   }
@@ -92,5 +134,17 @@ export class SyncComponent implements OnInit {
     if (!dateStr) return 'Never';
     const date = new Date(dateStr);
     return date.toLocaleString();
+  }
+
+  getPhaseLabel(phase: string): string {
+    const labels: Record<string, string> = {
+      'fields': 'Syncing Fields',
+      'columns': 'Adding Columns',
+      'issues': 'Fetching Issues',
+      'expand': 'Expanding Data',
+      'views': 'Creating Views',
+      'complete': 'Complete'
+    };
+    return labels[phase] || phase;
   }
 }

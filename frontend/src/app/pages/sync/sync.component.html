@@ -52,6 +52,50 @@
       </div>
     }
 
+    <!-- Sync Progress -->
+    @if (syncing() && currentProgress()) {
+      <div class="sync-progress">
+        <h3>Sync Progress</h3>
+        <div class="progress-card">
+          <div class="progress-header">
+            <span class="project-key">{{ currentProgress()!.projectKey }}</span>
+            <span class="phase-label">{{ getPhaseLabel(currentProgress()!.phase) }}</span>
+          </div>
+          @if (currentProgress()!.total > 0) {
+            <div class="progress-bar-container">
+              <div
+                class="progress-bar"
+                [style.width.%]="(currentProgress()!.current / currentProgress()!.total) * 100"
+              ></div>
+            </div>
+            <div class="progress-stats">
+              <span class="progress-count">{{ currentProgress()!.current }} / {{ currentProgress()!.total }}</span>
+              <span class="progress-percent">{{ ((currentProgress()!.current / currentProgress()!.total) * 100).toFixed(0) }}%</span>
+            </div>
+          }
+          <div class="progress-message">{{ currentProgress()!.message }}</div>
+        </div>
+
+        <!-- Progress History Log -->
+        @if (progressHistory().length > 0) {
+          <div class="progress-log">
+            <details>
+              <summary>Progress Log ({{ progressHistory().length }} events)</summary>
+              <div class="log-entries">
+                @for (entry of progressHistory(); track $index) {
+                  <div class="log-entry">
+                    <span class="log-project">{{ entry.projectKey }}</span>
+                    <span class="log-phase">{{ getPhaseLabel(entry.phase) }}</span>
+                    <span class="log-message">{{ entry.message }}</span>
+                  </div>
+                }
+              </div>
+            </details>
+          </div>
+        }
+      </div>
+    }
+
     <!-- Project Status -->
     <div class="project-status">
       <h3>Enabled Projects</h3>

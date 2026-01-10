@@ -1,7 +1,7 @@
 //! Sync command handlers
 
 use std::sync::Arc;
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
 
 use chrono::Duration;
 use jira_db_core::{
@@ -58,9 +58,29 @@ pub struct SyncExecuteResponseExtended {
     pub total_fields_synced: i32,
 }
 
+/// Emit sync progress event to frontend
+fn emit_progress(
+    app: &AppHandle,
+    project_key: &str,
+    phase: &str,
+    current: i32,
+    total: i32,
+    message: &str,
+) {
+    let progress = SyncProgress {
+        project_key: project_key.to_string(),
+        phase: phase.to_string(),
+        current,
+        total,
+        message: message.to_string(),
+    };
+    let _ = app.emit("sync-progress", &progress);
+}
+
 /// Execute sync for enabled projects with automatic fields expansion
 #[tauri::command]
 pub async fn sync_execute(
+    app: AppHandle,
     state: State<'_, AppState>,
     request: SyncExecuteRequest,
 ) -> Result<SyncExecuteResponseExtended, String> {
@@ -219,6 +239,7 @@ pub async fn sync_execute(
             SyncFieldsUseCase::new(jira_client.clone(), field_repo, expanded_repo);
 
         // Step 1: Sync fields from JIRA
+        emit_progress(&app, key, "fields", 0, 5, "Fetching JIRA fields...");
         log_info!(log, "[{}] Fetching JIRA fields...", key);
         let fields_synced = fields_use_case
             .sync_fields()
@@ -228,6 +249,7 @@ pub async fn sync_execute(
         total_fields_synced = fields_synced;
 
         // Step 2: Add columns based on fields
+        emit_progress(&app, key, "columns", 1, 5, "Adding database columns...");
         log_info!(log, "[{}] Adding database columns...", key);
         let added_columns = fields_use_case.add_columns().map_err(|e| e.to_string())?;
         let total_columns_added = added_columns.len() as i32;
@@ -242,6 +264,7 @@ pub async fn sync_execute(
         }
 
         // Step 3: Execute resumable sync with checkpoint support
+        emit_progress(&app, key, "issues", 2, 5, "Fetching issues from JIRA...");
         log_info!(log, "[{}] Fetching issues from JIRA...", key);
 
         // Clone values for the checkpoint callback
@@ -262,6 +285,7 @@ pub async fn sync_execute(
             .await;
 
         // Step 4: Expand issues for this project
+        emit_progress(&app, key, "expand", 3, 5, "Expanding issues...");
         log_info!(log, "[{}] Expanding issues...", key);
         let (issues_expanded, expand_error) = match fields_use_case.expand_issues(Some(id)) {
             Ok(count) => {
@@ -275,6 +299,7 @@ pub async fn sync_execute(
         };
 
         // Step 5: Create readable views
+        emit_progress(&app, key, "views", 4, 5, "Creating readable views...");
         log_info!(log, "[{}] Creating readable views...", key);
         if let Err(e) = fields_use_case.create_readable_view() {
             log_warn!(log, "[{}] Failed to create readable view: {}", key, e);
@@ -297,6 +322,17 @@ pub async fn sync_execute(
                 let success = sync_result.success && error.is_none();
 
                 if success {
+                    emit_progress(
+                        &app,
+                        key,
+                        "complete",
+                        5,
+                        5,
+                        &format!(
+                            "Completed: {} issues in {:.1}s",
+                            sync_result.issues_synced, duration
+                        ),
+                    );
                     log_info!(
                         log,
                         "[{}] Sync completed: {} issues in {:.1}s",

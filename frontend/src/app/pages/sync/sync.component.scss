@@ -266,3 +266,139 @@
   color: #dc2626;
   font-size: 0.875rem;
 }
+
+// Sync Progress Styles
+.sync-progress {
+  margin-bottom: 1.5rem;
+
+  h3 {
+    margin: 0 0 1rem;
+    color: #333;
+    font-size: 1.125rem;
+  }
+}
+
+.progress-card {
+  background: white;
+  border-radius: 8px;
+  padding: 1rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  border-left: 4px solid #4a4ae0;
+
+  .progress-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+
+    .project-key {
+      font-weight: 600;
+      color: #4a4ae0;
+    }
+
+    .phase-label {
+      font-size: 0.875rem;
+      color: #666;
+      font-weight: 500;
+    }
+  }
+
+  .progress-bar-container {
+    height: 8px;
+    background: #e5e7eb;
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 0.5rem;
+  }
+
+  .progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #4a4ae0 0%, #6366f1 100%);
+    border-radius: 4px;
+    transition: width 0.3s ease;
+  }
+
+  .progress-stats {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.75rem;
+    color: #666;
+    margin-bottom: 0.5rem;
+
+    .progress-count {
+      font-family: monospace;
+    }
+
+    .progress-percent {
+      font-weight: 500;
+      color: #4a4ae0;
+    }
+  }
+
+  .progress-message {
+    font-size: 0.875rem;
+    color: #374151;
+    padding: 0.5rem;
+    background: #f9fafb;
+    border-radius: 4px;
+    font-family: monospace;
+  }
+}
+
+.progress-log {
+  margin-top: 1rem;
+
+  details {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+
+    summary {
+      padding: 0.75rem 1rem;
+      cursor: pointer;
+      font-size: 0.875rem;
+      color: #666;
+      background: #f9fafb;
+      border-bottom: 1px solid #e5e7eb;
+
+      &:hover {
+        background: #f3f4f6;
+      }
+    }
+  }
+
+  .log-entries {
+    max-height: 200px;
+    overflow-y: auto;
+  }
+
+  .log-entry {
+    display: flex;
+    gap: 0.75rem;
+    padding: 0.5rem 1rem;
+    font-size: 0.75rem;
+    border-bottom: 1px solid #f3f4f6;
+
+    &:last-child {
+      border-bottom: none;
+    }
+
+    .log-project {
+      font-weight: 500;
+      color: #4a4ae0;
+      min-width: 60px;
+    }
+
+    .log-phase {
+      color: #666;
+      min-width: 100px;
+    }
+
+    .log-message {
+      color: #374151;
+      font-family: monospace;
+      flex: 1;
+    }
+  }
+}
