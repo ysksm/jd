@@ -37,6 +37,10 @@ export class SettingsComponent implements OnInit {
   logLevel = signal('info');
   logMaxFiles = signal(10);
 
+  // Sync settings
+  syncIncrementalEnabled = signal(true);
+  syncMarginMinutes = signal(5);
+
   // Multiple endpoints support
   endpoints = signal<JiraEndpoint[]>([]);
   activeEndpoint = signal<string | null>(null);
@@ -85,6 +89,11 @@ export class SettingsComponent implements OnInit {
       this.logFileDir.set(settings.log.fileDir || '');
       this.logLevel.set(settings.log.level);
       this.logMaxFiles.set(settings.log.maxFiles);
+    }
+
+    if (settings.sync) {
+      this.syncIncrementalEnabled.set(settings.sync.incrementalSyncEnabled);
+      this.syncMarginMinutes.set(settings.sync.incrementalSyncMarginMinutes);
     }
 
     // Populate endpoints
@@ -280,6 +289,10 @@ export class SettingsComponent implements OnInit {
         fileDir: this.logFileDir() || undefined,
         level: this.logLevel(),
         maxFiles: this.logMaxFiles()
+      },
+      sync: {
+        incrementalSyncEnabled: this.syncIncrementalEnabled(),
+        incrementalSyncMarginMinutes: this.syncMarginMinutes()
       }
     }).subscribe({
       next: (response) => {

@@ -181,12 +181,18 @@ export interface LogConfig {
   maxFiles: number;
 }
 
+export interface SyncConfig {
+  incrementalSyncEnabled: boolean;
+  incrementalSyncMarginMinutes: number;
+}
+
 export interface Settings {
   jira: JiraConfig;
   database: DatabaseConfig;
   projects: ProjectConfig[];
   embeddings?: EmbeddingsConfig;
   log?: LogConfig;
+  sync?: SyncConfig;
   /** Multiple JIRA endpoints (new) */
   jiraEndpoints?: JiraEndpoint[];
   /** Active endpoint name (new) */
@@ -210,6 +216,7 @@ export interface ConfigUpdateRequest {
   database?: DatabaseConfig;
   embeddings?: EmbeddingsConfig;
   log?: LogConfig;
+  sync?: SyncConfig;
   /** Add a new endpoint */
   addEndpoint?: JiraEndpoint;
   /** Remove an endpoint by name */
