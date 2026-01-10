@@ -1037,6 +1037,22 @@ fn handle_config_show(settings_path: &std::path::Path) -> DomainResult<()> {
         }
     );
 
+    // Show sync settings
+    let sync_settings = settings.get_sync_settings();
+    println!("\nSync Settings:");
+    println!(
+        "  Incremental Sync: {}",
+        if sync_settings.incremental_sync_enabled {
+            "enabled"
+        } else {
+            "disabled"
+        }
+    );
+    println!(
+        "  Safety Margin: {} minutes",
+        sync_settings.incremental_sync_margin_minutes
+    );
+
     Ok(())
 }
 
@@ -1059,9 +1075,36 @@ fn handle_config_set(settings_path: &std::path::Path, key: &str, value: &str) ->
         "debug_mode" => {
             settings.debug_mode = value.to_lowercase() == "true" || value == "1";
         }
+        "sync.incremental_sync_enabled" => {
+            let enabled = value.to_lowercase() == "true" || value == "1";
+            let mut sync_settings = settings.get_sync_settings();
+            sync_settings.incremental_sync_enabled = enabled;
+            settings.sync = Some(sync_settings);
+            println!(
+                "Incremental sync {}",
+                if enabled { "enabled" } else { "disabled" }
+            );
+        }
+        "sync.incremental_sync_margin_minutes" => {
+            let margin: u32 = value.parse().map_err(|_| {
+                DomainError::Validation(format!(
+                    "Invalid value '{}': must be a positive integer",
+                    value
+                ))
+            })?;
+            let mut sync_settings = settings.get_sync_settings();
+            sync_settings.incremental_sync_margin_minutes = margin;
+            settings.sync = Some(sync_settings);
+            println!("Set incremental sync margin to {} minutes", margin);
+        }
         _ => {
             return Err(DomainError::Validation(format!(
-                "Unknown configuration key: {}. Use 'endpoint' commands to manage JIRA endpoints.",
+                "Unknown configuration key: {}. Available keys:\n  \
+                - active_endpoint\n  \
+                - database.database_dir\n  \
+                - debug_mode\n  \
+                - sync.incremental_sync_enabled\n  \
+                - sync.incremental_sync_margin_minutes",
                 key
             )));
         }
