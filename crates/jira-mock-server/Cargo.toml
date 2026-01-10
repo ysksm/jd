@@ -1,0 +1,22 @@
+[package]
+name = "jira-mock-server"
+version = "0.1.0"
+edition = "2024"
+description = "Mock JIRA API server for testing and development"
+
+[[bin]]
+name = "jira-mock-server"
+path = "src/main.rs"
+
+[dependencies]
+axum = "0.8"
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tower-http = { version = "0.6", features = ["cors", "trace"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.0", features = ["v4", "serde"] }
+parking_lot = "0.12"
+clap = { version = "4.5", features = ["derive"] }

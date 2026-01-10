@@ -6,6 +6,7 @@ members = [
     "crates/jira-db-service",
     "crates/jira-db-web",
     "crates/jira-db-tauri/src-tauri",
+    "crates/jira-mock-server",
 ]
 resolver = "2"
 default-members = ["crates/jira-db-cli"]
