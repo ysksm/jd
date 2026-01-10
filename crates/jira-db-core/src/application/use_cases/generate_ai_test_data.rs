@@ -75,6 +75,17 @@ impl IssueTypeMapper {
             }
         }
 
+        // Fallback mappings: if Story is not available, map to Task
+        if !type_map.contains_key("Story") {
+            if let Some(task_type) = type_map.get("Task") {
+                log::info!(
+                    "Story type not available, falling back to Task type: {}",
+                    task_type
+                );
+                type_map.insert("Story".to_string(), task_type.clone());
+            }
+        }
+
         Self { type_map }
     }
 
