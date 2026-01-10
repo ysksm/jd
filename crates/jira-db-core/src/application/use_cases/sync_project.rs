@@ -472,7 +472,8 @@ where
         summary.local_snapshot_count = snapshot_count;
 
         // Get the last issue's updated_date for incremental sync
-        let last_issue_updated_at = all_issues.last().and_then(|issue| issue.updated_date);
+        // Use the checkpoint's value which is guaranteed to be set (with Utc::now() fallback)
+        let last_issue_updated_at = last_checkpoint.as_ref().map(|cp| cp.last_issue_updated_at);
         summary.last_issue_updated_at = last_issue_updated_at;
 
         step4.finish();
