@@ -90,6 +90,7 @@ pub async fn projects_initialize(
     Ok(ProjectInitResponse {
         projects,
         new_count,
+        endpoint_results: None,
     })
 }
 

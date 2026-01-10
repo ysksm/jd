@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 /// JiraDb API Definition
-/// 
+///
 /// Design principles:
 /// - All operations use POST method (RPC-style)
 /// - Parameters are passed in request body
@@ -337,8 +337,7 @@ pub struct ProjectConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ConfigGetRequest {
-}
+pub struct ConfigGetRequest {}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -398,8 +397,7 @@ pub struct ConfigInitResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ProjectListRequest {
-}
+pub struct ProjectListRequest {}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -483,8 +481,7 @@ pub struct SyncExecuteResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SyncStatusRequest {
-}
+pub struct SyncStatusRequest {}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -667,8 +664,7 @@ pub struct SqlGetSchemaResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SqlQueryListRequest {
-}
+pub struct SqlQueryListRequest {}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -747,8 +743,7 @@ pub struct IssueTypeInfo {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct DebugStatusRequest {
-}
+pub struct DebugStatusRequest {}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -987,8 +982,7 @@ pub struct DebugAiGenerateResponse {
 /// Request to check AI configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct DebugAiStatusRequest {
-}
+pub struct DebugAiStatusRequest {}
 
 /// Response for AI configuration status
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1003,4 +997,3 @@ pub struct DebugAiStatusResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub api_key_configured: Option<bool>,
 }
-
