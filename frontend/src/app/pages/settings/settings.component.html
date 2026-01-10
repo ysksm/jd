@@ -48,13 +48,15 @@
             </div>
 
             <div class="endpoint-actions">
-              <button
-                type="button"
-                class="btn btn-sm btn-secondary"
-                (click)="showAddEndpoint.set(!showAddEndpoint())"
-              >
-                {{ showAddEndpoint() ? 'Cancel' : '+ Add Endpoint' }}
-              </button>
+              @if (!showAddEndpoint()) {
+                <button
+                  type="button"
+                  class="btn btn-sm btn-secondary"
+                  (click)="showAddEndpoint.set(true)"
+                >
+                  + Add Endpoint
+                </button>
+              }
               @if (endpoints().length > 1) {
                 <button
                   type="button"
@@ -72,7 +74,7 @@
             <div class="add-endpoint-form">
               <h4>Add New Endpoint</h4>
               <div class="form-group">
-                <label for="newEndpointName">Endpoint Name (ID)</label>
+                <label for="newEndpointName">Endpoint Name (ID) *</label>
                 <input
                   type="text"
                   id="newEndpointName"
@@ -93,15 +95,57 @@
                   placeholder="e.g., Production Server"
                 />
               </div>
-              <p class="form-hint">Fill in the endpoint details below, then click "Add Endpoint"</p>
-              <button
-                type="button"
-                class="btn btn-primary"
-                (click)="addEndpoint()"
-                [disabled]="saving()"
-              >
-                Add Endpoint
-              </button>
+              <div class="form-group">
+                <label for="newEndpointUrl">Endpoint URL *</label>
+                <input
+                  type="url"
+                  id="newEndpointUrl"
+                  name="newEndpointUrl"
+                  [ngModel]="newEndpointUrl()"
+                  (ngModelChange)="newEndpointUrl.set($event)"
+                  placeholder="https://your-domain.atlassian.net"
+                />
+              </div>
+              <div class="form-group">
+                <label for="newEndpointUsername">Username / Email *</label>
+                <input
+                  type="email"
+                  id="newEndpointUsername"
+                  name="newEndpointUsername"
+                  [ngModel]="newEndpointUsername()"
+                  (ngModelChange)="newEndpointUsername.set($event)"
+                  placeholder="user@example.com"
+                />
+              </div>
+              <div class="form-group">
+                <label for="newEndpointApiKey">API Key *</label>
+                <input
+                  type="password"
+                  id="newEndpointApiKey"
+                  name="newEndpointApiKey"
+                  [ngModel]="newEndpointApiKey()"
+                  (ngModelChange)="newEndpointApiKey.set($event)"
+                  placeholder="Enter your JIRA API key"
+                />
+              </div>
+              <div class="form-actions">
+                <button
+                  type="button"
+                  class="btn btn-primary"
+                  (click)="addEndpoint()"
+                  [disabled]="saving()"
+                >
+                  Add Endpoint
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-secondary"
+                  (click)="resetNewEndpointForm()"
+                  [disabled]="saving()"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           }
         }
