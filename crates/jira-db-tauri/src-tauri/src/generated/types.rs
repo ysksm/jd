@@ -300,6 +300,18 @@ pub struct LogConfig {
     pub max_files: i32,
 }
 
+/// Sync configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncConfig {
+    /// Enable incremental sync (only fetch issues updated since last sync)
+    #[serde(rename = "incrementalSyncEnabled")]
+    pub incremental_sync_enabled: bool,
+    /// Safety margin in minutes for incremental sync
+    #[serde(rename = "incrementalSyncMarginMinutes")]
+    pub incremental_sync_margin_minutes: i32,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Settings {
@@ -310,6 +322,9 @@ pub struct Settings {
     pub embeddings: Option<EmbeddingsConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub log: Option<LogConfig>,
+    /// Sync configuration
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sync: Option<SyncConfig>,
     /// Multiple JIRA endpoints
     #[serde(rename = "jiraEndpoints")]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -348,6 +363,9 @@ pub struct ConfigUpdateRequest {
     pub embeddings: Option<EmbeddingsConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub log: Option<LogConfig>,
+    /// Sync configuration
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sync: Option<SyncConfig>,
     /// Add a new endpoint
     #[serde(rename = "addEndpoint")]
     #[serde(skip_serializing_if = "Option::is_none")]
