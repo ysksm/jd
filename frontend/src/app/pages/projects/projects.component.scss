@@ -10,6 +10,73 @@
   justify-content: space-between;
   align-items: center;
   margin-bottom: 1.5rem;
+
+  .fetch-controls {
+    display: flex;
+    gap: 0.5rem;
+  }
+}
+
+.fetch-options {
+  background: white;
+  padding: 1rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+
+  label {
+    font-weight: 500;
+    color: #374151;
+  }
+
+  select {
+    padding: 0.5rem 1rem;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    min-width: 200px;
+  }
+}
+
+.fetch-results {
+  background: white;
+  padding: 1rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+
+  h4 {
+    margin: 0 0 0.75rem 0;
+    color: #374151;
+    font-size: 0.875rem;
+  }
+
+  ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  li {
+    padding: 0.5rem 0;
+    border-bottom: 1px solid #e5e7eb;
+    font-size: 0.875rem;
+
+    &:last-child {
+      border-bottom: none;
+    }
+
+    &.success {
+      color: #16a34a;
+    }
+
+    &.error {
+      color: #dc2626;
+    }
+  }
 }
 
 .stats {

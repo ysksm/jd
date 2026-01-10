@@ -243,11 +243,24 @@ export interface ProjectListResponse {
 }
 
 export interface ProjectInitRequest {
+  /** Specific endpoint name to fetch from. If not provided, uses active endpoint. */
+  endpointName?: string;
+  /** If true, fetch from all configured endpoints */
+  allEndpoints?: boolean;
 }
 
 export interface ProjectInitResponse {
   projects: Project[];
   newCount: number;
+  /** Results per endpoint when fetching from multiple endpoints */
+  endpointResults?: EndpointFetchResult[];
+}
+
+export interface EndpointFetchResult {
+  endpointName: string;
+  projectCount: number;
+  success: boolean;
+  error?: string;
 }
 
 export interface ProjectEnableRequest {

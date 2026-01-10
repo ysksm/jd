@@ -1,13 +1,14 @@
 import { Component, OnInit, signal, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
-import { Project } from '../../generated/models';
+import { Project, JiraEndpoint, EndpointFetchResult } from '../../generated/models';
 import { API_SERVICE, IApiService } from '../../api.provider';
 
 @Component({
   selector: 'app-projects',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, FormsModule],
   templateUrl: './projects.component.html',
   styleUrl: './projects.component.scss'
 })
@@ -21,8 +22,30 @@ export class ProjectsComponent implements OnInit {
   error = signal<string | null>(null);
   success = signal<string | null>(null);
 
+  // Endpoint selection
+  endpoints = signal<JiraEndpoint[]>([]);
+  activeEndpoint = signal<string | null>(null);
+  showFetchOptions = signal(false);
+  selectedFetchEndpoint = signal<string>('active'); // 'active', 'all', or endpoint name
+  lastFetchResults = signal<EndpointFetchResult[] | null>(null);
+
   ngOnInit(): void {
+    this.loadSettings();
     this.loadProjects();
+  }
+
+  loadSettings(): void {
+    this.api.configGet({}).subscribe({
+      next: (response) => {
+        if (response.settings.jiraEndpoints) {
+          this.endpoints.set(response.settings.jiraEndpoints);
+        }
+        this.activeEndpoint.set(response.settings.activeEndpoint || null);
+      },
+      error: () => {
+        // Ignore settings load error
+      }
+    });
   }
 
   loadProjects(): void {
@@ -42,21 +65,54 @@ export class ProjectsComponent implements OnInit {
   }
 
   initializeProjects(): void {
+    const selection = this.selectedFetchEndpoint();
+
     this.syncing.set(true);
     this.error.set(null);
     this.success.set(null);
+    this.lastFetchResults.set(null);
 
-    this.api.projectsInitialize({}).subscribe({
+    const request: { endpointName?: string; allEndpoints?: boolean } = {};
+
+    if (selection === 'all') {
+      request.allEndpoints = true;
+    } else if (selection !== 'active') {
+      request.endpointName = selection;
+    }
+    // If 'active', send empty request (uses active endpoint)
+
+    this.api.projectsInitialize(request).subscribe({
       next: (response) => {
         this.projects.set(response.projects);
-        this.success.set(`Fetched ${response.newCount} projects from JIRA`);
+
+        if (response.endpointResults && response.endpointResults.length > 0) {
+          this.lastFetchResults.set(response.endpointResults);
+          const successCount = response.endpointResults.filter(r => r.success).length;
+          const totalEndpoints = response.endpointResults.length;
+          this.success.set(
+            `Fetched from ${successCount}/${totalEndpoints} endpoints. ` +
+            `${response.newCount} new projects added.`
+          );
+        } else {
+          this.success.set(`Fetched ${response.newCount} new projects from JIRA`);
+        }
+
         this.syncing.set(false);
+        this.showFetchOptions.set(false);
       },
       error: (err) => {
         this.error.set('Failed to fetch projects: ' + err);
         this.syncing.set(false);
       }
     });
+  }
+
+  getEndpointDisplayName(endpoint: JiraEndpoint): string {
+    return endpoint.displayName || endpoint.name;
+  }
+
+  hasMultipleEndpoints(): boolean {
+    return this.endpoints().length > 1;
   }
 
   enableProject(key: string): void {
