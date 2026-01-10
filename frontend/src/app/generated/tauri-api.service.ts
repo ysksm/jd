@@ -11,6 +11,10 @@ import {
   ConfigInitResponse,
   ConfigUpdateRequest,
   ConfigUpdateResponse,
+  DebugAiGenerateRequest,
+  DebugAiGenerateResponse,
+  DebugAiStatusRequest,
+  DebugAiStatusResponse,
   DebugBulkTransitionRequest,
   DebugBulkTransitionResponse,
   DebugCreateIssuesRequest,
@@ -232,6 +236,20 @@ export class TauriApiService {
   /** Bulk transition multiple issues */
   debugBulkTransition(request: DebugBulkTransitionRequest): Observable<DebugBulkTransitionResponse> {
     return from(invoke<DebugBulkTransitionResponse>('debug_bulk_transition', { request }));
+  }
+
+  // ----------------------------------------
+  // AI Test Data Generation
+  // ----------------------------------------
+
+  /** Check AI test data generation status */
+  debugAiStatus(request: DebugAiStatusRequest): Observable<DebugAiStatusResponse> {
+    return from(invoke<DebugAiStatusResponse>('debug_ai_status', { request }));
+  }
+
+  /** Generate test data using AI (Claude) */
+  debugAiGenerate(request: DebugAiGenerateRequest): Observable<DebugAiGenerateResponse> {
+    return from(invoke<DebugAiGenerateResponse>('debug_ai_generate', { request }));
   }
 
 }

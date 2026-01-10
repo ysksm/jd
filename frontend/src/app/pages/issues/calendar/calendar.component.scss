@@ -29,6 +29,7 @@
   border: 1px solid var(--border-color);
   border-radius: 4px;
   overflow: hidden;
+  table-layout: fixed;
 }
 
 .weekday-header {
@@ -57,11 +58,14 @@
 }
 
 .day-cell {
-  min-height: 100px;
+  height: 120px;
+  min-height: 120px;
+  max-height: 120px;
   padding: 4px;
   border-right: 1px solid var(--border-color);
   background: var(--bg-primary);
   transition: background-color 0.2s;
+  overflow: hidden;
 
   &:last-child {
     border-right: none;
@@ -113,6 +117,8 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
+  overflow: hidden;
+  max-height: calc(120px - 30px); // cell height minus day-number area
 }
 
 .issue-chip {
@@ -127,6 +133,9 @@
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   overflow: hidden;
+  flex-shrink: 0;
+  min-width: 0;
+  max-width: 100%;
 
   &:hover {
     background: var(--bg-hover);

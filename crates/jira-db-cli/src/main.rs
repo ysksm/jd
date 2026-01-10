@@ -25,7 +25,10 @@ use jira_db_core::infrastructure::database::{
 use jira_db_core::infrastructure::external::jira::JiraApiClient;
 use jira_db_core::report::{generate_interactive_report, generate_static_report};
 
-use cli::{Cli, Commands, ConfigAction, DebugAction, FieldsAction, ProjectAction, SnapshotsAction};
+use cli::{
+    Cli, Commands, ConfigAction, DebugAction, EndpointAction, FieldsAction, ProjectAction,
+    SnapshotsAction,
+};
 
 #[tokio::main]
 async fn main() {
@@ -48,13 +51,19 @@ async fn run() -> DomainResult<()> {
     }
 
     // Load settings for all other commands
-    let settings = Settings::load(&settings_path)?;
+    let mut settings = Settings::load(&settings_path)?;
+
+    // Migrate legacy config if needed
+    settings.migrate_legacy_config();
 
     // Create database factory for per-project databases
     let db_factory = Arc::new(DatabaseFactory::new(&settings));
 
     // Create JIRA service (DIP: implements application service trait)
-    let jira_service = Arc::new(JiraApiClient::new(&settings.jira)?);
+    let jira_config = settings.get_jira_config().ok_or_else(|| {
+        DomainError::Validation("No JIRA endpoint configured. Run 'jira-db init' first.".into())
+    })?;
+    let jira_service = Arc::new(JiraApiClient::new(&jira_config)?);
 
     // Route commands
     match cli.command {
@@ -125,6 +134,9 @@ async fn run() -> DomainResult<()> {
             ConfigAction::Show => handle_config_show(&settings_path)?,
             ConfigAction::Set { key, value } => handle_config_set(&settings_path, &key, &value)?,
         },
+        Commands::Endpoint { action } => {
+            handle_endpoint_command(&settings_path, jira_service, action).await?
+        }
         Commands::Report {
             project,
             interactive,
@@ -169,7 +181,7 @@ async fn handle_init_command(
     interactive: bool,
 ) -> DomainResult<()> {
     use dialoguer::{Confirm, Input};
-    use jira_db_core::infrastructure::config::{DatabaseConfig, JiraConfig};
+    use jira_db_core::infrastructure::config::{DatabaseConfig, JiraConfig, JiraEndpoint};
 
     if Settings::exists(settings_path) {
         println!(
@@ -181,6 +193,12 @@ async fn handle_init_command(
 
     if interactive {
         println!("JIRA-DB Configuration Setup\n");
+
+        let name: String = Input::new()
+            .with_prompt("Endpoint name (e.g., production, staging)")
+            .default("default".into())
+            .interact_text()
+            .map_err(|e| DomainError::Repository(format!("Input error: {}", e)))?;
 
         let endpoint: String = Input::new()
             .with_prompt("JIRA endpoint (e.g., https://your-domain.atlassian.net)")
@@ -203,12 +221,18 @@ async fn handle_init_command(
             .interact_text()
             .map_err(|e| DomainError::Repository(format!("Input error: {}", e)))?;
 
+        let jira_endpoint = JiraEndpoint {
+            name: name.clone(),
+            display_name: Some(name.clone()),
+            endpoint: endpoint.clone(),
+            username: username.clone(),
+            api_key: api_key.clone(),
+        };
+
         let settings = Settings {
-            jira: JiraConfig {
-                endpoint: endpoint.clone(),
-                username: username.clone(),
-                api_key: api_key.clone(),
-            },
+            jira: None,
+            jira_endpoints: vec![jira_endpoint],
+            active_endpoint: Some(name),
             projects: Vec::new(),
             database: DatabaseConfig {
                 path: None,
@@ -220,7 +244,12 @@ async fn handle_init_command(
         };
 
         println!("\nTesting JIRA connection...");
-        let jira_service = JiraApiClient::new(&settings.jira)?;
+        let jira_config = JiraConfig {
+            endpoint,
+            username,
+            api_key,
+        };
+        let jira_service = JiraApiClient::new(&jira_config)?;
         if let Err(e) = jira_service.test_connection().await {
             println!("Warning: Could not connect to JIRA: {}", e);
             let proceed = Confirm::new()
@@ -248,10 +277,10 @@ async fn handle_init_command(
         println!("Please edit the file to configure your JIRA connection.");
         info!("");
         info!("Next steps:");
-        info!("  1. Edit the configuration file and set your JIRA credentials:");
-        info!("     - endpoint: Your JIRA instance URL");
-        info!("     - username: Your JIRA username/email");
-        info!("     - api_key: Your JIRA API key");
+        info!("  1. Edit the configuration file and set your JIRA endpoint credentials:");
+        info!("     - jira_endpoints[0].endpoint: Your JIRA instance URL");
+        info!("     - jira_endpoints[0].username: Your JIRA username/email");
+        info!("     - jira_endpoints[0].api_key: Your JIRA API key");
         info!("  2. Run: jira-db project init");
     }
 
@@ -282,6 +311,7 @@ async fn handle_project_init(
             name: project.name.clone(),
             sync_enabled: false,
             last_synced: None,
+            endpoint: settings.active_endpoint.clone(), // Assign to current active endpoint
             sync_checkpoint: None,
             snapshot_checkpoint: None,
         };
@@ -862,9 +892,13 @@ async fn handle_test_ticket(
             .execute(project_key, &ticket_summary, description, issue_type)
             .await?;
 
+        let jira_endpoint = settings
+            .get_jira_config()
+            .map(|c| c.endpoint)
+            .unwrap_or_default();
         let browse_url = format!(
             "{}/browse/{}",
-            settings.jira.endpoint.trim_end_matches('/'),
+            jira_endpoint.trim_end_matches('/'),
             result.key
         );
 
@@ -875,13 +909,38 @@ async fn handle_test_ticket(
 }
 
 fn handle_config_show(settings_path: &std::path::Path) -> DomainResult<()> {
-    let settings = Settings::load(settings_path)?;
+    use comfy_table::{Cell, Color, Table, presets::UTF8_FULL};
+
+    let mut settings = Settings::load(settings_path)?;
+    settings.migrate_legacy_config();
 
     println!("Current Configuration:\n");
-    println!("JIRA:");
-    println!("  Endpoint: {}", settings.jira.endpoint);
-    println!("  Username: {}", settings.jira.username);
-    println!("  API Key:  {}", mask_key(&settings.jira.api_key));
+
+    // Show endpoints
+    println!("JIRA Endpoints:");
+    if settings.jira_endpoints.is_empty() {
+        println!("  (no endpoints configured)");
+    } else {
+        let mut table = Table::new();
+        table.load_preset(UTF8_FULL);
+        table.set_header(vec!["Name", "URL", "Username", "Active"]);
+
+        for ep in &settings.jira_endpoints {
+            let is_active = settings.active_endpoint.as_deref() == Some(&ep.name);
+            table.add_row(vec![
+                Cell::new(&ep.name),
+                Cell::new(&ep.endpoint),
+                Cell::new(&ep.username),
+                if is_active {
+                    Cell::new("*").fg(Color::Green)
+                } else {
+                    Cell::new("")
+                },
+            ]);
+        }
+        println!("{table}");
+    }
+
     println!("\nDatabase:");
     println!("  Directory: {}", settings.database.database_dir.display());
     println!("  (Each project has its own database file: <project_key>.duckdb)");
@@ -900,18 +959,26 @@ fn handle_config_show(settings_path: &std::path::Path) -> DomainResult<()> {
 
 fn handle_config_set(settings_path: &std::path::Path, key: &str, value: &str) -> DomainResult<()> {
     let mut settings = Settings::load(settings_path)?;
+    settings.migrate_legacy_config();
 
     match key {
-        "jira.endpoint" => settings.jira.endpoint = value.to_string(),
-        "jira.username" => settings.jira.username = value.to_string(),
-        "jira.api_key" => settings.jira.api_key = value.to_string(),
+        "active_endpoint" => {
+            if settings.set_active_endpoint(value) {
+                println!("Set active endpoint to '{}'", value);
+            } else {
+                return Err(DomainError::Validation(format!(
+                    "Endpoint '{}' not found",
+                    value
+                )));
+            }
+        }
         "database.database_dir" => settings.database.database_dir = PathBuf::from(value),
         "debug_mode" => {
             settings.debug_mode = value.to_lowercase() == "true" || value == "1";
         }
         _ => {
             return Err(DomainError::Validation(format!(
-                "Unknown configuration key: {}",
+                "Unknown configuration key: {}. Use 'endpoint' commands to manage JIRA endpoints.",
                 key
             )));
         }
@@ -1528,9 +1595,13 @@ async fn handle_debug_command(
                     )
                     .await?;
 
+                let jira_endpoint = settings
+                    .get_jira_config()
+                    .map(|c| c.endpoint)
+                    .unwrap_or_default();
                 let browse_url = format!(
                     "{}/browse/{}",
-                    settings.jira.endpoint.trim_end_matches('/'),
+                    jira_endpoint.trim_end_matches('/'),
                     result.key
                 );
 
@@ -1629,6 +1700,161 @@ async fn handle_debug_command(
                 "\nCompleted: {} success, {} failed",
                 success_count, error_count
             );
+        }
+    }
+
+    Ok(())
+}
+
+async fn handle_endpoint_command(
+    settings_path: &std::path::Path,
+    _jira_service: Arc<JiraApiClient>,
+    action: EndpointAction,
+) -> DomainResult<()> {
+    use comfy_table::{Cell, Color, Table, presets::UTF8_FULL};
+    use jira_db_core::infrastructure::config::JiraEndpoint;
+
+    let mut settings = Settings::load(settings_path)?;
+    settings.migrate_legacy_config();
+
+    match action {
+        EndpointAction::List => {
+            if settings.jira_endpoints.is_empty() {
+                println!("No JIRA endpoints configured.");
+                println!("Use 'jira-db endpoint add' to add an endpoint.");
+                return Ok(());
+            }
+
+            let mut table = Table::new();
+            table.load_preset(UTF8_FULL);
+            table.set_header(vec!["Name", "Display Name", "URL", "Username", "Active"]);
+
+            for ep in &settings.jira_endpoints {
+                let is_active = settings.active_endpoint.as_deref() == Some(&ep.name);
+                table.add_row(vec![
+                    Cell::new(&ep.name),
+                    Cell::new(ep.display_name.as_deref().unwrap_or("-")),
+                    Cell::new(&ep.endpoint),
+                    Cell::new(&ep.username),
+                    if is_active {
+                        Cell::new("*").fg(Color::Green)
+                    } else {
+                        Cell::new("")
+                    },
+                ]);
+            }
+
+            println!("JIRA Endpoints:\n");
+            println!("{table}");
+            println!("\nTotal: {} endpoint(s)", settings.jira_endpoints.len());
+        }
+
+        EndpointAction::Add {
+            name,
+            url,
+            username,
+            api_key,
+            display_name,
+        } => {
+            // Check if name already exists
+            if settings.get_endpoint(&name).is_some() {
+                return Err(DomainError::Validation(format!(
+                    "Endpoint '{}' already exists. Use a different name or remove it first.",
+                    name
+                )));
+            }
+
+            let endpoint = JiraEndpoint {
+                name: name.clone(),
+                display_name,
+                endpoint: url,
+                username,
+                api_key,
+            };
+
+            settings.add_endpoint(endpoint);
+
+            // Set as active if this is the first endpoint
+            if settings.jira_endpoints.len() == 1 {
+                settings.set_active_endpoint(&name);
+            }
+
+            settings.save(settings_path)?;
+            println!("Added endpoint '{}'", name);
+
+            if settings.active_endpoint.as_deref() == Some(&name) {
+                println!("Set as active endpoint.");
+            }
+        }
+
+        EndpointAction::Remove { name } => {
+            if settings.get_endpoint(&name).is_none() {
+                return Err(DomainError::NotFound(format!(
+                    "Endpoint '{}' not found",
+                    name
+                )));
+            }
+
+            if settings.remove_endpoint(&name) {
+                settings.save(settings_path)?;
+                println!("Removed endpoint '{}'", name);
+            }
+        }
+
+        EndpointAction::SetActive { name } => {
+            if settings.set_active_endpoint(&name) {
+                settings.save(settings_path)?;
+                println!("Set '{}' as active endpoint", name);
+            } else {
+                return Err(DomainError::NotFound(format!(
+                    "Endpoint '{}' not found",
+                    name
+                )));
+            }
+        }
+
+        EndpointAction::Show { name } => {
+            let endpoint = settings
+                .get_endpoint(&name)
+                .ok_or_else(|| DomainError::NotFound(format!("Endpoint '{}' not found", name)))?;
+
+            let is_active = settings.active_endpoint.as_deref() == Some(&name);
+
+            println!("Endpoint: {}", endpoint.name);
+            println!(
+                "Display Name: {}",
+                endpoint.display_name.as_deref().unwrap_or("-")
+            );
+            println!("URL:      {}", endpoint.endpoint);
+            println!("Username: {}", endpoint.username);
+            println!("API Key:  {}", mask_key(&endpoint.api_key));
+            println!("Active:   {}", if is_active { "Yes" } else { "No" });
+        }
+
+        EndpointAction::Test { name } => {
+            let endpoint_name = name.or_else(|| settings.active_endpoint.clone());
+
+            let endpoint_name = endpoint_name.ok_or_else(|| {
+                DomainError::Validation("No endpoint specified and no active endpoint set".into())
+            })?;
+
+            let endpoint = settings.get_endpoint(&endpoint_name).ok_or_else(|| {
+                DomainError::NotFound(format!("Endpoint '{}' not found", endpoint_name))
+            })?;
+
+            println!("Testing connection to '{}'...", endpoint.name);
+            println!("URL: {}", endpoint.endpoint);
+
+            let test_client = JiraApiClient::new(&endpoint.to_jira_config())?;
+            match test_client.test_connection().await {
+                Ok(_) => {
+                    println!("Connection successful!");
+                }
+                Err(e) => {
+                    println!("Connection failed: {}", e);
+                    return Err(e);
+                }
+            }
         }
     }
 

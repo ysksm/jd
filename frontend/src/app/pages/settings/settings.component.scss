@@ -141,4 +141,71 @@
       background-color: #3a3ad0;
     }
   }
+
+  &.btn-secondary {
+    background-color: #e5e7eb;
+    color: #374151;
+
+    &:hover:not(:disabled) {
+      background-color: #d1d5db;
+    }
+  }
+
+  &.btn-danger {
+    background-color: #dc2626;
+    color: white;
+
+    &:hover:not(:disabled) {
+      background-color: #b91c1c;
+    }
+  }
+
+  &.btn-sm {
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+  }
+}
+
+// Endpoint management styles
+.endpoints-list {
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  background-color: #f9fafb;
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
+}
+
+.endpoint-selector {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+
+  select {
+    flex: 1;
+  }
+}
+
+.endpoint-actions {
+  margin-top: 1rem;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.add-endpoint-form {
+  margin-top: 1rem;
+  padding: 1rem;
+  background-color: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 6px;
+
+  h4 {
+    margin: 0 0 1rem;
+    font-size: 1rem;
+    color: #92400e;
+  }
+
+  .form-hint {
+    margin-bottom: 1rem;
+    color: #92400e;
+  }
 }

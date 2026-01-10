@@ -6,8 +6,7 @@ use std::sync::Arc;
 use tauri::State;
 
 use jira_db_core::{
-    DuckDbFieldRepository, DuckDbIssuesExpandedRepository, JiraApiClient, JiraConfig,
-    SyncFieldsUseCase,
+    DuckDbFieldRepository, DuckDbIssuesExpandedRepository, JiraApiClient, SyncFieldsUseCase,
 };
 use serde::{Deserialize, Serialize};
 
@@ -115,12 +114,10 @@ pub async fn fields_sync(
         )
     })?;
 
-    // Create JIRA config and client
-    let jira_config = JiraConfig {
-        endpoint: settings.jira.endpoint.clone(),
-        username: settings.jira.username.clone(),
-        api_key: settings.jira.api_key.clone(),
-    };
+    // Create JIRA config and client from active endpoint
+    let jira_config = settings
+        .get_jira_config()
+        .ok_or("No JIRA endpoint configured")?;
     let jira_client = Arc::new(JiraApiClient::new(&jira_config).map_err(|e| e.to_string())?);
 
     // Create repositories
@@ -158,12 +155,10 @@ pub async fn fields_expand(
         )
     })?;
 
-    // Create JIRA config and client
-    let jira_config = JiraConfig {
-        endpoint: settings.jira.endpoint.clone(),
-        username: settings.jira.username.clone(),
-        api_key: settings.jira.api_key.clone(),
-    };
+    // Create JIRA config and client from active endpoint
+    let jira_config = settings
+        .get_jira_config()
+        .ok_or("No JIRA endpoint configured")?;
     let jira_client = Arc::new(JiraApiClient::new(&jira_config).map_err(|e| e.to_string())?);
 
     // Create repositories
@@ -209,12 +204,10 @@ pub async fn fields_full(
         )
     })?;
 
-    // Create JIRA config and client
-    let jira_config = JiraConfig {
-        endpoint: settings.jira.endpoint.clone(),
-        username: settings.jira.username.clone(),
-        api_key: settings.jira.api_key.clone(),
-    };
+    // Create JIRA config and client from active endpoint
+    let jira_config = settings
+        .get_jira_config()
+        .ok_or("No JIRA endpoint configured")?;
     let jira_client = Arc::new(JiraApiClient::new(&jira_config).map_err(|e| e.to_string())?);
 
     // Create repositories

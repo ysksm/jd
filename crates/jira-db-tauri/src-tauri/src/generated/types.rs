@@ -254,6 +254,20 @@ pub struct JiraConfig {
     pub api_key: String,
 }
 
+/// JIRA endpoint configuration (for multiple endpoints)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JiraEndpoint {
+    pub name: String,
+    #[serde(rename = "displayName")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
+    pub endpoint: String,
+    pub username: String,
+    #[serde(rename = "apiKey")]
+    pub api_key: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DatabaseConfig {
@@ -296,6 +310,14 @@ pub struct Settings {
     pub embeddings: Option<EmbeddingsConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub log: Option<LogConfig>,
+    /// Multiple JIRA endpoints
+    #[serde(rename = "jiraEndpoints")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub jira_endpoints: Option<Vec<JiraEndpoint>>,
+    /// Active endpoint name
+    #[serde(rename = "activeEndpoint")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub active_endpoint: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -326,6 +348,18 @@ pub struct ConfigUpdateRequest {
     pub embeddings: Option<EmbeddingsConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub log: Option<LogConfig>,
+    /// Add a new endpoint
+    #[serde(rename = "addEndpoint")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub add_endpoint: Option<JiraEndpoint>,
+    /// Remove an endpoint by name
+    #[serde(rename = "removeEndpoint")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub remove_endpoint: Option<String>,
+    /// Set active endpoint
+    #[serde(rename = "setActiveEndpoint")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub set_active_endpoint: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

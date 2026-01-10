@@ -154,6 +154,15 @@ export interface JiraConfig {
   apiKey: string;
 }
 
+/** JIRA endpoint configuration (for multiple endpoints) */
+export interface JiraEndpoint {
+  name: string;
+  displayName?: string;
+  endpoint: string;
+  username: string;
+  apiKey: string;
+}
+
 export interface DatabaseConfig {
   path: string;
 }
@@ -178,6 +187,10 @@ export interface Settings {
   projects: ProjectConfig[];
   embeddings?: EmbeddingsConfig;
   log?: LogConfig;
+  /** Multiple JIRA endpoints (new) */
+  jiraEndpoints?: JiraEndpoint[];
+  /** Active endpoint name (new) */
+  activeEndpoint?: string;
 }
 
 export interface ProjectConfig {
@@ -197,6 +210,12 @@ export interface ConfigUpdateRequest {
   database?: DatabaseConfig;
   embeddings?: EmbeddingsConfig;
   log?: LogConfig;
+  /** Add a new endpoint */
+  addEndpoint?: JiraEndpoint;
+  /** Remove an endpoint by name */
+  removeEndpoint?: string;
+  /** Set active endpoint */
+  setActiveEndpoint?: string;
 }
 
 export interface ConfigUpdateResponse {
@@ -468,5 +487,88 @@ export interface DebugBulkTransitionResponse {
   results: BulkTransitionResult[];
   successCount: number;
   failureCount: number;
+}
+
+// AI Test Data Generation Types
+export interface GeneratedIssue {
+  issueType: string;
+  summary: string;
+  description: string;
+  priority: string;
+  labels: string[];
+  storyPoints?: number;
+  parentKey?: string;
+  createdDayOffset: number;
+  startedDayOffset?: number;
+  completedDayOffset?: number;
+  assignee?: string;
+}
+
+export interface SprintScenario {
+  sprintName: string;
+  durationDays: number;
+  teamMembers: string[];
+  issues: GeneratedIssue[];
+}
+
+export interface AiCreatedIssueInfo {
+  key: string;
+  id: string;
+  issueType: string;
+  summary: string;
+  status: string;
+  selfUrl?: string;
+}
+
+export interface AiFailedIssueInfo {
+  issueType: string;
+  summary: string;
+  error: string;
+}
+
+export interface AiGenerationStats {
+  totalGenerated: number;
+  successfullyCreated: number;
+  failedToCreate: number;
+  epicsCreated: number;
+  storiesCreated: number;
+  tasksCreated: number;
+  bugsCreated: number;
+  transitionsApplied: number;
+  linksCreated: number;
+  dueDatesSet: number;
+}
+
+export interface DebugAiStatusRequest {}
+
+export interface DebugAiStatusResponse {
+  configured: boolean;
+  message: string;
+  cliAvailable?: boolean;
+  apiKeyConfigured?: boolean;
+}
+
+export interface DebugAiGenerateRequest {
+  project: string;
+  mode: string;
+  projectContext?: string;
+  teamSize?: number;
+  sprintDurationDays?: number;
+  applyTransitions?: boolean;
+  epicTheme?: string;
+  bugCount?: number;
+  useFastModel?: boolean;
+  useClaudeCli?: boolean;
+  /** Language for generated content (e.g., "ja" for Japanese, "en" for English) */
+  language?: string;
+}
+
+export interface DebugAiGenerateResponse {
+  success: boolean;
+  scenario?: SprintScenario;
+  createdIssues: AiCreatedIssueInfo[];
+  failedIssues: AiFailedIssueInfo[];
+  stats: AiGenerationStats;
+  error?: string;
 }
 

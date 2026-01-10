@@ -147,7 +147,13 @@
   @if (loading()) {
     <div class="loading">Searching...</div>
   } @else {
-    <div class="results-count">{{ total() }} issues found</div>
+    <div class="results-count">
+      @if (issues().length < total()) {
+        {{ issues().length }} / {{ total() }} issues <span class="hint">(max 1000)</span>
+      } @else {
+        {{ total() }} issues found
+      }
+    </div>
 
     @if (issues().length === 0) {
       <div class="empty-state">

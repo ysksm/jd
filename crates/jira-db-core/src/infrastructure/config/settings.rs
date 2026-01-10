@@ -6,7 +6,16 @@ use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settings {
-    pub jira: JiraConfig,
+    /// Legacy single JIRA config (for backward compatibility)
+    /// Deprecated: Use `jira_endpoints` instead
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub jira: Option<JiraConfig>,
+    /// Multiple JIRA endpoints configuration
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub jira_endpoints: Vec<JiraEndpoint>,
+    /// Name of the currently active endpoint (used when no specific endpoint is specified)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub active_endpoint: Option<String>,
     pub projects: Vec<ProjectConfig>,
     pub database: DatabaseConfig,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -16,6 +25,22 @@ pub struct Settings {
     /// Debug mode enables JIRA test data creation features and verbose logging
     #[serde(default)]
     pub debug_mode: bool,
+}
+
+/// Named JIRA endpoint configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JiraEndpoint {
+    /// Unique name for this endpoint (e.g., "production", "staging", "mock")
+    pub name: String,
+    /// Display name for UI
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
+    /// JIRA server endpoint URL
+    pub endpoint: String,
+    /// Username for authentication
+    pub username: String,
+    /// API key or token for authentication
+    pub api_key: String,
 }
 
 /// Configuration for logging
@@ -98,6 +123,10 @@ pub struct ProjectConfig {
     pub name: String,
     pub sync_enabled: bool,
     pub last_synced: Option<DateTime<Utc>>,
+    /// Name of the JIRA endpoint this project belongs to
+    /// If not specified, uses the active_endpoint from Settings
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub endpoint: Option<String>,
     /// Checkpoint for resuming interrupted sync
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sync_checkpoint: Option<SyncCheckpoint>,
@@ -172,12 +201,60 @@ impl EmbeddingsConfig {
     }
 }
 
+impl JiraEndpoint {
+    /// Convert to JiraConfig (for backward compatibility)
+    pub fn to_jira_config(&self) -> JiraConfig {
+        JiraConfig {
+            endpoint: self.endpoint.clone(),
+            username: self.username.clone(),
+            api_key: self.api_key.clone(),
+        }
+    }
+
+    /// Get display name (falls back to name if not set)
+    pub fn get_display_name(&self) -> &str {
+        self.display_name.as_deref().unwrap_or(&self.name)
+    }
+}
+
 impl Settings {
-    /// Create a new Settings with the required JIRA config and database directory.
+    /// Create a new Settings with a single JIRA endpoint and database directory.
     /// Other fields are set to sensible defaults.
     pub fn new(jira: JiraConfig, database_dir: PathBuf) -> Self {
+        // Convert legacy config to new endpoint format
+        let endpoint = JiraEndpoint {
+            name: "default".to_string(),
+            display_name: Some("Default".to_string()),
+            endpoint: jira.endpoint,
+            username: jira.username,
+            api_key: jira.api_key,
+        };
+
         Self {
-            jira,
+            jira: None,
+            jira_endpoints: vec![endpoint],
+            active_endpoint: Some("default".to_string()),
+            projects: Vec::new(),
+            database: DatabaseConfig {
+                path: None,
+                database_dir,
+            },
+            embeddings: None,
+            log: None,
+            debug_mode: false,
+        }
+    }
+
+    /// Create a new Settings with multiple JIRA endpoints
+    pub fn new_with_endpoints(
+        endpoints: Vec<JiraEndpoint>,
+        active: Option<String>,
+        database_dir: PathBuf,
+    ) -> Self {
+        Self {
+            jira: None,
+            jira_endpoints: endpoints,
+            active_endpoint: active,
             projects: Vec::new(),
             database: DatabaseConfig {
                 path: None,
@@ -192,8 +269,10 @@ impl Settings {
     pub fn load<P: AsRef<Path>>(path: P) -> DomainResult<Self> {
         let content = fs::read_to_string(&path)
             .map_err(|e| DomainError::Repository(format!("Failed to read settings file: {}", e)))?;
-        let settings: Settings = serde_json::from_str(&content)
+        let mut settings: Settings = serde_json::from_str(&content)
             .map_err(|e| DomainError::Repository(format!("Failed to parse settings: {}", e)))?;
+        // Migrate legacy jira config to jira_endpoints
+        settings.migrate_legacy_config();
         Ok(settings)
     }
 
@@ -201,8 +280,11 @@ impl Settings {
     ///
     /// This method resolves the `database_dir` relative to the settings file's
     /// parent directory if it's a relative path.
+    /// Also migrates legacy config if present.
     pub fn load_and_resolve<P: AsRef<Path>>(path: P) -> DomainResult<Self> {
         let mut settings = Self::load(&path)?;
+        // Migrate legacy jira config to jira_endpoints
+        settings.migrate_legacy_config();
         settings.resolve_paths(&path)?;
         Ok(settings)
     }
@@ -249,12 +331,18 @@ impl Settings {
     }
 
     pub fn create_default<P: AsRef<Path>>(path: P) -> DomainResult<Self> {
+        let default_endpoint = JiraEndpoint {
+            name: "default".to_string(),
+            display_name: Some("Default".to_string()),
+            endpoint: String::from("https://your-domain.atlassian.net"),
+            username: String::from("user@example.com"),
+            api_key: String::from("your-api-key-here"),
+        };
+
         let settings = Settings {
-            jira: JiraConfig {
-                endpoint: String::from("https://your-domain.atlassian.net"),
-                username: String::from("user@example.com"),
-                api_key: String::from("your-api-key-here"),
-            },
+            jira: None,
+            jira_endpoints: vec![default_endpoint],
+            active_endpoint: Some("default".to_string()),
             projects: Vec::new(),
             database: DatabaseConfig {
                 path: None,
@@ -267,6 +355,97 @@ impl Settings {
 
         settings.save(&path)?;
         Ok(settings)
+    }
+
+    /// Migrate legacy jira config to jira_endpoints if needed
+    pub fn migrate_legacy_config(&mut self) {
+        if let Some(legacy_jira) = self.jira.take() {
+            // Only migrate if no endpoints exist
+            if self.jira_endpoints.is_empty() {
+                let endpoint = JiraEndpoint {
+                    name: "default".to_string(),
+                    display_name: Some("Default".to_string()),
+                    endpoint: legacy_jira.endpoint,
+                    username: legacy_jira.username,
+                    api_key: legacy_jira.api_key,
+                };
+                self.jira_endpoints.push(endpoint);
+                if self.active_endpoint.is_none() {
+                    self.active_endpoint = Some("default".to_string());
+                }
+            }
+        }
+    }
+
+    /// Get all configured JIRA endpoints
+    pub fn get_endpoints(&self) -> &[JiraEndpoint] {
+        &self.jira_endpoints
+    }
+
+    /// Get endpoint by name
+    pub fn get_endpoint(&self, name: &str) -> Option<&JiraEndpoint> {
+        self.jira_endpoints.iter().find(|e| e.name == name)
+    }
+
+    /// Get the active (default) endpoint
+    pub fn get_active_endpoint(&self) -> Option<&JiraEndpoint> {
+        // First try jira_endpoints with active_endpoint
+        if let Some(active_name) = &self.active_endpoint {
+            if let Some(endpoint) = self.get_endpoint(active_name) {
+                return Some(endpoint);
+            }
+        }
+        // Fall back to first endpoint
+        self.jira_endpoints.first()
+    }
+
+    /// Get the effective JIRA config for a project
+    /// Returns the project-specific endpoint if set, otherwise the active endpoint
+    pub fn get_jira_config_for_project(&self, project_key: &str) -> Option<JiraConfig> {
+        // Find project and check if it has a specific endpoint
+        if let Some(project) = self.find_project(project_key) {
+            if let Some(endpoint_name) = &project.endpoint {
+                if let Some(endpoint) = self.get_endpoint(endpoint_name) {
+                    return Some(endpoint.to_jira_config());
+                }
+            }
+        }
+        // Fall back to active endpoint
+        self.get_active_endpoint().map(|e| e.to_jira_config())
+    }
+
+    /// Get the current JIRA config (for backward compatibility)
+    /// Prefers active endpoint, falls back to legacy jira config
+    pub fn get_jira_config(&self) -> Option<JiraConfig> {
+        self.get_active_endpoint().map(|e| e.to_jira_config())
+    }
+
+    /// Add a new endpoint
+    pub fn add_endpoint(&mut self, endpoint: JiraEndpoint) {
+        // Remove existing endpoint with same name
+        self.jira_endpoints.retain(|e| e.name != endpoint.name);
+        self.jira_endpoints.push(endpoint);
+    }
+
+    /// Remove an endpoint by name
+    pub fn remove_endpoint(&mut self, name: &str) -> bool {
+        let len_before = self.jira_endpoints.len();
+        self.jira_endpoints.retain(|e| e.name != name);
+        // Clear active_endpoint if it was removed
+        if self.active_endpoint.as_deref() == Some(name) {
+            self.active_endpoint = self.jira_endpoints.first().map(|e| e.name.clone());
+        }
+        self.jira_endpoints.len() < len_before
+    }
+
+    /// Set the active endpoint
+    pub fn set_active_endpoint(&mut self, name: &str) -> bool {
+        if self.get_endpoint(name).is_some() {
+            self.active_endpoint = Some(name.to_string());
+            true
+        } else {
+            false
+        }
     }
 
     /// Get the log configuration (returns default if not set)
@@ -291,19 +470,80 @@ impl Settings {
     }
 
     pub fn validate(&self) -> DomainResult<()> {
-        if self.jira.endpoint.is_empty() {
+        // Check if at least one endpoint is configured
+        if self.jira_endpoints.is_empty() && self.jira.is_none() {
             return Err(DomainError::Validation(
-                "JIRA endpoint cannot be empty".into(),
+                "At least one JIRA endpoint must be configured".into(),
             ));
         }
 
-        if self.jira.username.is_empty() {
+        // Validate all endpoints
+        for endpoint in &self.jira_endpoints {
+            if endpoint.endpoint.is_empty() {
+                return Err(DomainError::Validation(format!(
+                    "JIRA endpoint URL cannot be empty for endpoint '{}'",
+                    endpoint.name
+                )));
+            }
+
+            if endpoint.username.is_empty() {
+                return Err(DomainError::Validation(format!(
+                    "JIRA username cannot be empty for endpoint '{}'",
+                    endpoint.name
+                )));
+            }
+
+            if endpoint.api_key.is_empty() || endpoint.api_key == "your-api-key-here" {
+                return Err(DomainError::Validation(format!(
+                    "JIRA API key must be configured for endpoint '{}'",
+                    endpoint.name
+                )));
+            }
+        }
+
+        // Validate legacy config if present and no endpoints
+        if self.jira_endpoints.is_empty() {
+            if let Some(ref jira) = self.jira {
+                if jira.endpoint.is_empty() {
+                    return Err(DomainError::Validation(
+                        "JIRA endpoint cannot be empty".into(),
+                    ));
+                }
+                if jira.username.is_empty() {
+                    return Err(DomainError::Validation(
+                        "JIRA username cannot be empty".into(),
+                    ));
+                }
+                if jira.api_key.is_empty() || jira.api_key == "your-api-key-here" {
+                    return Err(DomainError::Validation(
+                        "JIRA API key must be configured".into(),
+                    ));
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Validate a specific endpoint by name
+    pub fn validate_endpoint(&self, name: &str) -> DomainResult<()> {
+        let endpoint = self
+            .get_endpoint(name)
+            .ok_or_else(|| DomainError::Validation(format!("Endpoint '{}' not found", name)))?;
+
+        if endpoint.endpoint.is_empty() {
+            return Err(DomainError::Validation(
+                "JIRA endpoint URL cannot be empty".into(),
+            ));
+        }
+
+        if endpoint.username.is_empty() {
             return Err(DomainError::Validation(
                 "JIRA username cannot be empty".into(),
             ));
         }
 
-        if self.jira.api_key.is_empty() || self.jira.api_key == "your-api-key-here" {
+        if endpoint.api_key.is_empty() || endpoint.api_key == "your-api-key-here" {
             return Err(DomainError::Validation(
                 "JIRA API key must be configured".into(),
             ));
@@ -350,14 +590,17 @@ impl Settings {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_settings_serialization() {
-        let settings = Settings {
-            jira: JiraConfig {
+    fn create_test_settings() -> Settings {
+        Settings {
+            jira: None,
+            jira_endpoints: vec![JiraEndpoint {
+                name: "default".to_string(),
+                display_name: Some("Default".to_string()),
                 endpoint: "https://test.atlassian.net".into(),
                 username: "test@example.com".into(),
                 api_key: "test-key".into(),
-            },
+            }],
+            active_endpoint: Some("default".to_string()),
             projects: vec![],
             database: DatabaseConfig {
                 path: None,
@@ -366,55 +609,36 @@ mod tests {
             embeddings: None,
             log: None,
             debug_mode: false,
-        };
+        }
+    }
+
+    #[test]
+    fn test_settings_serialization() {
+        let settings = create_test_settings();
 
         let json = serde_json::to_string(&settings).unwrap();
         let deserialized: Settings = serde_json::from_str(&json).unwrap();
 
-        assert_eq!(settings.jira.endpoint, deserialized.jira.endpoint);
+        assert_eq!(
+            settings.jira_endpoints[0].endpoint,
+            deserialized.jira_endpoints[0].endpoint
+        );
     }
 
     #[test]
     fn test_validate() {
-        let mut settings = Settings {
-            jira: JiraConfig {
-                endpoint: "https://test.atlassian.net".into(),
-                username: "test@example.com".into(),
-                api_key: "test-key".into(),
-            },
-            projects: vec![],
-            database: DatabaseConfig {
-                path: None,
-                database_dir: PathBuf::from("./data"),
-            },
-            embeddings: None,
-            log: None,
-            debug_mode: false,
-        };
-
+        let settings = create_test_settings();
         assert!(settings.validate().is_ok());
 
-        settings.jira.api_key = "your-api-key-here".into();
-        assert!(settings.validate().is_err());
+        // Test with invalid API key
+        let mut invalid_settings = create_test_settings();
+        invalid_settings.jira_endpoints[0].api_key = "your-api-key-here".into();
+        assert!(invalid_settings.validate().is_err());
     }
 
     #[test]
     fn test_get_database_path_for_project() {
-        let settings = Settings {
-            jira: JiraConfig {
-                endpoint: "https://test.atlassian.net".into(),
-                username: "test@example.com".into(),
-                api_key: "test-key".into(),
-            },
-            projects: vec![],
-            database: DatabaseConfig {
-                path: None,
-                database_dir: PathBuf::from("./data"),
-            },
-            embeddings: None,
-            log: None,
-            debug_mode: false,
-        };
+        let settings = create_test_settings();
 
         let path = settings.get_database_path_for_project("MYPROJ");
         assert_eq!(path, PathBuf::from("./data/MYPROJ.duckdb"));
@@ -431,21 +655,7 @@ mod tests {
 
     #[test]
     fn test_get_log_dir() {
-        let settings = Settings {
-            jira: JiraConfig {
-                endpoint: "https://test.atlassian.net".into(),
-                username: "test@example.com".into(),
-                api_key: "test-key".into(),
-            },
-            projects: vec![],
-            database: DatabaseConfig {
-                path: None,
-                database_dir: PathBuf::from("./data"),
-            },
-            embeddings: None,
-            log: None,
-            debug_mode: false,
-        };
+        let settings = create_test_settings();
 
         // Default log dir should be database_dir/logs
         assert_eq!(settings.get_log_dir(), PathBuf::from("./data/logs"));
@@ -464,5 +674,138 @@ mod tests {
             settings_with_log.get_log_dir(),
             PathBuf::from("/custom/logs")
         );
+    }
+
+    #[test]
+    fn test_multiple_endpoints() {
+        let mut settings = create_test_settings();
+
+        // Add second endpoint
+        settings.add_endpoint(JiraEndpoint {
+            name: "staging".to_string(),
+            display_name: Some("Staging Server".to_string()),
+            endpoint: "https://staging.atlassian.net".into(),
+            username: "staging@example.com".into(),
+            api_key: "staging-key".into(),
+        });
+
+        assert_eq!(settings.jira_endpoints.len(), 2);
+        assert!(settings.get_endpoint("staging").is_some());
+        assert!(settings.get_endpoint("default").is_some());
+    }
+
+    #[test]
+    fn test_set_active_endpoint() {
+        let mut settings = create_test_settings();
+
+        settings.add_endpoint(JiraEndpoint {
+            name: "staging".to_string(),
+            display_name: Some("Staging".to_string()),
+            endpoint: "https://staging.atlassian.net".into(),
+            username: "staging@example.com".into(),
+            api_key: "staging-key".into(),
+        });
+
+        assert!(settings.set_active_endpoint("staging"));
+        assert_eq!(settings.active_endpoint, Some("staging".to_string()));
+        assert_eq!(settings.get_active_endpoint().unwrap().name, "staging");
+
+        // Invalid endpoint should return false
+        assert!(!settings.set_active_endpoint("nonexistent"));
+    }
+
+    #[test]
+    fn test_remove_endpoint() {
+        let mut settings = create_test_settings();
+
+        settings.add_endpoint(JiraEndpoint {
+            name: "staging".to_string(),
+            display_name: Some("Staging".to_string()),
+            endpoint: "https://staging.atlassian.net".into(),
+            username: "staging@example.com".into(),
+            api_key: "staging-key".into(),
+        });
+
+        // Set active to staging
+        settings.set_active_endpoint("staging");
+
+        // Remove staging - active should switch to default
+        assert!(settings.remove_endpoint("staging"));
+        assert_eq!(settings.active_endpoint, Some("default".to_string()));
+        assert_eq!(settings.jira_endpoints.len(), 1);
+    }
+
+    #[test]
+    fn test_migrate_legacy_config() {
+        let mut settings = Settings {
+            jira: Some(JiraConfig {
+                endpoint: "https://legacy.atlassian.net".into(),
+                username: "legacy@example.com".into(),
+                api_key: "legacy-key".into(),
+            }),
+            jira_endpoints: vec![],
+            active_endpoint: None,
+            projects: vec![],
+            database: DatabaseConfig {
+                path: None,
+                database_dir: PathBuf::from("./data"),
+            },
+            embeddings: None,
+            log: None,
+            debug_mode: false,
+        };
+
+        settings.migrate_legacy_config();
+
+        assert!(settings.jira.is_none());
+        assert_eq!(settings.jira_endpoints.len(), 1);
+        assert_eq!(settings.jira_endpoints[0].name, "default");
+        assert_eq!(
+            settings.jira_endpoints[0].endpoint,
+            "https://legacy.atlassian.net"
+        );
+        assert_eq!(settings.active_endpoint, Some("default".to_string()));
+    }
+
+    #[test]
+    fn test_project_specific_endpoint() {
+        let mut settings = create_test_settings();
+
+        settings.add_endpoint(JiraEndpoint {
+            name: "staging".to_string(),
+            display_name: Some("Staging".to_string()),
+            endpoint: "https://staging.atlassian.net".into(),
+            username: "staging@example.com".into(),
+            api_key: "staging-key".into(),
+        });
+
+        settings.projects.push(ProjectConfig {
+            id: "1".to_string(),
+            key: "PROJ".to_string(),
+            name: "Project".to_string(),
+            sync_enabled: true,
+            last_synced: None,
+            endpoint: Some("staging".to_string()),
+            sync_checkpoint: None,
+            snapshot_checkpoint: None,
+        });
+
+        let config = settings.get_jira_config_for_project("PROJ").unwrap();
+        assert_eq!(config.endpoint, "https://staging.atlassian.net");
+
+        // Project without specific endpoint uses active
+        settings.projects.push(ProjectConfig {
+            id: "2".to_string(),
+            key: "OTHER".to_string(),
+            name: "Other Project".to_string(),
+            sync_enabled: true,
+            last_synced: None,
+            endpoint: None,
+            sync_checkpoint: None,
+            snapshot_checkpoint: None,
+        });
+
+        let config2 = settings.get_jira_config_for_project("OTHER").unwrap();
+        assert_eq!(config2.endpoint, "https://test.atlassian.net");
     }
 }

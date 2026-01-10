@@ -41,6 +41,12 @@ pub enum Commands {
         action: ConfigAction,
     },
 
+    /// Manage JIRA endpoints (multiple server configurations)
+    Endpoint {
+        #[command(subcommand)]
+        action: EndpointAction,
+    },
+
     /// Search issues
     Search {
         /// Search query
@@ -233,6 +239,59 @@ pub enum ConfigAction {
 
         /// Configuration value
         value: String,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum EndpointAction {
+    /// List all configured JIRA endpoints
+    List,
+
+    /// Add a new JIRA endpoint
+    Add {
+        /// Unique name for this endpoint (e.g., production, staging, mock)
+        #[arg(short, long)]
+        name: String,
+
+        /// JIRA server URL (e.g., https://your-domain.atlassian.net)
+        #[arg(short, long)]
+        url: String,
+
+        /// Username for authentication
+        #[arg(short = 'U', long)]
+        username: String,
+
+        /// API key or token
+        #[arg(short, long)]
+        api_key: String,
+
+        /// Display name for UI (optional)
+        #[arg(short, long)]
+        display_name: Option<String>,
+    },
+
+    /// Remove a JIRA endpoint
+    Remove {
+        /// Name of the endpoint to remove
+        name: String,
+    },
+
+    /// Set the active (default) endpoint
+    SetActive {
+        /// Name of the endpoint to set as active
+        name: String,
+    },
+
+    /// Show details of a specific endpoint
+    Show {
+        /// Name of the endpoint to show
+        name: String,
+    },
+
+    /// Test connection to an endpoint
+    Test {
+        /// Name of the endpoint to test (uses active endpoint if not specified)
+        name: Option<String>,
     },
 }
 

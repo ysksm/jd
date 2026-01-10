@@ -103,4 +103,24 @@ pub trait JiraService: Send + Sync {
 
     /// Get total issue count for a project (simple JQL count)
     async fn get_total_issue_count(&self, project_key: &str) -> DomainResult<usize>;
+
+    /// Create a link between two issues
+    ///
+    /// # Arguments
+    /// * `link_type` - Type of link (e.g., "Blocks", "Relates", "Cloners")
+    /// * `inward_issue` - The inward issue key (e.g., issue that is blocked)
+    /// * `outward_issue` - The outward issue key (e.g., issue that blocks)
+    async fn create_issue_link(
+        &self,
+        link_type: &str,
+        inward_issue: &str,
+        outward_issue: &str,
+    ) -> DomainResult<()>;
+
+    /// Update an issue's due date
+    ///
+    /// # Arguments
+    /// * `issue_key` - The issue key to update
+    /// * `due_date` - The due date in YYYY-MM-DD format
+    async fn update_issue_due_date(&self, issue_key: &str, due_date: &str) -> DomainResult<()>;
 }

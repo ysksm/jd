@@ -1,5 +1,6 @@
 mod create_test_ticket;
 mod execute_sql;
+mod generate_ai_test_data;
 mod generate_embeddings;
 mod generate_report;
 mod generate_snapshots;
@@ -14,6 +15,10 @@ mod transition_issue;
 
 pub use create_test_ticket::CreateTestTicketUseCase;
 pub use execute_sql::{ExecuteSqlUseCase, SqlResult};
+pub use generate_ai_test_data::{
+    AiTestDataConfig, AiTestDataResult, CreatedIssueInfo, FailedIssueInfo,
+    GenerateAiTestDataUseCase, GenerationStats,
+};
 pub use generate_embeddings::{
     EmbeddingGenerationConfig, EmbeddingGenerationResult, EmbeddingTiming,
     GenerateEmbeddingsUseCase,

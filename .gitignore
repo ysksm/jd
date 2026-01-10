@@ -37,3 +37,7 @@ node_modules/
 frontend/dist/
 crates/jira-db-tauri/dist/
 .angular/
+
+# Mock server data (contains test data, should not be committed)
+mock-data/
+crates/jira-mock-server/mock-data/
