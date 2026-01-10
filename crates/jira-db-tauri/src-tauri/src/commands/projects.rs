@@ -39,12 +39,10 @@ pub async fn projects_initialize(
 ) -> Result<ProjectInitResponse, String> {
     let settings = state.get_settings().ok_or("Not initialized")?;
 
-    // Create JIRA config and client
-    let jira_config = JiraConfig {
-        endpoint: settings.jira.endpoint.clone(),
-        username: settings.jira.username.clone(),
-        api_key: settings.jira.api_key.clone(),
-    };
+    // Create JIRA config and client from active endpoint
+    let jira_config = settings
+        .get_jira_config()
+        .ok_or("No JIRA endpoint configured")?;
     let jira_client = JiraApiClient::new(&jira_config).map_err(|e| e.to_string())?;
 
     // Fetch projects from JIRA (no database needed - projects are stored in settings.json)

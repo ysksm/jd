@@ -13,9 +13,98 @@
     }
 
     <form class="settings-form">
-      <!-- JIRA Configuration -->
+      <!-- JIRA Endpoints -->
       <section class="settings-section">
-        <h3>JIRA Configuration</h3>
+        <h3>JIRA Endpoints</h3>
+
+        @if (endpoints().length > 0) {
+          <div class="endpoints-list">
+            <div class="form-group">
+              <label for="endpointSelect">Active Endpoint</label>
+              <div class="endpoint-selector">
+                <select
+                  id="endpointSelect"
+                  name="endpointSelect"
+                  [ngModel]="activeEndpoint()"
+                  (ngModelChange)="selectEndpoint($event)"
+                >
+                  @for (ep of endpoints(); track ep.name) {
+                    <option [value]="ep.name">
+                      {{ getEndpointDisplayName(ep) }} ({{ ep.endpoint }})
+                    </option>
+                  }
+                </select>
+                @if (endpoints().length > 1 && activeEndpoint() !== activeEndpoint()) {
+                  <button
+                    type="button"
+                    class="btn btn-sm btn-secondary"
+                    (click)="setActiveEndpoint(activeEndpoint()!)"
+                    [disabled]="saving()"
+                  >
+                    Set as Default
+                  </button>
+                }
+              </div>
+            </div>
+
+            <div class="endpoint-actions">
+              <button
+                type="button"
+                class="btn btn-sm btn-secondary"
+                (click)="showAddEndpoint.set(!showAddEndpoint())"
+              >
+                {{ showAddEndpoint() ? 'Cancel' : '+ Add Endpoint' }}
+              </button>
+              @if (endpoints().length > 1) {
+                <button
+                  type="button"
+                  class="btn btn-sm btn-danger"
+                  (click)="removeEndpoint(activeEndpoint()!)"
+                  [disabled]="saving()"
+                >
+                  Remove Current
+                </button>
+              }
+            </div>
+          </div>
+
+          @if (showAddEndpoint()) {
+            <div class="add-endpoint-form">
+              <h4>Add New Endpoint</h4>
+              <div class="form-group">
+                <label for="newEndpointName">Endpoint Name (ID)</label>
+                <input
+                  type="text"
+                  id="newEndpointName"
+                  name="newEndpointName"
+                  [ngModel]="newEndpointName()"
+                  (ngModelChange)="newEndpointName.set($event)"
+                  placeholder="e.g., production, staging"
+                />
+              </div>
+              <div class="form-group">
+                <label for="newEndpointDisplayName">Display Name (optional)</label>
+                <input
+                  type="text"
+                  id="newEndpointDisplayName"
+                  name="newEndpointDisplayName"
+                  [ngModel]="newEndpointDisplayName()"
+                  (ngModelChange)="newEndpointDisplayName.set($event)"
+                  placeholder="e.g., Production Server"
+                />
+              </div>
+              <p class="form-hint">Fill in the endpoint details below, then click "Add Endpoint"</p>
+              <button
+                type="button"
+                class="btn btn-primary"
+                (click)="addEndpoint()"
+                [disabled]="saving()"
+              >
+                Add Endpoint
+              </button>
+            </div>
+          }
+        }
 
         <div class="form-group">
           <label for="endpoint">Endpoint URL</label>

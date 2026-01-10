@@ -4,7 +4,7 @@ use std::sync::Arc;
 use tauri::State;
 
 use jira_db_core::{
-    AiTestDataConfig, ClaudeCliClient, GenerateAiTestDataUseCase, JiraApiClient, JiraConfig,
+    AiTestDataConfig, ClaudeCliClient, GenerateAiTestDataUseCase, JiraApiClient,
     application::use_cases::{CreateTestTicketUseCase, TransitionIssueUseCase},
 };
 use serde::{Deserialize, Serialize};
@@ -330,12 +330,10 @@ pub async fn debug_create_issues(
         return Err("Count must be between 1 and 100".to_string());
     }
 
-    // Create JIRA client
-    let jira_config = JiraConfig {
-        endpoint: settings.jira.endpoint.clone(),
-        username: settings.jira.username.clone(),
-        api_key: settings.jira.api_key.clone(),
-    };
+    // Create JIRA client from active endpoint
+    let jira_config = settings
+        .get_jira_config()
+        .ok_or("No JIRA endpoint configured")?;
     let jira_client = Arc::new(JiraApiClient::new(&jira_config).map_err(|e| e.to_string())?);
 
     // Create use case
@@ -398,12 +396,10 @@ pub async fn debug_list_transitions(
         );
     }
 
-    // Create JIRA client
-    let jira_config = JiraConfig {
-        endpoint: settings.jira.endpoint.clone(),
-        username: settings.jira.username.clone(),
-        api_key: settings.jira.api_key.clone(),
-    };
+    // Create JIRA client from active endpoint
+    let jira_config = settings
+        .get_jira_config()
+        .ok_or("No JIRA endpoint configured")?;
     let jira_client = Arc::new(JiraApiClient::new(&jira_config).map_err(|e| e.to_string())?);
 
     // Get transitions
@@ -441,12 +437,10 @@ pub async fn debug_transition_issue(
         );
     }
 
-    // Create JIRA client
-    let jira_config = JiraConfig {
-        endpoint: settings.jira.endpoint.clone(),
-        username: settings.jira.username.clone(),
-        api_key: settings.jira.api_key.clone(),
-    };
+    // Create JIRA client from active endpoint
+    let jira_config = settings
+        .get_jira_config()
+        .ok_or("No JIRA endpoint configured")?;
     let jira_client = Arc::new(JiraApiClient::new(&jira_config).map_err(|e| e.to_string())?);
 
     // Transition issue
@@ -486,12 +480,10 @@ pub async fn debug_bulk_transition(
         return Err("No issues provided".to_string());
     }
 
-    // Create JIRA client
-    let jira_config = JiraConfig {
-        endpoint: settings.jira.endpoint.clone(),
-        username: settings.jira.username.clone(),
-        api_key: settings.jira.api_key.clone(),
-    };
+    // Create JIRA client from active endpoint
+    let jira_config = settings
+        .get_jira_config()
+        .ok_or("No JIRA endpoint configured")?;
     let jira_client = Arc::new(JiraApiClient::new(&jira_config).map_err(|e| e.to_string())?);
 
     // Transition each issue
@@ -544,12 +536,10 @@ pub async fn debug_get_issue_types(
         );
     }
 
-    // Create JIRA client
-    let jira_config = JiraConfig {
-        endpoint: settings.jira.endpoint.clone(),
-        username: settings.jira.username.clone(),
-        api_key: settings.jira.api_key.clone(),
-    };
+    // Create JIRA client from active endpoint
+    let jira_config = settings
+        .get_jira_config()
+        .ok_or("No JIRA endpoint configured")?;
     let jira_client = JiraApiClient::new(&jira_config).map_err(|e| e.to_string())?;
 
     // Fetch issue types
@@ -662,12 +652,10 @@ pub async fn debug_ai_generate(
         key
     };
 
-    // Create JIRA client
-    let jira_config = JiraConfig {
-        endpoint: settings.jira.endpoint.clone(),
-        username: settings.jira.username.clone(),
-        api_key: settings.jira.api_key.clone(),
-    };
+    // Create JIRA client from active endpoint
+    let jira_config = settings
+        .get_jira_config()
+        .ok_or("No JIRA endpoint configured")?;
     let jira_client = Arc::new(JiraApiClient::new(&jira_config).map_err(|e| e.to_string())?);
 
     // Create use case

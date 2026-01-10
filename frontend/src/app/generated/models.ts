@@ -154,6 +154,15 @@ export interface JiraConfig {
   apiKey: string;
 }
 
+/** JIRA endpoint configuration (for multiple endpoints) */
+export interface JiraEndpoint {
+  name: string;
+  displayName?: string;
+  endpoint: string;
+  username: string;
+  apiKey: string;
+}
+
 export interface DatabaseConfig {
   path: string;
 }
@@ -178,6 +187,10 @@ export interface Settings {
   projects: ProjectConfig[];
   embeddings?: EmbeddingsConfig;
   log?: LogConfig;
+  /** Multiple JIRA endpoints (new) */
+  jiraEndpoints?: JiraEndpoint[];
+  /** Active endpoint name (new) */
+  activeEndpoint?: string;
 }
 
 export interface ProjectConfig {
@@ -197,6 +210,12 @@ export interface ConfigUpdateRequest {
   database?: DatabaseConfig;
   embeddings?: EmbeddingsConfig;
   log?: LogConfig;
+  /** Add a new endpoint */
+  addEndpoint?: JiraEndpoint;
+  /** Remove an endpoint by name */
+  removeEndpoint?: string;
+  /** Set active endpoint */
+  setActiveEndpoint?: string;
 }
 
 export interface ConfigUpdateResponse {
