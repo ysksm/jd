@@ -359,23 +359,30 @@ jira-db sync
 
 ### 確認方法
 
-同期の進捗とチェックポイントの状態は`settings.json`で確認できます：
+同期の状態は`settings.json`で確認できます：
 
 ```json
 {
   "projects": [
     {
+      "id": "10001",
       "key": "PROJ",
-      "enabled": true,
-      "last_synced_at": "2024-12-15T14:30:00Z",
+      "name": "My Project",
+      "sync_enabled": true,
+      "last_synced": "2024-12-15T14:30:00Z",
       "sync_checkpoint": null
     }
   ]
 }
 ```
 
-- `last_synced_at`: 最後に完了した同期の日時（増分同期の起点）
-- `sync_checkpoint`: 中断時のみ存在（再開情報）
+| フィールド | 説明 |
+|-----------|------|
+| `last_synced` | 最後に**完了**した同期の日時。次回同期時はこの日時以降の更新のみ取得（増分同期の起点） |
+| `sync_checkpoint` | 同期**中断時**のみ存在。次回実行時にここから再開 |
+
+**正常な状態**: `last_synced` に日時があり、`sync_checkpoint` は `null`
+**中断した状態**: `sync_checkpoint` に再開情報が存在
 
 詳細な技術ドキュメントは [docs/SYNC_ARCHITECTURE.md](./docs/SYNC_ARCHITECTURE.md) を参照してください。
 
