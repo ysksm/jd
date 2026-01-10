@@ -46,6 +46,9 @@ pub struct SyncResultExtended {
     /// The updated_date of the last fetched issue (for incremental sync)
     #[serde(skip)]
     pub last_issue_updated_at: Option<jira_db_core::chrono::DateTime<jira_db_core::chrono::Utc>>,
+    /// Checkpoint for failed sync (to be saved for resume)
+    #[serde(skip)]
+    pub failed_checkpoint: Option<SyncCheckpoint>,
 }
 
 /// Extended sync response with detailed breakdown
@@ -340,14 +343,6 @@ pub async fn sync_execute(
                         sync_result.issues_synced,
                         duration
                     );
-
-                    // Clear checkpoint on success
-                    if let Ok(mut s) = Settings::load(&settings_path) {
-                        if let Some(p) = s.find_project_mut(key) {
-                            p.sync_checkpoint = None;
-                        }
-                        let _ = s.save(&settings_path);
-                    }
                 } else {
                     log_warn!(
                         log,
@@ -355,16 +350,6 @@ pub async fn sync_execute(
                         key,
                         error.as_deref().unwrap_or("unknown error")
                     );
-
-                    // Save checkpoint for resume on failure
-                    if let Some(checkpoint) = resumable_result.checkpoint {
-                        if let Ok(mut s) = Settings::load(&settings_path) {
-                            if let Some(p) = s.find_project_mut(key) {
-                                p.sync_checkpoint = Some(checkpoint);
-                            }
-                            let _ = s.save(&settings_path);
-                        }
-                    }
                 }
 
                 results.push(SyncResultExtended {
@@ -378,6 +363,12 @@ pub async fn sync_execute(
                     columns_added: total_columns_added,
                     issues_expanded,
                     last_issue_updated_at: sync_result.last_issue_updated_at,
+                    // Store checkpoint for failed sync, None for success (will be cleared)
+                    failed_checkpoint: if success {
+                        None
+                    } else {
+                        resumable_result.checkpoint
+                    },
                 });
             }
             Err(e) => {
@@ -393,27 +384,33 @@ pub async fn sync_execute(
                     columns_added: 0,
                     issues_expanded: 0,
                     last_issue_updated_at: None,
+                    failed_checkpoint: None,
                 });
             }
         }
     }
 
-    // Update last_synced for successful projects
+    // Update last_synced and checkpoint for all projects
     // Use the last issue's updated_date instead of current time for reliable incremental sync
     state
         .update_settings(|s| {
             for result in &results {
-                if result.success {
-                    if let Some(project) = s.find_project_mut(&result.project_key) {
-                        // Only update last_synced if we fetched issues
-                        // If no issues were fetched, keep the previous value
+                if let Some(project) = s.find_project_mut(&result.project_key) {
+                    if result.success {
+                        // Success: update last_synced and clear checkpoint
                         if let Some(last_updated) = result.last_issue_updated_at {
                             project.last_synced = Some(last_updated);
                         } else if project.last_synced.is_none() {
                             // First sync with no issues: set to current time
                             project.last_synced = Some(jira_db_core::chrono::Utc::now());
                         }
-                        // Otherwise, keep the existing last_synced
+                        // Clear checkpoint on success
+                        project.sync_checkpoint = None;
+                    } else {
+                        // Failure: save checkpoint for resume (if available)
+                        if let Some(ref checkpoint) = result.failed_checkpoint {
+                            project.sync_checkpoint = Some(checkpoint.clone());
+                        }
                     }
                 }
             }
