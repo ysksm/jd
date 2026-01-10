@@ -61,6 +61,22 @@
             <button class="btn-dismiss" (click)="dismissProgressPanel()" title="Close">×</button>
           }
         </div>
+
+        <!-- Step Indicator -->
+        <div class="steps-container">
+          @for (phase of syncPhases; track phase; let i = $index; let last = $last) {
+            @let status = getPhaseStatus(phase);
+            <div class="step" [class.completed]="status === 'completed'" [class.in-progress]="status === 'in_progress'" [class.pending]="status === 'pending'">
+              <div class="step-icon">{{ getPhaseIcon(status) }}</div>
+              <div class="step-label">{{ getPhaseLabel(phase) }}</div>
+            </div>
+            @if (!last) {
+              <div class="step-connector" [class.completed]="status === 'completed'"></div>
+            }
+          }
+        </div>
+
+        <!-- Current Progress Details -->
         @if (currentProgress()) {
           <div class="progress-card">
             <div class="progress-header">

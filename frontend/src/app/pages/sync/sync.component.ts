@@ -32,6 +32,9 @@ export class SyncComponent implements OnInit, OnDestroy {
   progressHistory = signal<SyncProgress[]>([]);
   showProgressPanel = signal(false);
 
+  // All sync phases in order
+  readonly syncPhases = ['fields', 'columns', 'issues', 'expand', 'views', 'complete'] as const;
+
   ngOnInit(): void {
     this.loadProjects();
     this.setupProgressListener();
@@ -154,5 +157,37 @@ export class SyncComponent implements OnInit, OnDestroy {
       'complete': 'Complete'
     };
     return labels[phase] || phase;
+  }
+
+  getPhaseStatus(phase: string): 'pending' | 'in_progress' | 'completed' {
+    const currentPhase = this.currentProgress()?.phase;
+    if (!currentPhase) {
+      // No progress yet - all pending, or all completed if sync finished
+      if (!this.syncing() && this.progressHistory().length > 0) {
+        // Sync finished - check if this phase was completed
+        const completed = this.progressHistory().some(p => p.phase === phase);
+        return completed ? 'completed' : 'pending';
+      }
+      return 'pending';
+    }
+
+    const currentIndex = this.syncPhases.indexOf(currentPhase as typeof this.syncPhases[number]);
+    const phaseIndex = this.syncPhases.indexOf(phase as typeof this.syncPhases[number]);
+
+    if (phaseIndex < currentIndex) {
+      return 'completed';
+    } else if (phaseIndex === currentIndex) {
+      return 'in_progress';
+    } else {
+      return 'pending';
+    }
+  }
+
+  getPhaseIcon(status: 'pending' | 'in_progress' | 'completed'): string {
+    switch (status) {
+      case 'completed': return '✓';
+      case 'in_progress': return '●';
+      case 'pending': return '○';
+    }
   }
 }
