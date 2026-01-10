@@ -269,8 +269,10 @@ impl Settings {
     pub fn load<P: AsRef<Path>>(path: P) -> DomainResult<Self> {
         let content = fs::read_to_string(&path)
             .map_err(|e| DomainError::Repository(format!("Failed to read settings file: {}", e)))?;
-        let settings: Settings = serde_json::from_str(&content)
+        let mut settings: Settings = serde_json::from_str(&content)
             .map_err(|e| DomainError::Repository(format!("Failed to parse settings: {}", e)))?;
+        // Migrate legacy jira config to jira_endpoints
+        settings.migrate_legacy_config();
         Ok(settings)
     }
 
@@ -278,8 +280,11 @@ impl Settings {
     ///
     /// This method resolves the `database_dir` relative to the settings file's
     /// parent directory if it's a relative path.
+    /// Also migrates legacy config if present.
     pub fn load_and_resolve<P: AsRef<Path>>(path: P) -> DomainResult<Self> {
         let mut settings = Self::load(&path)?;
+        // Migrate legacy jira config to jira_endpoints
+        settings.migrate_legacy_config();
         settings.resolve_paths(&path)?;
         Ok(settings)
     }
