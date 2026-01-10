@@ -20,6 +20,17 @@ pub fn update(
     state: &AppState,
     request: ConfigUpdateRequest,
 ) -> ServiceResult<ConfigUpdateResponse> {
+    // Debug log for endpoint operations
+    if let Some(ref new_ep) = request.add_endpoint {
+        tracing::info!(
+            "Adding endpoint - name: '{}', display_name: {:?}, endpoint: '{}', username: '{}'",
+            new_ep.name,
+            new_ep.display_name,
+            new_ep.endpoint,
+            new_ep.username
+        );
+    }
+
     let updated = state
         .update_settings(|settings| {
             // Migrate legacy config if needed
