@@ -1,10 +1,37 @@
 <div class="projects">
   <div class="page-header">
     <h2>Projects</h2>
-    <button class="btn btn-primary" (click)="initializeProjects()" [disabled]="syncing()">
-      {{ syncing() ? 'Fetching...' : 'Fetch from JIRA' }}
-    </button>
+    <div class="fetch-controls">
+      @if (hasMultipleEndpoints()) {
+        <button
+          class="btn btn-secondary"
+          (click)="showFetchOptions.set(!showFetchOptions())"
+          [disabled]="syncing()"
+        >
+          Options
+        </button>
+      }
+      <button class="btn btn-primary" (click)="initializeProjects()" [disabled]="syncing()">
+        {{ syncing() ? 'Fetching...' : 'Fetch from JIRA' }}
+      </button>
+    </div>
   </div>
+
+  @if (hasMultipleEndpoints() && showFetchOptions()) {
+    <div class="fetch-options">
+      <label>Fetch from:</label>
+      <select
+        [ngModel]="selectedFetchEndpoint()"
+        (ngModelChange)="selectedFetchEndpoint.set($event)"
+      >
+        <option value="active">Active Endpoint ({{ activeEndpoint() }})</option>
+        <option value="all">All Endpoints</option>
+        @for (ep of endpoints(); track ep.name) {
+          <option [value]="ep.name">{{ getEndpointDisplayName(ep) }}</option>
+        }
+      </select>
+    </div>
+  }
 
   @if (error()) {
     <div class="alert alert-error">{{ error() }}</div>
@@ -12,6 +39,24 @@
 
   @if (success()) {
     <div class="alert alert-success">{{ success() }}</div>
+  }
+
+  @if (lastFetchResults()) {
+    <div class="fetch-results">
+      <h4>Fetch Results:</h4>
+      <ul>
+        @for (result of lastFetchResults(); track result.endpointName) {
+          <li [class.success]="result.success" [class.error]="!result.success">
+            <strong>{{ result.endpointName }}:</strong>
+            @if (result.success) {
+              {{ result.projectCount }} projects
+            } @else {
+              Failed - {{ result.error }}
+            }
+          </li>
+        }
+      </ul>
+    </div>
   }
 
   @if (loading()) {

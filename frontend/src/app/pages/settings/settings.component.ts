@@ -47,6 +47,10 @@ export class SettingsComponent implements OnInit {
   showAddEndpoint = signal(false);
   newEndpointName = signal('');
   newEndpointDisplayName = signal('');
+  // Dedicated fields for new endpoint
+  newEndpointUrl = signal('');
+  newEndpointUsername = signal('');
+  newEndpointApiKey = signal('');
 
   ngOnInit(): void {
     this.loadSettings();
@@ -126,8 +130,19 @@ export class SettingsComponent implements OnInit {
 
   addEndpoint(): void {
     const name = this.newEndpointName().trim();
-    if (!name) {
-      this.error.set('Endpoint name is required');
+    const endpointUrl = this.newEndpointUrl().trim();
+    const username = this.newEndpointUsername().trim();
+    const apiKey = this.newEndpointApiKey().trim();
+
+    // Validate required fields
+    const missingFields: string[] = [];
+    if (!name) missingFields.push('Endpoint Name');
+    if (!endpointUrl) missingFields.push('Endpoint URL');
+    if (!username) missingFields.push('Username');
+    if (!apiKey) missingFields.push('API Key');
+
+    if (missingFields.length > 0) {
+      this.error.set(`Missing required fields: ${missingFields.join(', ')}`);
       return;
     }
 
@@ -139,9 +154,9 @@ export class SettingsComponent implements OnInit {
     const newEndpoint: JiraEndpoint = {
       name: name,
       displayName: this.newEndpointDisplayName().trim() || name,
-      endpoint: this.jiraEndpoint(),
-      username: this.jiraUsername(),
-      apiKey: this.jiraApiKey()
+      endpoint: endpointUrl,
+      username: username,
+      apiKey: apiKey
     };
 
     this.saving.set(true);
@@ -153,9 +168,7 @@ export class SettingsComponent implements OnInit {
       next: (response) => {
         this.settings.set(response.settings);
         this.populateForm(response.settings);
-        this.showAddEndpoint.set(false);
-        this.newEndpointName.set('');
-        this.newEndpointDisplayName.set('');
+        this.resetNewEndpointForm();
         this.success.set('Endpoint added successfully!');
         this.saving.set(false);
       },
@@ -164,6 +177,15 @@ export class SettingsComponent implements OnInit {
         this.saving.set(false);
       }
     });
+  }
+
+  resetNewEndpointForm(): void {
+    this.showAddEndpoint.set(false);
+    this.newEndpointName.set('');
+    this.newEndpointDisplayName.set('');
+    this.newEndpointUrl.set('');
+    this.newEndpointUsername.set('');
+    this.newEndpointApiKey.set('');
   }
 
   removeEndpoint(name: string): void {

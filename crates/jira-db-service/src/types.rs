@@ -192,6 +192,7 @@ pub struct JiraConfig {
     pub api_key: String,
 }
 
+/// JIRA endpoint configuration (for multiple endpoints)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JiraEndpoint {
@@ -379,13 +380,33 @@ pub struct ProjectListResponse {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ProjectInitRequest {}
+pub struct ProjectInitRequest {
+    /// Specific endpoint name to fetch from. If not provided, uses active endpoint.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub endpoint_name: Option<String>,
+    /// If true, fetch from all configured endpoints
+    #[serde(default)]
+    pub all_endpoints: bool,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectInitResponse {
     pub projects: Vec<Project>,
     pub new_count: i32,
+    /// Results per endpoint when fetching from multiple endpoints
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub endpoint_results: Option<Vec<EndpointFetchResult>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EndpointFetchResult {
+    pub endpoint_name: String,
+    pub project_count: i32,
+    pub success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -20,12 +20,71 @@ pub fn update(
     state: &AppState,
     request: ConfigUpdateRequest,
 ) -> ServiceResult<ConfigUpdateResponse> {
+    // Debug log for endpoint operations
+    if let Some(ref new_ep) = request.add_endpoint {
+        tracing::info!(
+            "Adding endpoint - name: '{}', display_name: {:?}, endpoint: '{}', username: '{}'",
+            new_ep.name,
+            new_ep.display_name,
+            new_ep.endpoint,
+            new_ep.username
+        );
+    }
+
     let updated = state
         .update_settings(|settings| {
-            // Handle JIRA config update (updates the active endpoint)
+            // Migrate legacy config if needed
+            settings.migrate_legacy_config();
+
+            // Handle endpoint operations first
+            // Add new endpoint
+            if let Some(ref new_ep) = request.add_endpoint {
+                let exists = settings
+                    .jira_endpoints
+                    .iter()
+                    .any(|e| e.name == new_ep.name);
+                if !exists {
+                    settings.jira_endpoints.push(jira_db_core::JiraEndpoint {
+                        name: new_ep.name.clone(),
+                        display_name: new_ep.display_name.clone(),
+                        endpoint: new_ep.endpoint.clone(),
+                        username: new_ep.username.clone(),
+                        api_key: new_ep.api_key.clone(),
+                    });
+                    // Set as active if it's the first endpoint
+                    if settings.active_endpoint.is_none() {
+                        settings.active_endpoint = Some(new_ep.name.clone());
+                    }
+                }
+            }
+
+            // Remove endpoint
+            if let Some(ref name_to_remove) = request.remove_endpoint {
+                settings
+                    .jira_endpoints
+                    .retain(|e| &e.name != name_to_remove);
+                // If active endpoint was removed, set to first available
+                if settings.active_endpoint.as_ref() == Some(name_to_remove) {
+                    settings.active_endpoint =
+                        settings.jira_endpoints.first().map(|e| e.name.clone());
+                }
+            }
+
+            // Set active endpoint
+            if let Some(ref active_name) = request.set_active_endpoint {
+                if settings
+                    .jira_endpoints
+                    .iter()
+                    .any(|e| &e.name == active_name)
+                {
+                    settings.active_endpoint = Some(active_name.clone());
+                }
+            }
+
+            // Update active endpoint's JIRA config if provided
             if let Some(jira) = request.jira.clone() {
+                // Find active endpoint and update it, or create a default one
                 if let Some(active_name) = &settings.active_endpoint {
-                    // Find and update the active endpoint
                     if let Some(endpoint) = settings
                         .jira_endpoints
                         .iter_mut()
@@ -35,49 +94,26 @@ pub fn update(
                         endpoint.username = jira.username;
                         endpoint.api_key = jira.api_key;
                     }
-                } else if let Some(endpoint) = settings.jira_endpoints.first_mut() {
-                    // Update first endpoint if no active is set
-                    endpoint.endpoint = jira.endpoint;
-                    endpoint.username = jira.username;
-                    endpoint.api_key = jira.api_key;
-                } else {
-                    // No endpoints exist, create a default one
-                    settings.jira_endpoints.push(jira_db_core::JiraEndpoint {
+                } else if settings.jira_endpoints.is_empty() {
+                    // Create a default endpoint
+                    let new_endpoint = jira_db_core::JiraEndpoint {
                         name: "default".to_string(),
                         display_name: Some("Default".to_string()),
                         endpoint: jira.endpoint,
                         username: jira.username,
                         api_key: jira.api_key,
-                    });
+                    };
+                    settings.jira_endpoints.push(new_endpoint);
                     settings.active_endpoint = Some("default".to_string());
                 }
             }
 
-            // Handle add endpoint
-            if let Some(ep) = request.add_endpoint.clone() {
-                settings.add_endpoint(jira_db_core::JiraEndpoint {
-                    name: ep.name,
-                    display_name: ep.display_name,
-                    endpoint: ep.endpoint,
-                    username: ep.username,
-                    api_key: ep.api_key,
-                });
-            }
-
-            // Handle remove endpoint
-            if let Some(name) = request.remove_endpoint.clone() {
-                settings.remove_endpoint(&name);
-            }
-
-            // Handle set active endpoint
-            if let Some(name) = request.set_active_endpoint.clone() {
-                settings.set_active_endpoint(&name);
-            }
-
+            // Update database config if provided
             if let Some(database) = request.database.clone() {
                 settings.database.database_dir = PathBuf::from(database.path);
             }
 
+            // Update embeddings config if provided
             if let Some(embeddings) = request.embeddings.clone() {
                 settings.embeddings = Some(jira_db_core::EmbeddingsConfig {
                     provider: embeddings.provider,
@@ -89,15 +125,17 @@ pub fn update(
                 });
             }
 
+            // Update log config if provided
             if let Some(log) = request.log.clone() {
                 settings.log = Some(jira_db_core::LogConfig {
                     file_enabled: log.file_enabled,
-                    file_dir: log.file_dir.map(std::path::PathBuf::from),
+                    file_dir: log.file_dir.map(PathBuf::from),
                     level: log.level,
                     max_files: log.max_files as usize,
                 });
             }
 
+            // Update sync config if provided
             if let Some(sync) = request.sync.clone() {
                 settings.sync = Some(jira_db_core::SyncSettings {
                     incremental_sync_enabled: sync.incremental_sync_enabled,
@@ -157,14 +195,17 @@ pub fn initialize(
 }
 
 /// Convert core Settings to API Settings
-fn convert_settings(s: jira_db_core::Settings) -> Settings {
+fn convert_settings(mut s: jira_db_core::Settings) -> Settings {
+    // Migrate legacy config to get active endpoint
+    s.migrate_legacy_config();
+
     let sync_settings = s.get_sync_settings();
 
-    // Get effective JIRA config from active endpoint
-    let jira = s.get_jira_config().map(|c| JiraConfig {
-        endpoint: c.endpoint,
-        username: c.username,
-        api_key: c.api_key,
+    // Get the active endpoint's config, or create a placeholder
+    let jira_config = s.get_jira_config().unwrap_or(jira_db_core::JiraConfig {
+        endpoint: String::new(),
+        username: String::new(),
+        api_key: String::new(),
     });
 
     // Convert endpoints
@@ -181,9 +222,13 @@ fn convert_settings(s: jira_db_core::Settings) -> Settings {
         .collect();
 
     Settings {
-        jira,
+        jira: Some(JiraConfig {
+            endpoint: jira_config.endpoint,
+            username: jira_config.username,
+            api_key: jira_config.api_key,
+        }),
         jira_endpoints,
-        active_endpoint: s.active_endpoint.clone(),
+        active_endpoint: s.active_endpoint,
         database: DatabaseConfig {
             path: s.database.database_dir.to_string_lossy().to_string(),
         },
