@@ -1,97 +1,97 @@
 # JIRA Mock Server
 
-Mock JIRA API server for testing and development. Provides a lightweight, in-memory JIRA REST API v3 compatible server with JSON file persistence.
+テストと開発用のモックJIRA APIサーバーです。JSONファイルによる永続化機能を持つ、軽量なインメモリJIRA REST API v3互換サーバーを提供します。
 
-## Features
+## 機能
 
-- **JIRA REST API v3 Compatible**: Implements core endpoints for projects, issues, metadata
-- **In-Memory Storage**: Fast, thread-safe data store with JSON file persistence
-- **Sample Data**: Automatically generates sample project with statuses, issue types, and priorities
-- **Changelog Support**: Tracks status transitions with timestamps
-- **JQL Support**: Basic JQL parsing for project and text search filters
-- **CORS Enabled**: Ready for web client testing
+- **JIRA REST API v3互換**: プロジェクト、課題、メタデータの主要エンドポイントを実装
+- **インメモリストレージ**: JSONファイル永続化機能付きの高速スレッドセーフデータストア
+- **サンプルデータ**: ステータス、課題タイプ、優先度を含むサンプルプロジェクトを自動生成
+- **変更履歴サポート**: タイムスタンプ付きのステータス遷移を追跡
+- **JQLサポート**: プロジェクトとテキスト検索フィルタの基本的なJQL解析
+- **CORS有効**: Webクライアントテストに対応
 
-## Quick Start
+## クイックスタート
 
-### Build and Run
+### ビルドと実行
 
 ```bash
-# Build
+# ビルド
 cargo build -p jira-mock-server --release
 
-# Run with default settings
+# デフォルト設定で実行
 cargo run -p jira-mock-server
 
-# Run with custom options
+# カスタムオプションで実行
 cargo run -p jira-mock-server -- --port 3000 --data-dir ./my-data
 ```
 
-### Command Line Options
+### コマンドラインオプション
 
-| Option | Short | Default | Description |
-|--------|-------|---------|-------------|
-| `--port` | `-p` | 8080 | Port to listen on |
-| `--data-dir` | `-d` | ./mock-data | Directory for JSON data files |
+| オプション | 短縮形 | デフォルト | 説明 |
+|-----------|--------|-----------|------|
+| `--port` | `-p` | 8080 | リッスンポート |
+| `--data-dir` | `-d` | ./mock-data | JSONデータファイルのディレクトリ |
 
-### Environment Variables
+### 環境変数
 
-| Variable | Description |
-|----------|-------------|
-| `RUST_LOG` | Log level (e.g., `debug`, `info`, `warn`) |
+| 変数 | 説明 |
+|------|------|
+| `RUST_LOG` | ログレベル（例: `debug`, `info`, `warn`） |
 
-## API Endpoints
+## APIエンドポイント
 
-### Projects
+### プロジェクト
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/rest/api/3/project` | List all projects |
+| メソッド | エンドポイント | 説明 |
+|---------|---------------|------|
+| GET | `/rest/api/3/project` | 全プロジェクト一覧 |
 
-### Issues
+### 課題
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/rest/api/3/search/jql` | Search issues (query params) |
-| POST | `/rest/api/3/search/jql` | Search issues (JSON body) |
-| GET | `/rest/api/3/search` | Legacy search endpoint |
-| POST | `/rest/api/3/issue` | Create issue |
-| PUT | `/rest/api/3/issue/{key}` | Update issue |
+| メソッド | エンドポイント | 説明 |
+|---------|---------------|------|
+| GET | `/rest/api/3/search/jql` | 課題検索（クエリパラメータ） |
+| POST | `/rest/api/3/search/jql` | 課題検索（JSONボディ） |
+| GET | `/rest/api/3/search` | レガシー検索エンドポイント |
+| POST | `/rest/api/3/issue` | 課題作成 |
+| PUT | `/rest/api/3/issue/{key}` | 課題更新 |
 
-### Workflow
+### ワークフロー
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/rest/api/3/issue/{key}/transitions` | Get available transitions |
-| POST | `/rest/api/3/issue/{key}/transitions` | Perform status transition |
+| メソッド | エンドポイント | 説明 |
+|---------|---------------|------|
+| GET | `/rest/api/3/issue/{key}/transitions` | 利用可能なトランジション取得 |
+| POST | `/rest/api/3/issue/{key}/transitions` | ステータス遷移実行 |
 
-### Metadata
+### メタデータ
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/rest/api/3/project/{key}/statuses` | Get project statuses |
-| GET | `/rest/api/3/priority` | Get all priorities |
-| GET | `/rest/api/3/issuetype/project` | Get issue types by project ID |
-| GET | `/rest/api/3/issue/createmeta/{key}/issuetypes` | Get issue types by project key |
-| GET | `/rest/api/3/project/{key}/components` | Get project components |
-| GET | `/rest/api/3/project/{key}/versions` | Get project versions |
-| GET | `/rest/api/3/field` | Get all field definitions |
+| メソッド | エンドポイント | 説明 |
+|---------|---------------|------|
+| GET | `/rest/api/3/project/{key}/statuses` | プロジェクトステータス取得 |
+| GET | `/rest/api/3/priority` | 全優先度取得 |
+| GET | `/rest/api/3/issuetype/project` | プロジェクトIDで課題タイプ取得 |
+| GET | `/rest/api/3/issue/createmeta/{key}/issuetypes` | プロジェクトキーで課題タイプ取得 |
+| GET | `/rest/api/3/project/{key}/components` | プロジェクトコンポーネント取得 |
+| GET | `/rest/api/3/project/{key}/versions` | プロジェクトバージョン取得 |
+| GET | `/rest/api/3/field` | 全フィールド定義取得 |
 
-### Issue Links
+### 課題リンク
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/rest/api/3/issueLink` | Create issue link |
+| メソッド | エンドポイント | 説明 |
+|---------|---------------|------|
+| POST | `/rest/api/3/issueLink` | 課題リンク作成 |
 
-## Configuration with jira-db
+## jira-dbとの設定
 
-Configure jira-db to use the mock server:
+jira-dbをモックサーバーで使用するための設定:
 
 ```json
 {
   "jira_endpoints": [
     {
       "name": "mock",
-      "display_name": "Mock Server",
+      "display_name": "モックサーバー",
       "endpoint": "http://localhost:8080",
       "username": "mock@example.com",
       "api_key": "mock-api-key"
@@ -101,48 +101,48 @@ Configure jira-db to use the mock server:
 }
 ```
 
-Or using the CLI:
+またはCLIを使用:
 
 ```bash
 jira-db endpoint add mock \
   --url http://localhost:8080 \
   --username mock@example.com \
   --api-key mock-api-key \
-  --display-name "Mock Server"
+  --display-name "モックサーバー"
 
 jira-db endpoint set-active mock
 ```
 
-## Default Sample Data
+## デフォルトサンプルデータ
 
-On first run, the server creates sample data:
+初回起動時にサンプルデータが作成されます:
 
-### Project
-- **Key**: `TEST`
-- **Name**: Test Project
+### プロジェクト
+- **キー**: `TEST`
+- **名前**: Test Project
 - **ID**: 10000
 
-### Statuses
-| Name | Category |
+### ステータス
+| 名前 | カテゴリ |
 |------|----------|
 | To Do | new |
 | In Progress | indeterminate |
 | Done | done |
 
-### Issue Types
-- Epic
-- Story
-- Task
-- Bug
+### 課題タイプ
+- Epic（エピック）
+- Story（ストーリー）
+- Task（タスク）
+- Bug（バグ）
 
-### Priorities
-- Highest
-- High
-- Medium
-- Low
-- Lowest
+### 優先度
+- Highest（最高）
+- High（高）
+- Medium（中）
+- Low（低）
+- Lowest（最低）
 
-### Workflow Transitions
+### ワークフロートランジション
 ```
 To Do ──► In Progress ──► Done
   ▲            │           │
@@ -150,28 +150,28 @@ To Do ──► In Progress ──► Done
   └────────────────────────┘
 ```
 
-## JQL Support
+## JQLサポート
 
-The mock server supports basic JQL queries:
+モックサーバーは基本的なJQLクエリをサポートしています:
 
 ```
-# Filter by project
+# プロジェクトでフィルタ
 project = TEST
 
-# Text search
-text ~ "search term"
+# テキスト検索
+text ~ "検索語"
 
-# Combined
-project = TEST AND text ~ "bug"
+# 組み合わせ
+project = TEST AND text ~ "バグ"
 ```
 
-### Pagination
+### ページネーション
 
 ```bash
-# Using query parameters
+# クエリパラメータを使用
 GET /rest/api/3/search/jql?jql=project=TEST&maxResults=50&startAt=0
 
-# Using JSON body
+# JSONボディを使用
 POST /rest/api/3/search/jql
 {
   "jql": "project = TEST",
@@ -180,9 +180,9 @@ POST /rest/api/3/search/jql
 }
 ```
 
-## Data Persistence
+## データ永続化
 
-Data is stored in JSON files in the data directory:
+データはデータディレクトリ内のJSONファイルに保存されます:
 
 ```
 mock-data/
@@ -198,11 +198,11 @@ mock-data/
 └── transitions.json
 ```
 
-Files are automatically created and updated as data changes.
+ファイルはデータ変更時に自動的に作成・更新されます。
 
-## Example Usage
+## 使用例
 
-### Create an Issue
+### 課題の作成
 
 ```bash
 curl -X POST http://localhost:8080/rest/api/3/issue \
@@ -210,15 +210,15 @@ curl -X POST http://localhost:8080/rest/api/3/issue \
   -d '{
     "fields": {
       "project": {"key": "TEST"},
-      "summary": "Test issue",
-      "description": "Description here",
+      "summary": "テスト課題",
+      "description": "説明文",
       "issuetype": {"name": "Task"},
       "priority": {"name": "Medium"}
     }
   }'
 ```
 
-Response:
+レスポンス:
 ```json
 {
   "id": "10001",
@@ -227,19 +227,19 @@ Response:
 }
 ```
 
-### Transition an Issue
+### 課題のトランジション
 
 ```bash
-# Get available transitions
+# 利用可能なトランジションを取得
 curl http://localhost:8080/rest/api/3/issue/TEST-1/transitions
 
-# Perform transition
+# トランジションを実行
 curl -X POST http://localhost:8080/rest/api/3/issue/TEST-1/transitions \
   -H "Content-Type: application/json" \
   -d '{"transition": {"id": "21"}}'
 ```
 
-### Search Issues
+### 課題の検索
 
 ```bash
 curl "http://localhost:8080/rest/api/3/search/jql?jql=project=TEST&maxResults=10"
@@ -247,13 +247,13 @@ curl "http://localhost:8080/rest/api/3/search/jql?jql=project=TEST&maxResults=10
 
 ## Docker
 
-### Build Image
+### イメージのビルド
 
 ```bash
 docker build -t jira-mock-server -f crates/jira-mock-server/Dockerfile .
 ```
 
-### Run Container
+### コンテナの実行
 
 ```bash
 docker run -d \
@@ -263,40 +263,74 @@ docker run -d \
   jira-mock-server
 ```
 
-## Limitations
+### Docker Compose
 
-- **No Authentication**: All requests are accepted without auth validation
-- **Basic JQL**: Only `project = X` and `text ~ "term"` patterns are supported
-- **Limited Updates**: Issue updates support only summary, description, and due date
-- **Single Workflow**: All projects share the same To Do → In Progress → Done workflow
+```bash
+cd crates/jira-mock-server
+docker-compose up -d
+```
 
-## Development
+## CI/CDデプロイ
 
-### Project Structure
+### GitHub Actions
+
+`.github/workflows/mock-server.yml`にCI/CDワークフローが定義されています:
+
+- **build**: ビルド、テスト、Clippy、フォーマットチェック
+- **docker**: DockerイメージのビルドとGHCRへのプッシュ
+- **deploy-staging**: mainブランチへのプッシュでステージングに自動デプロイ
+- **deploy-production**: 手動トリガーまたはタグでプロダクションにデプロイ
+
+### 手動デプロイ
+
+```bash
+# ステージング環境へデプロイ
+./scripts/deploy.sh --host staging.example.com --user deploy --env staging
+
+# プロダクション環境へデプロイ
+./scripts/deploy.sh --host prod.example.com --user deploy --env production
+
+# ドライラン（実行せずにコマンドを表示）
+./scripts/deploy.sh --dry-run --host example.com --user deploy
+```
+
+## 制限事項
+
+- **認証なし**: 全てのリクエストは認証検証なしで受け入れられます
+- **基本的なJQL**: `project = X` と `text ~ "term"` パターンのみサポート
+- **限定的な更新**: 課題更新はsummary、description、due dateのみ対応
+- **単一ワークフロー**: 全プロジェクトで同じ To Do → In Progress → Done ワークフローを共有
+
+## 開発
+
+### プロジェクト構造
 
 ```
 crates/jira-mock-server/
 ├── Cargo.toml
 ├── README.md
 ├── Dockerfile
+├── docker-compose.yml
+├── scripts/
+│   └── deploy.sh
 └── src/
-    ├── main.rs      # Entry point, CLI, routing
-    ├── handlers.rs  # API endpoint handlers
-    └── data.rs      # Data models and storage
+    ├── main.rs      # エントリーポイント、CLI、ルーティング
+    ├── handlers.rs  # APIエンドポイントハンドラー
+    └── data.rs      # データモデルとストレージ
 ```
 
-### Adding New Endpoints
+### 新しいエンドポイントの追加
 
-1. Add route in `main.rs`
-2. Implement handler in `handlers.rs`
-3. Add data model if needed in `data.rs`
+1. `main.rs`にルートを追加
+2. `handlers.rs`にハンドラーを実装
+3. 必要に応じて`data.rs`にデータモデルを追加
 
-### Running Tests
+### テストの実行
 
 ```bash
 cargo test -p jira-mock-server
 ```
 
-## License
+## ライセンス
 
-Part of the jira-db project.
+jira-dbプロジェクトの一部です。
