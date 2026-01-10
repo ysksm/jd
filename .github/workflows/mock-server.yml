@@ -1,0 +1,201 @@
+name: JIRA Mock Server CI/CD
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'crates/jira-mock-server/**'
+      - '.github/workflows/mock-server.yml'
+  pull_request:
+    branches:
+      - main
+      - master
+    paths:
+      - 'crates/jira-mock-server/**'
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: 'Deploy to production'
+        required: false
+        default: 'false'
+        type: boolean
+
+env:
+  CARGO_TERM_COLOR: always
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}/jira-mock-server
+
+jobs:
+  # Build and test
+  build:
+    name: Build and Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-action@stable
+        with:
+          toolchain: stable
+
+      - name: Cache cargo dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "."
+          cache-on-failure: true
+
+      - name: Check formatting
+        run: cargo fmt -p jira-mock-server -- --check
+
+      - name: Run clippy
+        run: cargo clippy -p jira-mock-server -- -D warnings
+
+      - name: Build
+        run: cargo build -p jira-mock-server --release
+
+      - name: Run tests
+        run: cargo test -p jira-mock-server
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: jira-mock-server-linux-x64
+          path: target/release/jira-mock-server
+          retention-days: 7
+
+  # Build Docker image
+  docker:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix=
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: crates/jira-mock-server/Dockerfile
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64,linux/arm64
+
+  # Deploy to staging (on push to main)
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: docker
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment:
+      name: staging
+      url: ${{ vars.STAGING_URL }}
+    steps:
+      - name: Deploy to staging server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.STAGING_HOST }}
+          username: ${{ secrets.STAGING_USER }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          script: |
+            # Pull latest image
+            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+
+            # Stop existing container
+            docker stop jira-mock-server || true
+            docker rm jira-mock-server || true
+
+            # Start new container
+            docker run -d \
+              --name jira-mock-server \
+              --restart unless-stopped \
+              -p 8080:8080 \
+              -v /opt/jira-mock-server/data:/app/data \
+              -e RUST_LOG=info \
+              ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+
+            # Cleanup old images
+            docker image prune -f
+
+      - name: Health check
+        run: |
+          sleep 10
+          curl -f ${{ vars.STAGING_URL }}/rest/api/3/project || exit 1
+
+  # Deploy to production (manual trigger or tag)
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: docker
+    if: github.event.inputs.deploy == 'true' || startsWith(github.ref, 'refs/tags/v')
+    environment:
+      name: production
+      url: ${{ vars.PRODUCTION_URL }}
+    steps:
+      - name: Deploy to production server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.PRODUCTION_HOST }}
+          username: ${{ secrets.PRODUCTION_USER }}
+          key: ${{ secrets.PRODUCTION_SSH_KEY }}
+          script: |
+            # Pull latest image
+            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+
+            # Stop existing container
+            docker stop jira-mock-server || true
+            docker rm jira-mock-server || true
+
+            # Start new container with production settings
+            docker run -d \
+              --name jira-mock-server \
+              --restart unless-stopped \
+              -p 8080:8080 \
+              -v /opt/jira-mock-server/data:/app/data \
+              -e RUST_LOG=warn \
+              ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+
+            # Cleanup old images
+            docker image prune -f
+
+      - name: Health check
+        run: |
+          sleep 10
+          curl -f ${{ vars.PRODUCTION_URL }}/rest/api/3/project || exit 1
+
+      - name: Notify deployment
+        if: success()
+        run: |
+          echo "Successfully deployed to production"
+          # Add Slack/Discord notification here if needed

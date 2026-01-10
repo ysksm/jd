@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  jira-mock-server:
+    build:
+      context: ../..
+      dockerfile: crates/jira-mock-server/Dockerfile
+    container_name: jira-mock-server
+    ports:
+      - "8080:8080"
+    volumes:
+      - mock-data:/app/data
+    environment:
+      - RUST_LOG=debug
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/rest/api/3/project"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  mock-data:
+    driver: local
