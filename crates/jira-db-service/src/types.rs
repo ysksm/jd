@@ -192,6 +192,28 @@ pub struct JiraConfig {
     pub api_key: String,
 }
 
+/// JIRA endpoint configuration (for multiple endpoints)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JiraEndpoint {
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
+    pub endpoint: String,
+    pub username: String,
+    pub api_key: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LogConfig {
+    pub file_enabled: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file_dir: Option<String>,
+    pub level: String,
+    pub max_files: i32,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DatabaseConfig {
@@ -217,6 +239,14 @@ pub struct Settings {
     pub projects: Vec<ProjectConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub embeddings: Option<EmbeddingsConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub log: Option<LogConfig>,
+    /// Multiple JIRA endpoints
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub jira_endpoints: Option<Vec<JiraEndpoint>>,
+    /// Active endpoint name
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub active_endpoint: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -283,6 +313,17 @@ pub struct ConfigUpdateRequest {
     pub database: Option<DatabaseConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub embeddings: Option<EmbeddingsConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub log: Option<LogConfig>,
+    /// Add a new endpoint
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub add_endpoint: Option<JiraEndpoint>,
+    /// Remove an endpoint by name
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub remove_endpoint: Option<String>,
+    /// Set active endpoint
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub set_active_endpoint: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

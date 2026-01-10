@@ -5,8 +5,8 @@ use std::sync::Arc;
 use jira_db_core::{
     DuckDbChangeHistoryRepository, DuckDbFieldRepository, DuckDbIssueRepository,
     DuckDbIssueSnapshotRepository, DuckDbIssuesExpandedRepository, DuckDbMetadataRepository,
-    DuckDbSyncHistoryRepository, JiraApiClient, JiraConfig, Settings, SyncCheckpoint,
-    SyncFieldsUseCase, SyncProjectUseCase,
+    DuckDbSyncHistoryRepository, JiraApiClient, Settings, SyncCheckpoint, SyncFieldsUseCase,
+    SyncProjectUseCase,
 };
 
 use crate::error::{ServiceError, ServiceResult};
@@ -24,12 +24,10 @@ pub async fn execute(
         .ok_or(ServiceError::NotInitialized)?;
     let db = state.get_db().ok_or(ServiceError::NotInitialized)?;
 
-    // Create JIRA config and client
-    let jira_config = JiraConfig {
-        endpoint: settings.jira.endpoint.clone(),
-        username: settings.jira.username.clone(),
-        api_key: settings.jira.api_key.clone(),
-    };
+    // Create JIRA config and client from active endpoint
+    let jira_config = settings
+        .get_jira_config()
+        .ok_or_else(|| ServiceError::Config("No JIRA endpoint configured".to_string()))?;
     let jira_client = Arc::new(
         JiraApiClient::new(&jira_config).map_err(|e| ServiceError::JiraApi(e.to_string()))?,
     );
