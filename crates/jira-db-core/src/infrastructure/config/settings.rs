@@ -22,9 +22,44 @@ pub struct Settings {
     pub embeddings: Option<EmbeddingsConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub log: Option<LogConfig>,
+    /// Sync configuration
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sync: Option<SyncSettings>,
     /// Debug mode enables JIRA test data creation features and verbose logging
     #[serde(default)]
     pub debug_mode: bool,
+}
+
+/// Configuration for sync behavior
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SyncSettings {
+    /// Enable incremental sync (only fetch issues updated since last sync)
+    /// Default: true
+    #[serde(default = "default_incremental_sync_enabled")]
+    pub incremental_sync_enabled: bool,
+    /// Safety margin in minutes for incremental sync
+    /// This is subtracted from last_synced to ensure no data is missed
+    /// due to JQL's minute-level precision (JIRA JQL does not support seconds)
+    /// Default: 5 minutes
+    #[serde(default = "default_incremental_sync_margin_minutes")]
+    pub incremental_sync_margin_minutes: u32,
+}
+
+fn default_incremental_sync_enabled() -> bool {
+    true
+}
+
+fn default_incremental_sync_margin_minutes() -> u32 {
+    5
+}
+
+impl Default for SyncSettings {
+    fn default() -> Self {
+        Self {
+            incremental_sync_enabled: default_incremental_sync_enabled(),
+            incremental_sync_margin_minutes: default_incremental_sync_margin_minutes(),
+        }
+    }
 }
 
 /// Named JIRA endpoint configuration
@@ -241,6 +276,7 @@ impl Settings {
             },
             embeddings: None,
             log: None,
+            sync: None,
             debug_mode: false,
         }
     }
@@ -262,6 +298,7 @@ impl Settings {
             },
             embeddings: None,
             log: None,
+            sync: None,
             debug_mode: false,
         }
     }
@@ -350,6 +387,7 @@ impl Settings {
             },
             embeddings: None,
             log: None,
+            sync: None,
             debug_mode: false,
         };
 
@@ -451,6 +489,11 @@ impl Settings {
     /// Get the log configuration (returns default if not set)
     pub fn get_log_config(&self) -> LogConfig {
         self.log.clone().unwrap_or_default()
+    }
+
+    /// Get the sync configuration (returns default if not set)
+    pub fn get_sync_settings(&self) -> SyncSettings {
+        self.sync.clone().unwrap_or_default()
     }
 
     /// Get the log directory path
@@ -608,6 +651,7 @@ mod tests {
             },
             embeddings: None,
             log: None,
+            sync: None,
             debug_mode: false,
         }
     }
@@ -752,6 +796,7 @@ mod tests {
             },
             embeddings: None,
             log: None,
+            sync: None,
             debug_mode: false,
         };
 

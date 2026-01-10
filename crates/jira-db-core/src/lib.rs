@@ -36,7 +36,7 @@ pub use domain::repositories::{
 
 pub use infrastructure::config::{
     DatabaseConfig, EmbeddingsConfig, JiraConfig, JiraEndpoint, LogConfig, ProjectConfig, Settings,
-    SyncCheckpoint,
+    SyncCheckpoint, SyncSettings,
 };
 pub use infrastructure::database::{
     Database, DatabaseFactory, DbConnection, DuckDbChangeHistoryRepository, DuckDbFieldRepository,

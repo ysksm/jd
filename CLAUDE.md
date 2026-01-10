@@ -399,6 +399,27 @@ Metadata is NOT extracted from issues - it's fetched from API to ensure complete
 - ✅ **SQL Execution** tool via MCP (read-only)
 - ✅ **Multiple Embedding Providers** (OpenAI, Ollama, Cohere)
 - ✅ **Resumable Sync** with checkpoint support (survives interruptions)
+- ✅ **Incremental Sync** - only fetch issues updated since last sync (with configurable safety margin)
+
+## Sync Configuration
+
+Optional sync settings in `settings.json`:
+
+```json
+{
+  "sync": {
+    "incremental_sync_enabled": true,
+    "incremental_sync_margin_minutes": 5
+  }
+}
+```
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `incremental_sync_enabled` | `true` | Enable incremental sync (only fetch updated issues) |
+| `incremental_sync_margin_minutes` | `5` | Safety margin in minutes (JQL only supports minute precision) |
+
+**Note**: The safety margin prevents data loss due to JQL's minute-level precision. A 5-minute margin ensures no issues are missed even if they were updated in the same minute as the last sync.
 
 ## Future Enhancements
 
