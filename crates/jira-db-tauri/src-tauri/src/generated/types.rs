@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 /// JiraDb API Definition
-///
+/// 
 /// Design principles:
 /// - All operations use POST method (RPC-style)
 /// - Parameters are passed in request body
@@ -253,6 +253,20 @@ pub struct JiraConfig {
     pub api_key: String,
 }
 
+/// JIRA endpoint configuration (for multiple endpoints)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JiraEndpoint {
+    pub name: String,
+    #[serde(rename = "displayName")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
+    pub endpoint: String,
+    pub username: String,
+    #[serde(rename = "apiKey")]
+    pub api_key: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DatabaseConfig {
@@ -287,6 +301,15 @@ pub struct LogConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct SyncConfig {
+    #[serde(rename = "incrementalSyncEnabled")]
+    pub incremental_sync_enabled: bool,
+    #[serde(rename = "incrementalSyncMarginMinutes")]
+    pub incremental_sync_margin_minutes: i32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Settings {
     pub jira: JiraConfig,
     pub database: DatabaseConfig,
@@ -295,6 +318,14 @@ pub struct Settings {
     pub embeddings: Option<EmbeddingsConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub log: Option<LogConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sync: Option<SyncConfig>,
+    #[serde(rename = "jiraEndpoints")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub jira_endpoints: Option<Vec<JiraEndpoint>>,
+    #[serde(rename = "activeEndpoint")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub active_endpoint: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -306,7 +337,8 @@ pub struct ProjectConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ConfigGetRequest {}
+pub struct ConfigGetRequest {
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -325,6 +357,17 @@ pub struct ConfigUpdateRequest {
     pub embeddings: Option<EmbeddingsConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub log: Option<LogConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sync: Option<SyncConfig>,
+    #[serde(rename = "addEndpoint")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub add_endpoint: Option<JiraEndpoint>,
+    #[serde(rename = "removeEndpoint")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub remove_endpoint: Option<String>,
+    #[serde(rename = "setActiveEndpoint")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub set_active_endpoint: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -355,7 +398,8 @@ pub struct ConfigInitResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ProjectListRequest {}
+pub struct ProjectListRequest {
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -365,7 +409,14 @@ pub struct ProjectListResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ProjectInitRequest {}
+pub struct ProjectInitRequest {
+    #[serde(rename = "endpointName")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub endpoint_name: Option<String>,
+    #[serde(rename = "allEndpoints")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub all_endpoints: Option<bool>,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -373,6 +424,21 @@ pub struct ProjectInitResponse {
     pub projects: Vec<Project>,
     #[serde(rename = "newCount")]
     pub new_count: i32,
+    #[serde(rename = "endpointResults")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub endpoint_results: Option<Vec<EndpointFetchResult>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EndpointFetchResult {
+    #[serde(rename = "endpointName")]
+    pub endpoint_name: String,
+    #[serde(rename = "projectCount")]
+    pub project_count: i32,
+    pub success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -417,7 +483,8 @@ pub struct SyncExecuteResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SyncStatusRequest {}
+pub struct SyncStatusRequest {
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -600,7 +667,8 @@ pub struct SqlGetSchemaResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SqlQueryListRequest {}
+pub struct SqlQueryListRequest {
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -679,7 +747,8 @@ pub struct IssueTypeInfo {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct DebugStatusRequest {}
+pub struct DebugStatusRequest {
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -859,6 +928,10 @@ pub struct AiGenerationStats {
     pub bugs_created: i32,
     #[serde(rename = "transitionsApplied")]
     pub transitions_applied: i32,
+    #[serde(rename = "linksCreated")]
+    pub links_created: i32,
+    #[serde(rename = "dueDatesSet")]
+    pub due_dates_set: i32,
 }
 
 /// Request for AI test data generation
@@ -888,6 +961,11 @@ pub struct DebugAiGenerateRequest {
     #[serde(rename = "useFastModel")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub use_fast_model: Option<bool>,
+    #[serde(rename = "useClaudeCli")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub use_claude_cli: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub language: Option<String>,
 }
 
 /// Response from AI test data generation
@@ -909,7 +987,8 @@ pub struct DebugAiGenerateResponse {
 /// Request to check AI configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct DebugAiStatusRequest {}
+pub struct DebugAiStatusRequest {
+}
 
 /// Response for AI configuration status
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -917,4 +996,11 @@ pub struct DebugAiStatusRequest {}
 pub struct DebugAiStatusResponse {
     pub configured: bool,
     pub message: String,
+    #[serde(rename = "cliAvailable")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cli_available: Option<bool>,
+    #[serde(rename = "apiKeyConfigured")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub api_key_configured: Option<bool>,
 }
+

@@ -154,6 +154,15 @@ export interface JiraConfig {
   apiKey: string;
 }
 
+/** JIRA endpoint configuration (for multiple endpoints) */
+export interface JiraEndpoint {
+  name: string;
+  displayName?: string;
+  endpoint: string;
+  username: string;
+  apiKey: string;
+}
+
 export interface DatabaseConfig {
   path: string;
 }
@@ -172,12 +181,20 @@ export interface LogConfig {
   maxFiles: number;
 }
 
+export interface SyncConfig {
+  incrementalSyncEnabled: boolean;
+  incrementalSyncMarginMinutes: number;
+}
+
 export interface Settings {
   jira: JiraConfig;
   database: DatabaseConfig;
   projects: ProjectConfig[];
   embeddings?: EmbeddingsConfig;
   log?: LogConfig;
+  sync?: SyncConfig;
+  jiraEndpoints?: JiraEndpoint[];
+  activeEndpoint?: string;
 }
 
 export interface ProjectConfig {
@@ -197,6 +214,10 @@ export interface ConfigUpdateRequest {
   database?: DatabaseConfig;
   embeddings?: EmbeddingsConfig;
   log?: LogConfig;
+  sync?: SyncConfig;
+  addEndpoint?: JiraEndpoint;
+  removeEndpoint?: string;
+  setActiveEndpoint?: string;
 }
 
 export interface ConfigUpdateResponse {
@@ -224,11 +245,21 @@ export interface ProjectListResponse {
 }
 
 export interface ProjectInitRequest {
+  endpointName?: string;
+  allEndpoints?: boolean;
 }
 
 export interface ProjectInitResponse {
   projects: Project[];
   newCount: number;
+  endpointResults?: EndpointFetchResult[];
+}
+
+export interface EndpointFetchResult {
+  endpointName: string;
+  projectCount: number;
+  success: boolean;
+  error?: string;
 }
 
 export interface ProjectEnableRequest {
@@ -521,6 +552,8 @@ export interface AiGenerationStats {
   tasksCreated: number;
   bugsCreated: number;
   transitionsApplied: number;
+  linksCreated: number;
+  dueDatesSet: number;
 }
 
 /** Request for AI test data generation */
@@ -534,6 +567,8 @@ export interface DebugAiGenerateRequest {
   epicTheme?: string;
   bugCount?: number;
   useFastModel?: boolean;
+  useClaudeCli?: boolean;
+  language?: string;
 }
 
 /** Response from AI test data generation */
@@ -554,5 +589,7 @@ export interface DebugAiStatusRequest {
 export interface DebugAiStatusResponse {
   configured: boolean;
   message: string;
+  cliAvailable?: boolean;
+  apiKeyConfigured?: boolean;
 }
 
