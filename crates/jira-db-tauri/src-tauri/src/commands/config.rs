@@ -128,6 +128,14 @@ pub async fn config_update(
                     max_files: log.max_files as usize,
                 });
             }
+
+            // Update sync config if provided
+            if let Some(sync) = request.sync.clone() {
+                settings.sync = Some(jira_db_core::SyncSettings {
+                    incremental_sync_enabled: sync.incremental_sync_enabled,
+                    incremental_sync_margin_minutes: sync.incremental_sync_margin_minutes as u32,
+                });
+            }
         })
         .map_err(|e| e.to_string())?;
 
@@ -212,6 +220,9 @@ impl From<jira_db_core::Settings> for Settings {
             })
             .collect();
 
+        // Get sync settings
+        let sync_settings = s.get_sync_settings();
+
         Self {
             jira: JiraConfig {
                 endpoint: jira_config.endpoint,
@@ -240,6 +251,11 @@ impl From<jira_db_core::Settings> for Settings {
                 file_dir: l.file_dir.map(|p| p.to_string_lossy().to_string()),
                 level: l.level,
                 max_files: l.max_files as i32,
+            }),
+            sync: Some(SyncConfig {
+                incremental_sync_enabled: sync_settings.incremental_sync_enabled,
+                incremental_sync_margin_minutes: sync_settings.incremental_sync_margin_minutes
+                    as i32,
             }),
             jira_endpoints: if jira_endpoints.is_empty() {
                 None

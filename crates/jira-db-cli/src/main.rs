@@ -12,11 +12,11 @@ use jira_db_core::application::use_cases::{
     GetChangeHistoryUseCase, GetProjectMetadataUseCase, SearchIssuesUseCase,
     SyncProjectListUseCase, SyncProjectUseCase,
 };
-use jira_db_core::chrono::Utc;
+use jira_db_core::chrono::{Duration, Utc};
 use jira_db_core::domain::error::{DomainError, DomainResult};
 use jira_db_core::domain::repositories::SearchParams;
 use jira_db_core::indicatif::{ProgressBar, ProgressStyle};
-use jira_db_core::infrastructure::config::{ProjectConfig, Settings};
+use jira_db_core::infrastructure::config::{ProjectConfig, Settings, SyncCheckpoint};
 use jira_db_core::infrastructure::database::{
     DatabaseFactory, DuckDbChangeHistoryRepository, DuckDbIssueRepository,
     DuckDbIssueSnapshotRepository, DuckDbMetadataRepository, DuckDbProjectRepository,
@@ -240,6 +240,7 @@ async fn handle_init_command(
             },
             embeddings: None,
             log: None,
+            sync: None,
             debug_mode: false,
         };
 
@@ -434,13 +435,53 @@ async fn handle_sync(
 
     let settings_path = settings_path.to_path_buf();
 
+    // Get sync settings for incremental sync
+    let sync_settings = settings.get_sync_settings();
+
     if let Some(key) = project_key {
         let project = settings
             .find_project(&key)
             .ok_or_else(|| DomainError::NotFound(format!("Project not found: {}", key)))?;
 
         let project_id = project.id.clone();
-        let checkpoint = project.sync_checkpoint.clone();
+        let last_synced = project.last_synced;
+
+        // Determine the checkpoint to use:
+        // 1. If there's an existing sync_checkpoint (interrupted sync), use it
+        // 2. If incremental sync is enabled and we have last_synced, create an incremental checkpoint
+        // 3. Otherwise, do a full sync (no checkpoint)
+        let checkpoint = if let Some(cp) = project.sync_checkpoint.clone() {
+            // Resuming from interrupted sync
+            Some(cp)
+        } else if sync_settings.incremental_sync_enabled {
+            if let Some(last_sync_time) = last_synced {
+                // Create incremental sync checkpoint with safety margin
+                // JQL only supports minute-level precision, so we subtract a safety margin
+                // to ensure no data is missed
+                let margin_minutes = sync_settings.incremental_sync_margin_minutes as i64;
+                let incremental_start = last_sync_time - Duration::minutes(margin_minutes);
+                println!(
+                    "Incremental sync for {}: fetching issues updated since {} (margin: {} min)",
+                    key,
+                    incremental_start.format("%Y-%m-%d %H:%M:%S"),
+                    margin_minutes
+                );
+                Some(SyncCheckpoint {
+                    last_issue_updated_at: incremental_start,
+                    last_issue_key: String::new(), // Empty = don't skip any issues
+                    items_processed: 0,
+                    total_items: 0,
+                })
+            } else {
+                // First sync - no checkpoint
+                println!("Full sync for {} (first time)", key);
+                None
+            }
+        } else {
+            // Incremental sync disabled - full sync
+            println!("Full sync for {} (incremental sync disabled)", key);
+            None
+        };
 
         // Get connection for this specific project
         let conn = db_factory.get_connection(&key)?;
@@ -463,12 +504,14 @@ async fn handle_sync(
         )
         .with_raw_repository(raw_repository);
 
-        // Show resuming message if we have a checkpoint
-        if let Some(ref cp) = checkpoint {
-            println!(
-                "Resuming sync for {} from checkpoint ({}/{} issues processed)",
-                key, cp.items_processed, cp.total_items
-            );
+        // Show resuming message if we have a checkpoint from interrupted sync
+        if project.sync_checkpoint.is_some() {
+            if let Some(ref cp) = checkpoint {
+                println!(
+                    "Resuming sync for {} from checkpoint ({}/{} issues processed)",
+                    key, cp.items_processed, cp.total_items
+                );
+            }
         }
 
         let pb = ProgressBar::new_spinner();
@@ -529,10 +572,18 @@ async fn handle_sync(
             settings.save(&settings_path)?;
         }
     } else {
+        // Collect project info including last_synced for incremental sync
         let enabled_projects: Vec<_> = settings
             .sync_enabled_projects()
             .iter()
-            .map(|p| (p.key.clone(), p.id.clone(), p.sync_checkpoint.clone()))
+            .map(|p| {
+                (
+                    p.key.clone(),
+                    p.id.clone(),
+                    p.sync_checkpoint.clone(),
+                    p.last_synced,
+                )
+            })
             .collect();
 
         if enabled_projects.is_empty() {
@@ -542,7 +593,37 @@ async fn handle_sync(
 
         info!("Syncing {} projects", enabled_projects.len());
 
-        for (key, id, checkpoint) in enabled_projects {
+        for (key, id, existing_checkpoint, last_synced) in enabled_projects {
+            // Determine the checkpoint to use (same logic as single project)
+            let checkpoint = if let Some(cp) = existing_checkpoint.clone() {
+                // Resuming from interrupted sync
+                Some(cp)
+            } else if sync_settings.incremental_sync_enabled {
+                if let Some(last_sync_time) = last_synced {
+                    // Create incremental sync checkpoint with safety margin
+                    let margin_minutes = sync_settings.incremental_sync_margin_minutes as i64;
+                    let incremental_start = last_sync_time - Duration::minutes(margin_minutes);
+                    println!(
+                        "Incremental sync for {}: fetching issues updated since {} (margin: {} min)",
+                        key,
+                        incremental_start.format("%Y-%m-%d %H:%M:%S"),
+                        margin_minutes
+                    );
+                    Some(SyncCheckpoint {
+                        last_issue_updated_at: incremental_start,
+                        last_issue_key: String::new(),
+                        items_processed: 0,
+                        total_items: 0,
+                    })
+                } else {
+                    println!("Full sync for {} (first time)", key);
+                    None
+                }
+            } else {
+                println!("Full sync for {} (incremental sync disabled)", key);
+                None
+            };
+
             // Get connection for this specific project
             let conn = db_factory.get_connection(&key)?;
             let raw_conn = db_factory.get_raw_connection(&key)?;
@@ -565,12 +646,14 @@ async fn handle_sync(
             )
             .with_raw_repository(raw_repository);
 
-            // Show resuming message if we have a checkpoint
-            if let Some(ref cp) = checkpoint {
-                println!(
-                    "Resuming sync for {} from checkpoint ({}/{} issues processed)",
-                    key, cp.items_processed, cp.total_items
-                );
+            // Show resuming message if we have a checkpoint from interrupted sync
+            if existing_checkpoint.is_some() {
+                if let Some(ref cp) = checkpoint {
+                    println!(
+                        "Resuming sync for {} from checkpoint ({}/{} issues processed)",
+                        key, cp.items_processed, cp.total_items
+                    );
+                }
             }
 
             let settings_path_clone = settings_path.clone();
@@ -954,6 +1037,22 @@ fn handle_config_show(settings_path: &std::path::Path) -> DomainResult<()> {
         }
     );
 
+    // Show sync settings
+    let sync_settings = settings.get_sync_settings();
+    println!("\nSync Settings:");
+    println!(
+        "  Incremental Sync: {}",
+        if sync_settings.incremental_sync_enabled {
+            "enabled"
+        } else {
+            "disabled"
+        }
+    );
+    println!(
+        "  Safety Margin: {} minutes",
+        sync_settings.incremental_sync_margin_minutes
+    );
+
     Ok(())
 }
 
@@ -976,9 +1075,36 @@ fn handle_config_set(settings_path: &std::path::Path, key: &str, value: &str) ->
         "debug_mode" => {
             settings.debug_mode = value.to_lowercase() == "true" || value == "1";
         }
+        "sync.incremental_sync_enabled" => {
+            let enabled = value.to_lowercase() == "true" || value == "1";
+            let mut sync_settings = settings.get_sync_settings();
+            sync_settings.incremental_sync_enabled = enabled;
+            settings.sync = Some(sync_settings);
+            println!(
+                "Incremental sync {}",
+                if enabled { "enabled" } else { "disabled" }
+            );
+        }
+        "sync.incremental_sync_margin_minutes" => {
+            let margin: u32 = value.parse().map_err(|_| {
+                DomainError::Validation(format!(
+                    "Invalid value '{}': must be a positive integer",
+                    value
+                ))
+            })?;
+            let mut sync_settings = settings.get_sync_settings();
+            sync_settings.incremental_sync_margin_minutes = margin;
+            settings.sync = Some(sync_settings);
+            println!("Set incremental sync margin to {} minutes", margin);
+        }
         _ => {
             return Err(DomainError::Validation(format!(
-                "Unknown configuration key: {}. Use 'endpoint' commands to manage JIRA endpoints.",
+                "Unknown configuration key: {}. Available keys:\n  \
+                - active_endpoint\n  \
+                - database.database_dir\n  \
+                - debug_mode\n  \
+                - sync.incremental_sync_enabled\n  \
+                - sync.incremental_sync_margin_minutes",
                 key
             )));
         }

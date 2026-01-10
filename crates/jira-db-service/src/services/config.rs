@@ -134,6 +134,14 @@ pub fn update(
                     max_files: log.max_files as usize,
                 });
             }
+
+            // Update sync config if provided
+            if let Some(sync) = request.sync.clone() {
+                settings.sync = Some(jira_db_core::SyncSettings {
+                    incremental_sync_enabled: sync.incremental_sync_enabled,
+                    incremental_sync_margin_minutes: sync.incremental_sync_margin_minutes as u32,
+                });
+            }
         })
         .map_err(|e| ServiceError::Config(e.to_string()))?;
 
@@ -155,14 +163,12 @@ pub fn initialize(
     // Determine database directory
     let database_dir = if let Some(db_path) = request.database_path {
         PathBuf::from(db_path)
+    } else if let Some(parent) = settings_path.parent() {
+        parent.join("data")
     } else {
-        if let Some(parent) = settings_path.parent() {
-            parent.join("data")
-        } else {
-            std::env::current_dir()
-                .map(|cwd| cwd.join("data"))
-                .unwrap_or_else(|_| PathBuf::from("./data"))
-        }
+        std::env::current_dir()
+            .map(|cwd| cwd.join("data"))
+            .unwrap_or_else(|_| PathBuf::from("./data"))
     };
 
     // Ensure the database directory exists
@@ -193,6 +199,8 @@ fn convert_settings(mut s: jira_db_core::Settings) -> Settings {
     // Migrate legacy config to get active endpoint
     s.migrate_legacy_config();
 
+    let sync_settings = s.get_sync_settings();
+
     // Get the active endpoint's config, or create a placeholder
     let jira_config = s.get_jira_config().unwrap_or(jira_db_core::JiraConfig {
         endpoint: String::new(),
@@ -214,11 +222,13 @@ fn convert_settings(mut s: jira_db_core::Settings) -> Settings {
         .collect();
 
     Settings {
-        jira: JiraConfig {
+        jira: Some(JiraConfig {
             endpoint: jira_config.endpoint,
             username: jira_config.username,
             api_key: jira_config.api_key,
-        },
+        }),
+        jira_endpoints,
+        active_endpoint: s.active_endpoint,
         database: DatabaseConfig {
             path: s.database.database_dir.to_string_lossy().to_string(),
         },
@@ -228,6 +238,7 @@ fn convert_settings(mut s: jira_db_core::Settings) -> Settings {
             .map(|p| ProjectConfig {
                 key: p.key,
                 enabled: p.sync_enabled,
+                endpoint: p.endpoint,
             })
             .collect(),
         embeddings: s.embeddings.map(|e| EmbeddingsConfig {
@@ -242,11 +253,9 @@ fn convert_settings(mut s: jira_db_core::Settings) -> Settings {
             level: l.level,
             max_files: l.max_files as i32,
         }),
-        jira_endpoints: if jira_endpoints.is_empty() {
-            None
-        } else {
-            Some(jira_endpoints)
-        },
-        active_endpoint: s.active_endpoint,
+        sync: Some(SyncConfig {
+            incremental_sync_enabled: sync_settings.incremental_sync_enabled,
+            incremental_sync_margin_minutes: sync_settings.incremental_sync_margin_minutes as i32,
+        }),
     }
 }

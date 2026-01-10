@@ -322,6 +322,44 @@
         }
       </section>
 
+      <!-- Sync Configuration -->
+      <section class="settings-section">
+        <h3>Sync Settings</h3>
+
+        <div class="form-group checkbox">
+          <label>
+            <input
+              type="checkbox"
+              name="syncIncrementalEnabled"
+              [ngModel]="syncIncrementalEnabled()"
+              (ngModelChange)="syncIncrementalEnabled.set($event)"
+            />
+            Enable incremental sync (only fetch updated issues)
+          </label>
+          <small class="form-hint">When enabled, sync only fetches issues updated since the last sync.</small>
+        </div>
+
+        @if (syncIncrementalEnabled()) {
+          <div class="form-group">
+            <label for="syncMarginMinutes">Safety Margin (minutes)</label>
+            <input
+              type="number"
+              id="syncMarginMinutes"
+              name="syncMarginMinutes"
+              [ngModel]="syncMarginMinutes()"
+              (ngModelChange)="syncMarginMinutes.set($event)"
+              min="0"
+              max="60"
+              placeholder="5"
+            />
+            <small class="form-hint">
+              JQL only supports minute-level precision. This margin prevents data loss by fetching
+              issues from a few minutes before the last sync time.
+            </small>
+          </div>
+        }
+      </section>
+
       <!-- Actions -->
       <div class="form-actions">
         @if (!initialized()) {
