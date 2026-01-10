@@ -88,7 +88,7 @@ async fn main() {
         .route("/rest/api/3/search", post(handlers::search_issues_post))
         // Project metadata
         .route(
-            "/rest/api/3/project/:project_key/statuses",
+            "/rest/api/3/project/{project_key}/statuses",
             get(handlers::get_project_statuses),
         )
         .route("/rest/api/3/priority", get(handlers::get_priorities))
@@ -97,28 +97,28 @@ async fn main() {
             get(handlers::get_issue_types),
         )
         .route(
-            "/rest/api/3/issue/createmeta/:project_key/issuetypes",
+            "/rest/api/3/issue/createmeta/{project_key}/issuetypes",
             get(handlers::get_issue_types_by_project_key),
         )
         .route(
-            "/rest/api/3/project/:project_key/components",
+            "/rest/api/3/project/{project_key}/components",
             get(handlers::get_components),
         )
         .route(
-            "/rest/api/3/project/:project_key/versions",
+            "/rest/api/3/project/{project_key}/versions",
             get(handlers::get_versions),
         )
         .route("/rest/api/3/field", get(handlers::get_fields))
         // Issue CRUD
         .route("/rest/api/3/issue", post(handlers::create_issue))
-        .route("/rest/api/3/issue/:issue_key", put(handlers::update_issue))
+        .route("/rest/api/3/issue/{issue_key}", put(handlers::update_issue))
         // Transitions
         .route(
-            "/rest/api/3/issue/:issue_key/transitions",
+            "/rest/api/3/issue/{issue_key}/transitions",
             get(handlers::get_transitions),
         )
         .route(
-            "/rest/api/3/issue/:issue_key/transitions",
+            "/rest/api/3/issue/{issue_key}/transitions",
             post(handlers::do_transition),
         )
         // Issue Links
@@ -144,17 +144,17 @@ async fn main() {
     tracing::info!("  GET  /rest/api/3/project");
     tracing::info!("  GET  /rest/api/3/search/jql?jql=...");
     tracing::info!("  POST /rest/api/3/search/jql");
-    tracing::info!("  GET  /rest/api/3/project/:key/statuses");
+    tracing::info!("  GET  /rest/api/3/project/{{key}}/statuses");
     tracing::info!("  GET  /rest/api/3/priority");
     tracing::info!("  GET  /rest/api/3/issuetype/project?projectId=...");
-    tracing::info!("  GET  /rest/api/3/issue/createmeta/:key/issuetypes");
-    tracing::info!("  GET  /rest/api/3/project/:key/components");
-    tracing::info!("  GET  /rest/api/3/project/:key/versions");
+    tracing::info!("  GET  /rest/api/3/issue/createmeta/{{key}}/issuetypes");
+    tracing::info!("  GET  /rest/api/3/project/{{key}}/components");
+    tracing::info!("  GET  /rest/api/3/project/{{key}}/versions");
     tracing::info!("  GET  /rest/api/3/field");
     tracing::info!("  POST /rest/api/3/issue");
-    tracing::info!("  PUT  /rest/api/3/issue/:key");
-    tracing::info!("  GET  /rest/api/3/issue/:key/transitions");
-    tracing::info!("  POST /rest/api/3/issue/:key/transitions");
+    tracing::info!("  PUT  /rest/api/3/issue/{{key}}");
+    tracing::info!("  GET  /rest/api/3/issue/{{key}}/transitions");
+    tracing::info!("  POST /rest/api/3/issue/{{key}}/transitions");
     tracing::info!("  POST /rest/api/3/issueLink");
 
     axum::serve(listener, app).await.unwrap();
