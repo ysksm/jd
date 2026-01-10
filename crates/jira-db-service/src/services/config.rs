@@ -22,17 +22,63 @@ pub fn update(
 ) -> ServiceResult<ConfigUpdateResponse> {
     let updated = state
         .update_settings(|settings| {
-            if let Some(jira) = request.jira {
-                settings.jira.endpoint = jira.endpoint;
-                settings.jira.username = jira.username;
-                settings.jira.api_key = jira.api_key;
+            // Handle JIRA config update (updates the active endpoint)
+            if let Some(jira) = request.jira.clone() {
+                if let Some(active_name) = &settings.active_endpoint {
+                    // Find and update the active endpoint
+                    if let Some(endpoint) = settings
+                        .jira_endpoints
+                        .iter_mut()
+                        .find(|e| &e.name == active_name)
+                    {
+                        endpoint.endpoint = jira.endpoint;
+                        endpoint.username = jira.username;
+                        endpoint.api_key = jira.api_key;
+                    }
+                } else if let Some(endpoint) = settings.jira_endpoints.first_mut() {
+                    // Update first endpoint if no active is set
+                    endpoint.endpoint = jira.endpoint;
+                    endpoint.username = jira.username;
+                    endpoint.api_key = jira.api_key;
+                } else {
+                    // No endpoints exist, create a default one
+                    settings.jira_endpoints.push(jira_db_core::JiraEndpoint {
+                        name: "default".to_string(),
+                        display_name: Some("Default".to_string()),
+                        endpoint: jira.endpoint,
+                        username: jira.username,
+                        api_key: jira.api_key,
+                    });
+                    settings.active_endpoint = Some("default".to_string());
+                }
             }
 
-            if let Some(database) = request.database {
+            // Handle add endpoint
+            if let Some(ep) = request.add_endpoint.clone() {
+                settings.add_endpoint(jira_db_core::JiraEndpoint {
+                    name: ep.name,
+                    display_name: ep.display_name,
+                    endpoint: ep.endpoint,
+                    username: ep.username,
+                    api_key: ep.api_key,
+                });
+            }
+
+            // Handle remove endpoint
+            if let Some(name) = request.remove_endpoint.clone() {
+                settings.remove_endpoint(&name);
+            }
+
+            // Handle set active endpoint
+            if let Some(name) = request.set_active_endpoint.clone() {
+                settings.set_active_endpoint(&name);
+            }
+
+            if let Some(database) = request.database.clone() {
                 settings.database.database_dir = PathBuf::from(database.path);
             }
 
-            if let Some(embeddings) = request.embeddings {
+            if let Some(embeddings) = request.embeddings.clone() {
                 settings.embeddings = Some(jira_db_core::EmbeddingsConfig {
                     provider: embeddings.provider,
                     api_key: None,
@@ -43,7 +89,7 @@ pub fn update(
                 });
             }
 
-            if let Some(log) = request.log {
+            if let Some(log) = request.log.clone() {
                 settings.log = Some(jira_db_core::LogConfig {
                     file_enabled: log.file_enabled,
                     file_dir: log.file_dir.map(std::path::PathBuf::from),
@@ -52,7 +98,7 @@ pub fn update(
                 });
             }
 
-            if let Some(sync) = request.sync {
+            if let Some(sync) = request.sync.clone() {
                 settings.sync = Some(jira_db_core::SyncSettings {
                     incremental_sync_enabled: sync.incremental_sync_enabled,
                     incremental_sync_margin_minutes: sync.incremental_sync_margin_minutes as u32,
@@ -79,14 +125,12 @@ pub fn initialize(
     // Determine database directory
     let database_dir = if let Some(db_path) = request.database_path {
         PathBuf::from(db_path)
+    } else if let Some(parent) = settings_path.parent() {
+        parent.join("data")
     } else {
-        if let Some(parent) = settings_path.parent() {
-            parent.join("data")
-        } else {
-            std::env::current_dir()
-                .map(|cwd| cwd.join("data"))
-                .unwrap_or_else(|_| PathBuf::from("./data"))
-        }
+        std::env::current_dir()
+            .map(|cwd| cwd.join("data"))
+            .unwrap_or_else(|_| PathBuf::from("./data"))
     };
 
     // Ensure the database directory exists
@@ -115,12 +159,31 @@ pub fn initialize(
 /// Convert core Settings to API Settings
 fn convert_settings(s: jira_db_core::Settings) -> Settings {
     let sync_settings = s.get_sync_settings();
+
+    // Get effective JIRA config from active endpoint
+    let jira = s.get_jira_config().map(|c| JiraConfig {
+        endpoint: c.endpoint,
+        username: c.username,
+        api_key: c.api_key,
+    });
+
+    // Convert endpoints
+    let jira_endpoints: Vec<JiraEndpoint> = s
+        .jira_endpoints
+        .iter()
+        .map(|e| JiraEndpoint {
+            name: e.name.clone(),
+            display_name: e.display_name.clone(),
+            endpoint: e.endpoint.clone(),
+            username: e.username.clone(),
+            api_key: e.api_key.clone(),
+        })
+        .collect();
+
     Settings {
-        jira: JiraConfig {
-            endpoint: s.jira.endpoint,
-            username: s.jira.username,
-            api_key: s.jira.api_key,
-        },
+        jira,
+        jira_endpoints,
+        active_endpoint: s.active_endpoint.clone(),
         database: DatabaseConfig {
             path: s.database.database_dir.to_string_lossy().to_string(),
         },
@@ -130,6 +193,7 @@ fn convert_settings(s: jira_db_core::Settings) -> Settings {
             .map(|p| ProjectConfig {
                 key: p.key,
                 enabled: p.sync_enabled,
+                endpoint: p.endpoint,
             })
             .collect(),
         embeddings: s.embeddings.map(|e| EmbeddingsConfig {
