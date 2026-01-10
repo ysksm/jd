@@ -8,7 +8,6 @@ pub use types::*;
 // Note: commands.rs is a scaffold file for reference only.
 // Implement your commands in src/commands/*.rs using the types above.
 // The scaffold file shows the expected command names and signatures.
-// DISABLED: Scaffold module conflicts with actual command implementations
-// #[path = "commands.rs"]
-// #[allow(dead_code)]
-// mod commands_scaffold;
+#[path = "commands.rs"]
+#[allow(dead_code)]
+mod commands_scaffold;

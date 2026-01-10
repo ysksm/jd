@@ -3,11 +3,13 @@
 use std::sync::Arc;
 use tauri::State;
 
+use chrono::Duration;
 use jira_db_core::{
     DuckDbChangeHistoryRepository, DuckDbFieldRepository, DuckDbIssueRepository,
     DuckDbIssueSnapshotRepository, DuckDbIssuesExpandedRepository, DuckDbMetadataRepository,
     DuckDbSyncHistoryRepository, JiraApiClient, RawDataRepository, Settings, SyncCheckpoint,
     SyncFieldsUseCase, SyncProjectUseCase,
+    chrono::{self, DateTime, Utc},
 };
 use serde::{Deserialize, Serialize};
 
@@ -78,24 +80,46 @@ pub async fn sync_execute(
         .ok_or("No JIRA endpoint configured")?;
     let jira_client = Arc::new(JiraApiClient::new(&jira_config).map_err(|e| e.to_string())?);
 
-    // Get projects to sync with their checkpoint information
+    // Get sync settings for incremental sync
+    let sync_settings = settings.get_sync_settings();
+    let force_full_sync = request.force.unwrap_or(false);
+
+    // Get projects to sync with their checkpoint and last_synced information
     // Clone the data we need so we don't hold reference to settings
-    let projects_to_sync: Vec<(String, String, Option<SyncCheckpoint>)> =
-        if let Some(ref project_key) = request.project_key {
-            settings
-                .projects
-                .iter()
-                .filter(|p| &p.key == project_key)
-                .map(|p| (p.key.clone(), p.id.clone(), p.sync_checkpoint.clone()))
-                .collect()
-        } else {
-            settings
-                .projects
-                .iter()
-                .filter(|p| p.sync_enabled)
-                .map(|p| (p.key.clone(), p.id.clone(), p.sync_checkpoint.clone()))
-                .collect()
-        };
+    let projects_to_sync: Vec<(
+        String,
+        String,
+        Option<SyncCheckpoint>,
+        Option<DateTime<Utc>>,
+    )> = if let Some(ref project_key) = request.project_key {
+        settings
+            .projects
+            .iter()
+            .filter(|p| &p.key == project_key)
+            .map(|p| {
+                (
+                    p.key.clone(),
+                    p.id.clone(),
+                    p.sync_checkpoint.clone(),
+                    p.last_synced,
+                )
+            })
+            .collect()
+    } else {
+        settings
+            .projects
+            .iter()
+            .filter(|p| p.sync_enabled)
+            .map(|p| {
+                (
+                    p.key.clone(),
+                    p.id.clone(),
+                    p.sync_checkpoint.clone(),
+                    p.last_synced,
+                )
+            })
+            .collect()
+    };
 
     if projects_to_sync.is_empty() {
         return Err("No projects to sync".to_string());
@@ -111,11 +135,18 @@ pub async fn sync_execute(
     let mut results = Vec::new();
     let mut total_fields_synced = 0i32;
 
-    for (key, id, checkpoint) in &projects_to_sync {
+    for (key, id, existing_checkpoint, last_synced) in &projects_to_sync {
         let start_time = std::time::Instant::now();
 
-        // Show resuming message if we have a checkpoint
-        if let Some(cp) = checkpoint {
+        // Determine the checkpoint to use for sync:
+        // 1. If force=true, use None (full sync)
+        // 2. If existing checkpoint exists, use it (resume interrupted sync)
+        // 3. If incremental sync enabled and last_synced exists, create incremental checkpoint
+        // 4. Otherwise, full sync
+        let checkpoint: Option<SyncCheckpoint> = if force_full_sync {
+            log_info!(log, "[{}] Force full sync requested", key);
+            None
+        } else if let Some(cp) = existing_checkpoint {
             log_info!(
                 log,
                 "[{}] Resuming sync from checkpoint ({}/{} issues processed)",
@@ -123,9 +154,33 @@ pub async fn sync_execute(
                 cp.items_processed,
                 cp.total_items
             );
+            Some(cp.clone())
+        } else if sync_settings.incremental_sync_enabled {
+            if let Some(last_sync_time) = last_synced {
+                // Create incremental sync checkpoint with safety margin
+                let margin_minutes = sync_settings.incremental_sync_margin_minutes as i64;
+                let incremental_start = *last_sync_time - Duration::minutes(margin_minutes);
+                log_info!(
+                    log,
+                    "[{}] Incremental sync from {} (margin: {} min)",
+                    key,
+                    incremental_start.format("%Y-%m-%d %H:%M:%S"),
+                    margin_minutes
+                );
+                Some(SyncCheckpoint {
+                    last_issue_updated_at: incremental_start,
+                    last_issue_key: String::new(),
+                    items_processed: 0,
+                    total_items: 0,
+                })
+            } else {
+                log_info!(log, "[{}] Full sync (first sync)", key);
+                None
+            }
         } else {
-            log_info!(log, "[{}] Starting sync...", key);
-        }
+            log_info!(log, "[{}] Full sync (incremental sync disabled)", key);
+            None
+        };
 
         // Get database connection for this project
         let db = db_factory
@@ -337,7 +392,7 @@ pub async fn sync_execute(
     );
 
     // Close database connections after sync to free resources
-    for (key, _, _) in &projects_to_sync {
+    for (key, _, _, _) in &projects_to_sync {
         if let Err(e) = state.close_db(key) {
             log_warn!(log, "Failed to close database for {}: {}", key, e);
         }

@@ -19,6 +19,18 @@
         </select>
       </div>
 
+      <div class="sync-options">
+        <label class="checkbox-label">
+          <input
+            type="checkbox"
+            [checked]="forceFullSync()"
+            (change)="toggleForceSync()"
+          />
+          <span>Force Full Sync</span>
+          <span class="hint">(Ignore last sync time, re-fetch all issues)</span>
+        </label>
+      </div>
+
       <button
         class="btn btn-primary"
         (click)="startSync()"
@@ -26,6 +38,8 @@
       >
         @if (syncing()) {
           <span class="spinner"></span> Syncing...
+        } @else if (forceFullSync()) {
+          Force Full Sync
         } @else {
           Start Sync
         }

@@ -301,6 +301,24 @@ pub async fn debug_bulk_transition(
     todo!("Implement debug_bulk_transition")
 }
 
+/// Check AI test data generation status
+#[tauri::command]
+pub async fn debug_ai_status(
+    state: State<'_, AppState>,
+    request: DebugAiStatusRequest,
+) -> Result<DebugAiStatusResponse, String> {
+    todo!("Implement debug_ai_status")
+}
+
+/// Generate test data using AI (Claude)
+#[tauri::command]
+pub async fn debug_ai_generate(
+    state: State<'_, AppState>,
+    request: DebugAiGenerateRequest,
+) -> Result<DebugAiGenerateResponse, String> {
+    todo!("Implement debug_ai_generate")
+}
+
 // ============================================================
 // Command Registration
 // ============================================================
@@ -337,6 +355,8 @@ macro_rules! register_commands {
             debug_list_transitions,
             debug_transition_issue,
             debug_bulk_transition,
+            debug_ai_status,
+            debug_ai_generate,
         ])
     };
 }

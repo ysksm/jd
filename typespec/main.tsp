@@ -270,6 +270,8 @@ model ProjectDisableResponse {
 // -- Sync --
 model SyncExecuteRequest {
   projectKey?: string;
+  /** Force full sync (ignore last_synced, re-fetch all issues) */
+  force?: boolean;
 }
 
 model SyncExecuteResponse {

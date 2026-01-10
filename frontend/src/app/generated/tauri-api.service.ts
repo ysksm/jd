@@ -238,10 +238,6 @@ export class TauriApiService {
     return from(invoke<DebugBulkTransitionResponse>('debug_bulk_transition', { request }));
   }
 
-  // ----------------------------------------
-  // AI Test Data Generation
-  // ----------------------------------------
-
   /** Check AI test data generation status */
   debugAiStatus(request: DebugAiStatusRequest): Observable<DebugAiStatusResponse> {
     return from(invoke<DebugAiStatusResponse>('debug_ai_status', { request }));

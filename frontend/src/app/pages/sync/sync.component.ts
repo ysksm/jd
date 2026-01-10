@@ -18,6 +18,7 @@ export class SyncComponent implements OnInit {
   loading = signal(true);
   syncing = signal(false);
   selectedProject = signal<string | null>(null);
+  forceFullSync = signal(false);
   syncResults = signal<SyncResult[]>([]);
   error = signal<string | null>(null);
 
@@ -39,19 +40,23 @@ export class SyncComponent implements OnInit {
     });
   }
 
-  startSync(): void {
+  startSync(force?: boolean): void {
     this.syncing.set(true);
     this.error.set(null);
     this.syncResults.set([]);
 
-    const request = this.selectedProject()
-      ? { projectKey: this.selectedProject()! }
-      : {};
+    const useForce = force ?? this.forceFullSync();
+    const request = {
+      ...(this.selectedProject() ? { projectKey: this.selectedProject()! } : {}),
+      ...(useForce ? { force: true } : {})
+    };
 
     this.api.syncExecute(request).subscribe({
       next: (response) => {
         this.syncResults.set(response.results);
         this.syncing.set(false);
+        // Reset force checkbox after sync
+        this.forceFullSync.set(false);
         // Refresh projects to update last_synced
         this.loadProjects();
       },
@@ -60,6 +65,10 @@ export class SyncComponent implements OnInit {
         this.syncing.set(false);
       }
     });
+  }
+
+  toggleForceSync(): void {
+    this.forceFullSync.update(v => !v);
   }
 
   selectProject(key: string | null): void {
