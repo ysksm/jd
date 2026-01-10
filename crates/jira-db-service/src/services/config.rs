@@ -42,6 +42,22 @@ pub fn update(
                     auto_generate: embeddings.auto_generate,
                 });
             }
+
+            if let Some(log) = request.log {
+                settings.log = Some(jira_db_core::LogConfig {
+                    file_enabled: log.file_enabled,
+                    file_dir: log.file_dir.map(std::path::PathBuf::from),
+                    level: log.level,
+                    max_files: log.max_files as usize,
+                });
+            }
+
+            if let Some(sync) = request.sync {
+                settings.sync = Some(jira_db_core::SyncSettings {
+                    incremental_sync_enabled: sync.incremental_sync_enabled,
+                    incremental_sync_margin_minutes: sync.incremental_sync_margin_minutes as u32,
+                });
+            }
         })
         .map_err(|e| ServiceError::Config(e.to_string()))?;
 
@@ -98,6 +114,7 @@ pub fn initialize(
 
 /// Convert core Settings to API Settings
 fn convert_settings(s: jira_db_core::Settings) -> Settings {
+    let sync_settings = s.get_sync_settings();
     Settings {
         jira: JiraConfig {
             endpoint: s.jira.endpoint,
@@ -120,6 +137,16 @@ fn convert_settings(s: jira_db_core::Settings) -> Settings {
             model_name: Some(e.model),
             endpoint: e.endpoint,
             auto_generate: e.auto_generate,
+        }),
+        log: s.log.map(|l| LogConfig {
+            file_enabled: l.file_enabled,
+            file_dir: l.file_dir.map(|p| p.to_string_lossy().to_string()),
+            level: l.level,
+            max_files: l.max_files as i32,
+        }),
+        sync: Some(SyncConfig {
+            incremental_sync_enabled: sync_settings.incremental_sync_enabled,
+            incremental_sync_margin_minutes: sync_settings.incremental_sync_margin_minutes as i32,
         }),
     }
 }

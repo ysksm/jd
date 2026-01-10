@@ -211,12 +211,33 @@ pub struct EmbeddingsConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct LogConfig {
+    pub file_enabled: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file_dir: Option<String>,
+    pub level: String,
+    pub max_files: i32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncConfig {
+    pub incremental_sync_enabled: bool,
+    pub incremental_sync_margin_minutes: i32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Settings {
     pub jira: JiraConfig,
     pub database: DatabaseConfig,
     pub projects: Vec<ProjectConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub embeddings: Option<EmbeddingsConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub log: Option<LogConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sync: Option<SyncConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -283,6 +304,10 @@ pub struct ConfigUpdateRequest {
     pub database: Option<DatabaseConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub embeddings: Option<EmbeddingsConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub log: Option<LogConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sync: Option<SyncConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
