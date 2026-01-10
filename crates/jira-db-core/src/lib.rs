@@ -35,7 +35,7 @@ pub use domain::repositories::{
 };
 
 pub use infrastructure::config::{
-    DatabaseConfig, EmbeddingsConfig, JiraConfig, LogConfig, ProjectConfig, Settings,
+    DatabaseConfig, EmbeddingsConfig, JiraConfig, JiraEndpoint, LogConfig, ProjectConfig, Settings,
     SyncCheckpoint,
 };
 pub use infrastructure::database::{

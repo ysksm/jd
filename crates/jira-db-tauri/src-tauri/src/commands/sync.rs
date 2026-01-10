@@ -6,8 +6,8 @@ use tauri::State;
 use jira_db_core::{
     DuckDbChangeHistoryRepository, DuckDbFieldRepository, DuckDbIssueRepository,
     DuckDbIssueSnapshotRepository, DuckDbIssuesExpandedRepository, DuckDbMetadataRepository,
-    DuckDbSyncHistoryRepository, JiraApiClient, JiraConfig, RawDataRepository, Settings,
-    SyncCheckpoint, SyncFieldsUseCase, SyncProjectUseCase,
+    DuckDbSyncHistoryRepository, JiraApiClient, RawDataRepository, Settings, SyncCheckpoint,
+    SyncFieldsUseCase, SyncProjectUseCase,
 };
 use serde::{Deserialize, Serialize};
 

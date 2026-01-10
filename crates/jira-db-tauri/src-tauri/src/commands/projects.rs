@@ -2,7 +2,7 @@
 
 use tauri::State;
 
-use jira_db_core::{JiraApiClient, JiraConfig, JiraService};
+use jira_db_core::{JiraApiClient, JiraService};
 
 use crate::generated::*;
 use crate::state::AppState;
@@ -65,6 +65,7 @@ pub async fn projects_initialize(
                         name: project.name.clone(),
                         sync_enabled: false,
                         last_synced: None,
+                        endpoint: None,
                         sync_checkpoint: None,
                         snapshot_checkpoint: None,
                     });
