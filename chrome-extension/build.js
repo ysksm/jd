@@ -42,14 +42,14 @@ const pagesBuildOptions = {
   }
 };
 
-// Offscreen document - use esm format (for DuckDB WASM)
+// Offscreen document - use iife format (ESM may have issues in offscreen)
 const offscreenBuildOptions = {
   entryPoints: [
     { in: 'src/offscreen/index.ts', out: 'offscreen' },
   ],
   bundle: true,
   outdir: 'dist',
-  format: 'esm',
+  format: 'iife',
   platform: 'browser',
   target: 'chrome100',
   sourcemap: false,
