@@ -26,9 +26,9 @@ if (existsSync(duckdbPath)) {
 
 const buildOptions = {
   entryPoints: [
-    'src/background/index.ts',
-    'src/popup/popup.ts',
-    'src/options/options.ts',
+    { in: 'src/background/index.ts', out: 'background' },
+    { in: 'src/popup/popup.ts', out: 'popup' },
+    { in: 'src/options/options.ts', out: 'options' },
   ],
   bundle: true,
   outdir: 'dist',
