@@ -42,15 +42,20 @@ export async function initProjects(): Promise<void> {
 
   const jiraProjects = await client.getProjects();
 
-  // Add all projects to settings
+  // Add all projects to settings (this is the primary goal)
   for (const project of jiraProjects) {
     await upsertProjectInSettings({ key: project.key, name: project.name });
   }
 
-  // Also add to database
-  await initDatabase();
-  for (const project of jiraProjects) {
-    await upsertProject(project);
+  // Also try to add to database, but don't fail if database isn't ready
+  try {
+    await initDatabase();
+    for (const project of jiraProjects) {
+      await upsertProject(project);
+    }
+  } catch (error) {
+    console.warn('Could not save projects to database (will be saved during sync):', error);
+    // This is not a fatal error - projects are saved to settings
   }
 }
 

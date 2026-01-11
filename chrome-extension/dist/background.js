@@ -451,9 +451,13 @@
     for (const project of jiraProjects) {
       await upsertProjectInSettings({ key: project.key, name: project.name });
     }
-    await initDatabase();
-    for (const project of jiraProjects) {
-      await upsertProject(project);
+    try {
+      await initDatabase();
+      for (const project of jiraProjects) {
+        await upsertProject(project);
+      }
+    } catch (error) {
+      console.warn("Could not save projects to database (will be saved during sync):", error);
     }
   }
   async function syncProject(projectKey, onProgress) {
