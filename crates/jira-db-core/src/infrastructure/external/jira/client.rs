@@ -19,6 +19,7 @@ use chrono::{DateTime, Utc};
 fn parse_jira_datetime(s: &str) -> Option<DateTime<Utc>> {
     // Try RFC3339 first
     if let Ok(dt) = DateTime::parse_from_rfc3339(s) {
+        debug!("Parsed date as RFC3339: {} -> {}", s, dt);
         return Some(dt.with_timezone(&Utc));
     }
 
@@ -35,11 +36,13 @@ fn parse_jira_datetime(s: &str) -> Option<DateTime<Utc>> {
             fixed.push(':');
             fixed.push_str(&s[len - 2..]);
             if let Ok(dt) = DateTime::parse_from_rfc3339(&fixed) {
+                debug!("Parsed date as JIRA format: {} -> {} -> {}", s, fixed, dt);
                 return Some(dt.with_timezone(&Utc));
             }
         }
     }
 
+    warn!("Failed to parse JIRA datetime: {}", s);
     None
 }
 
@@ -283,9 +286,19 @@ impl JiraApiClient {
             })
             .map(|dt| dt.with_timezone(&chrono::Utc));
 
-        let created_date = fields["created"].as_str().and_then(parse_jira_datetime);
+        let created_str = fields["created"].as_str();
+        let updated_str = fields["updated"].as_str();
+        debug!(
+            "[parse_issue] Issue {} date strings: created={:?}, updated={:?}",
+            key, created_str, updated_str
+        );
 
-        let updated_date = fields["updated"].as_str().and_then(parse_jira_datetime);
+        let created_date = created_str.and_then(parse_jira_datetime);
+        let updated_date = updated_str.and_then(parse_jira_datetime);
+        debug!(
+            "[parse_issue] Issue {} parsed dates: created_date={:?}, updated_date={:?}",
+            key, created_date, updated_date
+        );
 
         let raw_json = serde_json::to_string(&issue_json).ok();
 
@@ -1371,5 +1384,31 @@ impl JiraService for JiraApiClient {
 
         info!("Updated due date for {}: {}", issue_key, due_date);
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_jira_datetime() {
+        // JIRA format without colon in timezone
+        let result = parse_jira_datetime("2024-01-15T10:30:00.000+0000");
+        assert!(result.is_some(), "Should parse JIRA format with +0000");
+
+        let result = parse_jira_datetime("2024-01-15T10:30:00.000+0900");
+        assert!(result.is_some(), "Should parse JIRA format with +0900");
+
+        // RFC3339 format (already valid)
+        let result = parse_jira_datetime("2024-01-15T10:30:00.000Z");
+        assert!(result.is_some(), "Should parse RFC3339 with Z");
+
+        let result = parse_jira_datetime("2024-01-15T10:30:00.000+00:00");
+        assert!(result.is_some(), "Should parse RFC3339 with +00:00");
+
+        // Without milliseconds
+        let result = parse_jira_datetime("2024-01-15T10:30:00+0000");
+        assert!(result.is_some(), "Should parse without milliseconds");
     }
 }
