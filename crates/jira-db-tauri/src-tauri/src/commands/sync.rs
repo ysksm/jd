@@ -1,13 +1,15 @@
 //! Sync command handlers
 
 use std::sync::Arc;
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
 
+use chrono::Duration;
 use jira_db_core::{
     DuckDbChangeHistoryRepository, DuckDbFieldRepository, DuckDbIssueRepository,
     DuckDbIssueSnapshotRepository, DuckDbIssuesExpandedRepository, DuckDbMetadataRepository,
     DuckDbSyncHistoryRepository, JiraApiClient, RawDataRepository, Settings, SyncCheckpoint,
     SyncFieldsUseCase, SyncProjectUseCase,
+    chrono::{self, DateTime, Utc},
 };
 use serde::{Deserialize, Serialize};
 
@@ -44,6 +46,9 @@ pub struct SyncResultExtended {
     /// The updated_date of the last fetched issue (for incremental sync)
     #[serde(skip)]
     pub last_issue_updated_at: Option<jira_db_core::chrono::DateTime<jira_db_core::chrono::Utc>>,
+    /// Checkpoint for failed sync (to be saved for resume)
+    #[serde(skip)]
+    pub failed_checkpoint: Option<SyncCheckpoint>,
 }
 
 /// Extended sync response with detailed breakdown
@@ -56,9 +61,29 @@ pub struct SyncExecuteResponseExtended {
     pub total_fields_synced: i32,
 }
 
+/// Emit sync progress event to frontend
+fn emit_progress(
+    app: &AppHandle,
+    project_key: &str,
+    phase: &str,
+    current: i32,
+    total: i32,
+    message: &str,
+) {
+    let progress = SyncProgress {
+        project_key: project_key.to_string(),
+        phase: phase.to_string(),
+        current,
+        total,
+        message: message.to_string(),
+    };
+    let _ = app.emit("sync-progress", &progress);
+}
+
 /// Execute sync for enabled projects with automatic fields expansion
 #[tauri::command]
 pub async fn sync_execute(
+    app: AppHandle,
     state: State<'_, AppState>,
     request: SyncExecuteRequest,
 ) -> Result<SyncExecuteResponseExtended, String> {
@@ -78,24 +103,46 @@ pub async fn sync_execute(
         .ok_or("No JIRA endpoint configured")?;
     let jira_client = Arc::new(JiraApiClient::new(&jira_config).map_err(|e| e.to_string())?);
 
-    // Get projects to sync with their checkpoint information
+    // Get sync settings for incremental sync
+    let sync_settings = settings.get_sync_settings();
+    let force_full_sync = request.force.unwrap_or(false);
+
+    // Get projects to sync with their checkpoint and last_synced information
     // Clone the data we need so we don't hold reference to settings
-    let projects_to_sync: Vec<(String, String, Option<SyncCheckpoint>)> =
-        if let Some(ref project_key) = request.project_key {
-            settings
-                .projects
-                .iter()
-                .filter(|p| &p.key == project_key)
-                .map(|p| (p.key.clone(), p.id.clone(), p.sync_checkpoint.clone()))
-                .collect()
-        } else {
-            settings
-                .projects
-                .iter()
-                .filter(|p| p.sync_enabled)
-                .map(|p| (p.key.clone(), p.id.clone(), p.sync_checkpoint.clone()))
-                .collect()
-        };
+    let projects_to_sync: Vec<(
+        String,
+        String,
+        Option<SyncCheckpoint>,
+        Option<DateTime<Utc>>,
+    )> = if let Some(ref project_key) = request.project_key {
+        settings
+            .projects
+            .iter()
+            .filter(|p| &p.key == project_key)
+            .map(|p| {
+                (
+                    p.key.clone(),
+                    p.id.clone(),
+                    p.sync_checkpoint.clone(),
+                    p.last_synced,
+                )
+            })
+            .collect()
+    } else {
+        settings
+            .projects
+            .iter()
+            .filter(|p| p.sync_enabled)
+            .map(|p| {
+                (
+                    p.key.clone(),
+                    p.id.clone(),
+                    p.sync_checkpoint.clone(),
+                    p.last_synced,
+                )
+            })
+            .collect()
+    };
 
     if projects_to_sync.is_empty() {
         return Err("No projects to sync".to_string());
@@ -111,11 +158,18 @@ pub async fn sync_execute(
     let mut results = Vec::new();
     let mut total_fields_synced = 0i32;
 
-    for (key, id, checkpoint) in &projects_to_sync {
+    for (key, id, existing_checkpoint, last_synced) in &projects_to_sync {
         let start_time = std::time::Instant::now();
 
-        // Show resuming message if we have a checkpoint
-        if let Some(cp) = checkpoint {
+        // Determine the checkpoint to use for sync:
+        // 1. If force=true, use None (full sync)
+        // 2. If existing checkpoint exists, use it (resume interrupted sync)
+        // 3. If incremental sync enabled and last_synced exists, create incremental checkpoint
+        // 4. Otherwise, full sync
+        let checkpoint: Option<SyncCheckpoint> = if force_full_sync {
+            log_info!(log, "[{}] Force full sync requested", key);
+            None
+        } else if let Some(cp) = existing_checkpoint {
             log_info!(
                 log,
                 "[{}] Resuming sync from checkpoint ({}/{} issues processed)",
@@ -123,9 +177,33 @@ pub async fn sync_execute(
                 cp.items_processed,
                 cp.total_items
             );
+            Some(cp.clone())
+        } else if sync_settings.incremental_sync_enabled {
+            if let Some(last_sync_time) = last_synced {
+                // Create incremental sync checkpoint with safety margin
+                let margin_minutes = sync_settings.incremental_sync_margin_minutes as i64;
+                let incremental_start = *last_sync_time - Duration::minutes(margin_minutes);
+                log_info!(
+                    log,
+                    "[{}] Incremental sync from {} (margin: {} min)",
+                    key,
+                    incremental_start.format("%Y-%m-%d %H:%M:%S"),
+                    margin_minutes
+                );
+                Some(SyncCheckpoint {
+                    last_issue_updated_at: incremental_start,
+                    last_issue_key: String::new(),
+                    items_processed: 0,
+                    total_items: 0,
+                })
+            } else {
+                log_info!(log, "[{}] Full sync (first sync)", key);
+                None
+            }
         } else {
-            log_info!(log, "[{}] Starting sync...", key);
-        }
+            log_info!(log, "[{}] Full sync (incremental sync disabled)", key);
+            None
+        };
 
         // Get database connection for this project
         let db = db_factory
@@ -164,6 +242,7 @@ pub async fn sync_execute(
             SyncFieldsUseCase::new(jira_client.clone(), field_repo, expanded_repo);
 
         // Step 1: Sync fields from JIRA
+        emit_progress(&app, key, "fields", 0, 5, "Fetching JIRA fields...");
         log_info!(log, "[{}] Fetching JIRA fields...", key);
         let fields_synced = fields_use_case
             .sync_fields()
@@ -173,6 +252,7 @@ pub async fn sync_execute(
         total_fields_synced = fields_synced;
 
         // Step 2: Add columns based on fields
+        emit_progress(&app, key, "columns", 1, 5, "Adding database columns...");
         log_info!(log, "[{}] Adding database columns...", key);
         let added_columns = fields_use_case.add_columns().map_err(|e| e.to_string())?;
         let total_columns_added = added_columns.len() as i32;
@@ -187,6 +267,7 @@ pub async fn sync_execute(
         }
 
         // Step 3: Execute resumable sync with checkpoint support
+        emit_progress(&app, key, "issues", 2, 5, "Fetching issues from JIRA...");
         log_info!(log, "[{}] Fetching issues from JIRA...", key);
 
         // Clone values for the checkpoint callback
@@ -207,6 +288,7 @@ pub async fn sync_execute(
             .await;
 
         // Step 4: Expand issues for this project
+        emit_progress(&app, key, "expand", 3, 5, "Expanding issues...");
         log_info!(log, "[{}] Expanding issues...", key);
         let (issues_expanded, expand_error) = match fields_use_case.expand_issues(Some(id)) {
             Ok(count) => {
@@ -220,6 +302,7 @@ pub async fn sync_execute(
         };
 
         // Step 5: Create readable views
+        emit_progress(&app, key, "views", 4, 5, "Creating readable views...");
         log_info!(log, "[{}] Creating readable views...", key);
         if let Err(e) = fields_use_case.create_readable_view() {
             log_warn!(log, "[{}] Failed to create readable view: {}", key, e);
@@ -242,6 +325,17 @@ pub async fn sync_execute(
                 let success = sync_result.success && error.is_none();
 
                 if success {
+                    emit_progress(
+                        &app,
+                        key,
+                        "complete",
+                        5,
+                        5,
+                        &format!(
+                            "Completed: {} issues in {:.1}s",
+                            sync_result.issues_synced, duration
+                        ),
+                    );
                     log_info!(
                         log,
                         "[{}] Sync completed: {} issues in {:.1}s",
@@ -249,14 +343,6 @@ pub async fn sync_execute(
                         sync_result.issues_synced,
                         duration
                     );
-
-                    // Clear checkpoint on success
-                    if let Ok(mut s) = Settings::load(&settings_path) {
-                        if let Some(p) = s.find_project_mut(key) {
-                            p.sync_checkpoint = None;
-                        }
-                        let _ = s.save(&settings_path);
-                    }
                 } else {
                     log_warn!(
                         log,
@@ -264,16 +350,6 @@ pub async fn sync_execute(
                         key,
                         error.as_deref().unwrap_or("unknown error")
                     );
-
-                    // Save checkpoint for resume on failure
-                    if let Some(checkpoint) = resumable_result.checkpoint {
-                        if let Ok(mut s) = Settings::load(&settings_path) {
-                            if let Some(p) = s.find_project_mut(key) {
-                                p.sync_checkpoint = Some(checkpoint);
-                            }
-                            let _ = s.save(&settings_path);
-                        }
-                    }
                 }
 
                 results.push(SyncResultExtended {
@@ -287,6 +363,12 @@ pub async fn sync_execute(
                     columns_added: total_columns_added,
                     issues_expanded,
                     last_issue_updated_at: sync_result.last_issue_updated_at,
+                    // Store checkpoint for failed sync, None for success (will be cleared)
+                    failed_checkpoint: if success {
+                        None
+                    } else {
+                        resumable_result.checkpoint
+                    },
                 });
             }
             Err(e) => {
@@ -302,27 +384,33 @@ pub async fn sync_execute(
                     columns_added: 0,
                     issues_expanded: 0,
                     last_issue_updated_at: None,
+                    failed_checkpoint: None,
                 });
             }
         }
     }
 
-    // Update last_synced for successful projects
+    // Update last_synced and checkpoint for all projects
     // Use the last issue's updated_date instead of current time for reliable incremental sync
     state
         .update_settings(|s| {
             for result in &results {
-                if result.success {
-                    if let Some(project) = s.find_project_mut(&result.project_key) {
-                        // Only update last_synced if we fetched issues
-                        // If no issues were fetched, keep the previous value
+                if let Some(project) = s.find_project_mut(&result.project_key) {
+                    if result.success {
+                        // Success: update last_synced and clear checkpoint
                         if let Some(last_updated) = result.last_issue_updated_at {
                             project.last_synced = Some(last_updated);
                         } else if project.last_synced.is_none() {
                             // First sync with no issues: set to current time
                             project.last_synced = Some(jira_db_core::chrono::Utc::now());
                         }
-                        // Otherwise, keep the existing last_synced
+                        // Clear checkpoint on success
+                        project.sync_checkpoint = None;
+                    } else {
+                        // Failure: save checkpoint for resume (if available)
+                        if let Some(ref checkpoint) = result.failed_checkpoint {
+                            project.sync_checkpoint = Some(checkpoint.clone());
+                        }
                     }
                 }
             }
@@ -337,7 +425,7 @@ pub async fn sync_execute(
     );
 
     // Close database connections after sync to free resources
-    for (key, _, _) in &projects_to_sync {
+    for (key, _, _, _) in &projects_to_sync {
         if let Err(e) = state.close_db(key) {
             log_warn!(log, "Failed to close database for {}: {}", key, e);
         }

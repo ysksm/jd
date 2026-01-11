@@ -342,8 +342,21 @@ where
 
                     // Get the last issue from all_issues (which now contains the batch)
                     if let Some(last_issue) = all_issues.last() {
+                        let checkpoint_time = last_issue.updated_date.unwrap_or_else(|| {
+                            log::warn!(
+                                "[SyncProject] Issue {} has no updated_date, falling back to Utc::now()",
+                                last_issue.key
+                            );
+                            Utc::now()
+                        });
+                        log::debug!(
+                            "[SyncProject] Creating checkpoint: issue={}, updated_date={:?}, checkpoint_time={}",
+                            last_issue.key,
+                            last_issue.updated_date,
+                            checkpoint_time
+                        );
                         let new_checkpoint = SyncCheckpoint {
-                            last_issue_updated_at: last_issue.updated_date.unwrap_or_else(Utc::now),
+                            last_issue_updated_at: checkpoint_time,
                             last_issue_key: last_issue.key.clone(),
                             items_processed,
                             total_items: all_issues.len(),
@@ -472,7 +485,8 @@ where
         summary.local_snapshot_count = snapshot_count;
 
         // Get the last issue's updated_date for incremental sync
-        let last_issue_updated_at = all_issues.last().and_then(|issue| issue.updated_date);
+        // Use the checkpoint's value which is guaranteed to be set (with Utc::now() fallback)
+        let last_issue_updated_at = last_checkpoint.as_ref().map(|cp| cp.last_issue_updated_at);
         summary.last_issue_updated_at = last_issue_updated_at;
 
         step4.finish();

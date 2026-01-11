@@ -56,9 +56,9 @@ impl IssueRepository for DuckDbIssueRepository {
                     id, project_id, key, summary, description,
                     status, priority, assignee, reporter,
                     issue_type, resolution, labels, components, fix_versions, sprint, team, parent_key,
-                    due_date, created_date, updated_date, raw_data, synced_at
+                    due_date, created_date, updated_date, raw_data, synced_at, is_deleted
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, false)
                 ON CONFLICT (id) DO UPDATE SET
                     project_id = excluded.project_id,
                     key = excluded.key,
@@ -80,7 +80,8 @@ impl IssueRepository for DuckDbIssueRepository {
                     created_date = excluded.created_date,
                     updated_date = excluded.updated_date,
                     raw_data = excluded.raw_data,
-                    synced_at = ?
+                    synced_at = ?,
+                    is_deleted = false
                 "#,
                 duckdb::params![
                     &issue.id,
@@ -216,7 +217,8 @@ impl IssueRepository for DuckDbIssueRepository {
                    i.status, i.priority, i.assignee, i.reporter,
                    i.issue_type, i.resolution, i.labels, i.components, i.fix_versions, i.sprint, i.team, i.parent_key,
                    CASE WHEN i.due_date IS NOT NULL THEN strftime(i.due_date::TIMESTAMP, '%Y-%m-%dT%H:%M:%S') || '+00:00' ELSE NULL END as due_date,
-                   i.created_date, i.updated_date
+                   CASE WHEN i.created_date IS NOT NULL THEN strftime(i.created_date::TIMESTAMP, '%Y-%m-%dT%H:%M:%S') || '+00:00' ELSE NULL END as created_date,
+                   CASE WHEN i.updated_date IS NOT NULL THEN strftime(i.updated_date::TIMESTAMP, '%Y-%m-%dT%H:%M:%S') || '+00:00' ELSE NULL END as updated_date
             FROM issues i
             LEFT JOIN projects p ON i.project_id = p.id
             WHERE (i.is_deleted IS NULL OR i.is_deleted = false)

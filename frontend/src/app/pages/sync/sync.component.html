@@ -19,6 +19,18 @@
         </select>
       </div>
 
+      <div class="sync-options">
+        <label class="checkbox-label">
+          <input
+            type="checkbox"
+            [checked]="forceFullSync()"
+            (change)="toggleForceSync()"
+          />
+          <span>Force Full Sync</span>
+          <span class="hint">(Ignore last sync time, re-fetch all issues)</span>
+        </label>
+      </div>
+
       <button
         class="btn btn-primary"
         (click)="startSync()"
@@ -26,6 +38,8 @@
       >
         @if (syncing()) {
           <span class="spinner"></span> Syncing...
+        } @else if (forceFullSync()) {
+          Force Full Sync
         } @else {
           Start Sync
         }
@@ -35,6 +49,73 @@
     @if (enabledProjects.length === 0) {
       <div class="alert alert-warning">
         No projects enabled for sync. Enable projects in the Projects page first.
+      </div>
+    }
+
+    <!-- Sync Progress -->
+    @if (showProgressPanel() && (currentProgress() || progressHistory().length > 0)) {
+      <div class="sync-progress">
+        <div class="progress-title-row">
+          <h3>Sync Progress</h3>
+          @if (!syncing()) {
+            <button class="btn-dismiss" (click)="dismissProgressPanel()" title="Close">×</button>
+          }
+        </div>
+
+        <!-- Step Indicator -->
+        <div class="steps-container">
+          @for (phase of syncPhases; track phase; let i = $index; let last = $last) {
+            @let status = getPhaseStatus(phase);
+            <div class="step" [class.completed]="status === 'completed'" [class.in-progress]="status === 'in_progress'" [class.pending]="status === 'pending'">
+              <div class="step-icon">{{ getPhaseIcon(status) }}</div>
+              <div class="step-label">{{ getPhaseLabel(phase) }}</div>
+            </div>
+            @if (!last) {
+              <div class="step-connector" [class.completed]="status === 'completed'"></div>
+            }
+          }
+        </div>
+
+        <!-- Current Progress Details -->
+        @if (currentProgress()) {
+          <div class="progress-card">
+            <div class="progress-header">
+              <span class="project-key">{{ currentProgress()!.projectKey }}</span>
+              <span class="phase-label">{{ getPhaseLabel(currentProgress()!.phase) }}</span>
+            </div>
+            @if (currentProgress()!.total > 0) {
+              <div class="progress-bar-container">
+                <div
+                  class="progress-bar"
+                  [style.width.%]="(currentProgress()!.current / currentProgress()!.total) * 100"
+                ></div>
+              </div>
+              <div class="progress-stats">
+                <span class="progress-count">{{ currentProgress()!.current }} / {{ currentProgress()!.total }}</span>
+                <span class="progress-percent">{{ ((currentProgress()!.current / currentProgress()!.total) * 100).toFixed(0) }}%</span>
+              </div>
+            }
+            <div class="progress-message">{{ currentProgress()!.message }}</div>
+          </div>
+        }
+
+        <!-- Progress History Log -->
+        @if (progressHistory().length > 0) {
+          <div class="progress-log">
+            <details [open]="!syncing()">
+              <summary>Progress Log ({{ progressHistory().length }} events)</summary>
+              <div class="log-entries">
+                @for (entry of progressHistory(); track $index) {
+                  <div class="log-entry">
+                    <span class="log-project">{{ entry.projectKey }}</span>
+                    <span class="log-phase">{{ getPhaseLabel(entry.phase) }}</span>
+                    <span class="log-message">{{ entry.message }}</span>
+                  </div>
+                }
+              </div>
+            </details>
+          </div>
+        }
       </div>
     }
 

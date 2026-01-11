@@ -125,7 +125,17 @@ impl AppState {
         let factory = self.db_factory.lock().unwrap();
         factory
             .as_ref()
-            .and_then(|f| f.get_connection(project_key).ok())
+            .and_then(|f| match f.get_connection(project_key) {
+                Ok(conn) => Some(conn),
+                Err(e) => {
+                    tracing::warn!(
+                        "Failed to get database connection for project {}: {}",
+                        project_key,
+                        e
+                    );
+                    None
+                }
+            })
     }
 
     /// Get raw database connection for a specific project

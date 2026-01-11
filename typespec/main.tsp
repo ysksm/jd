@@ -167,6 +167,15 @@ model JiraConfig {
   apiKey: string;
 }
 
+/** JIRA endpoint configuration (for multiple endpoints) */
+model JiraEndpoint {
+  name: string;
+  displayName?: string;
+  endpoint: string;
+  username: string;
+  apiKey: string;
+}
+
 model DatabaseConfig {
   path: string;
 }
@@ -189,12 +198,22 @@ model LogConfig {
   maxFiles: int32;
 }
 
+model SyncConfig {
+  incrementalSyncEnabled: boolean;
+  incrementalSyncMarginMinutes: int32;
+}
+
 model Settings {
   jira: JiraConfig;
   database: DatabaseConfig;
   projects: ProjectConfig[];
   embeddings?: EmbeddingsConfig;
   log?: LogConfig;
+  sync?: SyncConfig;
+  /** Multiple JIRA endpoints (new) */
+  jiraEndpoints?: JiraEndpoint[];
+  /** Active endpoint name (new) */
+  activeEndpoint?: string;
 }
 
 model ProjectConfig {
@@ -218,6 +237,13 @@ model ConfigUpdateRequest {
   database?: DatabaseConfig;
   embeddings?: EmbeddingsConfig;
   log?: LogConfig;
+  sync?: SyncConfig;
+  /** Add a new endpoint */
+  addEndpoint?: JiraEndpoint;
+  /** Remove an endpoint by name */
+  removeEndpoint?: string;
+  /** Set active endpoint */
+  setActiveEndpoint?: string;
 }
 
 model ConfigUpdateResponse {
@@ -244,11 +270,25 @@ model ProjectListResponse {
   projects: Project[];
 }
 
-model ProjectInitRequest {}
+model ProjectInitRequest {
+  /** Specific endpoint name to fetch from. If not provided, uses active endpoint. */
+  endpointName?: string;
+  /** If true, fetch from all configured endpoints */
+  allEndpoints?: boolean;
+}
 
 model ProjectInitResponse {
   projects: Project[];
   newCount: int32;
+  /** Results per endpoint when fetching from multiple endpoints */
+  endpointResults?: EndpointFetchResult[];
+}
+
+model EndpointFetchResult {
+  endpointName: string;
+  projectCount: int32;
+  success: boolean;
+  error?: string;
 }
 
 model ProjectEnableRequest {
@@ -270,6 +310,8 @@ model ProjectDisableResponse {
 // -- Sync --
 model SyncExecuteRequest {
   projectKey?: string;
+  /** Force full sync (ignore last_synced, re-fetch all issues) */
+  force?: boolean;
 }
 
 model SyncExecuteResponse {
@@ -643,6 +685,8 @@ model AiGenerationStats {
   tasksCreated: int32;
   bugsCreated: int32;
   transitionsApplied: int32;
+  linksCreated: int32;
+  dueDatesSet: int32;
 }
 
 /** Request for AI test data generation */
@@ -665,6 +709,10 @@ model DebugAiGenerateRequest {
   bugCount?: int32;
   /** Use faster model (Haiku) */
   useFastModel?: boolean;
+  /** Use Claude CLI instead of API */
+  useClaudeCli?: boolean;
+  /** Language for generated content (e.g., "ja" for Japanese, "en" for English) */
+  language?: string;
 }
 
 /** Response from AI test data generation */
@@ -684,6 +732,8 @@ model DebugAiStatusRequest {}
 model DebugAiStatusResponse {
   configured: boolean;
   message: string;
+  cliAvailable?: boolean;
+  apiKeyConfigured?: boolean;
 }
 
 // ============================================================

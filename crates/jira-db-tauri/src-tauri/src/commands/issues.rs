@@ -61,7 +61,14 @@ pub async fn issues_search(
             .collect()
     };
 
+    tracing::debug!(
+        "[issues_search] Searching {} projects: {:?}",
+        projects_to_search.len(),
+        projects_to_search
+    );
+
     if projects_to_search.is_empty() {
+        tracing::debug!("[issues_search] No projects to search, returning empty");
         return Ok(IssueSearchResponse {
             issues: vec![],
             total: 0,
@@ -71,24 +78,46 @@ pub async fn issues_search(
     // Search across all projects
     let mut all_issues = Vec::new();
     for project_key in &projects_to_search {
-        if let Some(db) = state.get_db(project_key) {
-            let issue_repo = Arc::new(DuckDbIssueRepository::new(db));
-            let use_case = SearchIssuesUseCase::new(issue_repo);
+        match state.get_db(project_key) {
+            Some(db) => {
+                let issue_repo = Arc::new(DuckDbIssueRepository::new(db));
+                let use_case = SearchIssuesUseCase::new(issue_repo);
 
-            let params = SearchParams {
-                query: request.query.clone(),
-                project_key: Some(project_key.clone()),
-                status: request.status.clone(),
-                assignee: request.assignee.clone(),
-                issue_type: request.issue_type.clone(),
-                priority: request.priority.clone(),
-                team: request.team.clone(),
-                limit: request.limit.map(|l| l as usize),
-                offset: None, // Apply offset after combining results
-            };
+                let params = SearchParams {
+                    query: request.query.clone(),
+                    project_key: Some(project_key.clone()),
+                    status: request.status.clone(),
+                    assignee: request.assignee.clone(),
+                    issue_type: request.issue_type.clone(),
+                    priority: request.priority.clone(),
+                    team: request.team.clone(),
+                    limit: request.limit.map(|l| l as usize),
+                    offset: None, // Apply offset after combining results
+                };
 
-            if let Ok(issues) = use_case.execute(params) {
-                all_issues.extend(issues);
+                match use_case.execute(params) {
+                    Ok(issues) => {
+                        tracing::debug!(
+                            "[issues_search] Found {} issues for project {}",
+                            issues.len(),
+                            project_key
+                        );
+                        all_issues.extend(issues);
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            "[issues_search] Failed to search issues for project {}: {}",
+                            project_key,
+                            e
+                        );
+                    }
+                }
+            }
+            None => {
+                tracing::warn!(
+                    "[issues_search] No database connection for project {}",
+                    project_key
+                );
             }
         }
     }
@@ -107,6 +136,14 @@ pub async fn issues_search(
         .take(limit)
         .map(convert_issue)
         .collect();
+
+    tracing::info!(
+        "[issues_search] Returning {} issues (total: {}, offset: {}, limit: {})",
+        issues.len(),
+        total,
+        offset,
+        limit
+    );
 
     Ok(IssueSearchResponse { issues, total })
 }

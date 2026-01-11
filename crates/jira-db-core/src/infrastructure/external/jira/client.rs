@@ -13,6 +13,39 @@ use crate::domain::error::{DomainError, DomainResult};
 use crate::infrastructure::config::JiraConfig;
 use chrono::{DateTime, Utc};
 
+/// Parse JIRA date string which can be in multiple formats:
+/// - RFC3339: "2024-01-15T10:30:00.000+00:00"
+/// - JIRA format: "2024-01-15T10:30:00.000+0000" (no colon in timezone)
+fn parse_jira_datetime(s: &str) -> Option<DateTime<Utc>> {
+    // Try RFC3339 first
+    if let Ok(dt) = DateTime::parse_from_rfc3339(s) {
+        debug!("Parsed date as RFC3339: {} -> {}", s, dt);
+        return Some(dt.with_timezone(&Utc));
+    }
+
+    // Try JIRA format (insert colon in timezone offset)
+    // "2024-01-15T10:30:00.000+0000" -> "2024-01-15T10:30:00.000+00:00"
+    if s.len() >= 5 {
+        let len = s.len();
+        // Check if it ends with a timezone without colon like +0000 or -0530
+        let last5 = &s[len.saturating_sub(5)..];
+        if (last5.starts_with('+') || last5.starts_with('-'))
+            && last5[1..].chars().all(|c| c.is_ascii_digit())
+        {
+            let mut fixed = s[..len - 2].to_string();
+            fixed.push(':');
+            fixed.push_str(&s[len - 2..]);
+            if let Ok(dt) = DateTime::parse_from_rfc3339(&fixed) {
+                debug!("Parsed date as JIRA format: {} -> {} -> {}", s, fixed, dt);
+                return Some(dt.with_timezone(&Utc));
+            }
+        }
+    }
+
+    warn!("Failed to parse JIRA datetime: {}", s);
+    None
+}
+
 pub struct JiraApiClient {
     client: jira_api::JiraClient,
     http_client: reqwest::Client,
@@ -253,15 +286,19 @@ impl JiraApiClient {
             })
             .map(|dt| dt.with_timezone(&chrono::Utc));
 
-        let created_date = fields["created"]
-            .as_str()
-            .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
-            .map(|dt| dt.with_timezone(&chrono::Utc));
+        let created_str = fields["created"].as_str();
+        let updated_str = fields["updated"].as_str();
+        debug!(
+            "[parse_issue] Issue {} date strings: created={:?}, updated={:?}",
+            key, created_str, updated_str
+        );
 
-        let updated_date = fields["updated"]
-            .as_str()
-            .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
-            .map(|dt| dt.with_timezone(&chrono::Utc));
+        let created_date = created_str.and_then(parse_jira_datetime);
+        let updated_date = updated_str.and_then(parse_jira_datetime);
+        debug!(
+            "[parse_issue] Issue {} parsed dates: created_date={:?}, updated_date={:?}",
+            key, created_date, updated_date
+        );
 
         let raw_json = serde_json::to_string(&issue_json).ok();
 
@@ -337,10 +374,13 @@ impl JiraService for JiraApiClient {
     ) -> DomainResult<FetchProgress> {
         // Build JQL: order by updated ASC (oldest first) for resumable sync
         let jql = if let Some(after) = after_updated_at {
-            let formatted_date = after.format("%Y-%m-%d %H:%M").to_string();
+            // Convert UTC to local timezone for JQL query
+            // JIRA interprets dates in the user's configured timezone
+            let local_time = after.with_timezone(&chrono::Local);
+            let formatted_date = local_time.format("%Y-%m-%d %H:%M").to_string();
             info!(
-                "[JIRA API] Incremental sync: after_updated_at={:?}, formatted={}",
-                after, formatted_date
+                "[JIRA API] Incremental sync: after_updated_at={:?} (UTC), local_time={}, formatted={}",
+                after, local_time, formatted_date
             );
             format!(
                 "project = {} AND updated >= \"{}\" ORDER BY updated ASC, key ASC",
@@ -361,9 +401,11 @@ impl JiraService for JiraApiClient {
         );
 
         // Build query parameters
+        // Note: *navigable may not include created/updated fields in all JIRA configurations,
+        // so we explicitly request them to ensure they are always returned.
         let mut query_params: Vec<(&str, String)> = vec![
             ("jql", jql.clone()),
-            ("fields", "*navigable".to_string()),
+            ("fields", "*navigable,created,updated".to_string()),
             ("expand", "changelog".to_string()),
             ("maxResults", max_results.to_string()),
         ];
@@ -1347,5 +1389,31 @@ impl JiraService for JiraApiClient {
 
         info!("Updated due date for {}: {}", issue_key, due_date);
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_jira_datetime() {
+        // JIRA format without colon in timezone
+        let result = parse_jira_datetime("2024-01-15T10:30:00.000+0000");
+        assert!(result.is_some(), "Should parse JIRA format with +0000");
+
+        let result = parse_jira_datetime("2024-01-15T10:30:00.000+0900");
+        assert!(result.is_some(), "Should parse JIRA format with +0900");
+
+        // RFC3339 format (already valid)
+        let result = parse_jira_datetime("2024-01-15T10:30:00.000Z");
+        assert!(result.is_some(), "Should parse RFC3339 with Z");
+
+        let result = parse_jira_datetime("2024-01-15T10:30:00.000+00:00");
+        assert!(result.is_some(), "Should parse RFC3339 with +00:00");
+
+        // Without milliseconds
+        let result = parse_jira_datetime("2024-01-15T10:30:00+0000");
+        assert!(result.is_some(), "Should parse without milliseconds");
     }
 }
