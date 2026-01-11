@@ -419,8 +419,12 @@
         const date = new Date(updatedSince);
         const jiraDate = formatJiraDate(date);
         jql += ` AND updated >= "${jiraDate}"`;
+        console.log(`[JIRA Client] Incremental sync: updatedSince=${updatedSince}, jiraDate=${jiraDate}`);
+      } else {
+        console.log(`[JIRA Client] Full sync: no updatedSince filter`);
       }
       jql += " ORDER BY updated ASC";
+      console.log(`[JIRA Client] JQL query: ${jql}`);
       let startAt = 0;
       const maxResults = 100;
       let total = 0;
@@ -520,16 +524,23 @@
         console.log(`Resuming sync for ${projectKey} from position ${startPosition}`);
       }
       let updatedSince;
+      console.log(`[SyncService] Incremental sync settings: enabled=${settings.sync.incrementalSyncEnabled}, hasCheckpoint=${!!checkpoint}`);
       if (settings.sync.incrementalSyncEnabled && !checkpoint) {
         const latestInDb = await getLatestUpdatedAt(projectKey);
+        console.log(`[SyncService] Latest updated_at in DB for ${projectKey}: "${latestInDb}" (type: ${typeof latestInDb})`);
         if (latestInDb) {
           const marginMs = settings.sync.incrementalSyncMarginMinutes * 60 * 1e3;
-          const date = new Date(new Date(latestInDb).getTime() - marginMs);
+          const parsedDate = new Date(latestInDb);
+          console.log(`[SyncService] Parsed date: ${parsedDate.toISOString()}, valid: ${!isNaN(parsedDate.getTime())}`);
+          const date = new Date(parsedDate.getTime() - marginMs);
           updatedSince = date.toISOString();
-          console.log(`Incremental sync from ${updatedSince}`);
+          console.log(`[SyncService] Incremental sync from ${updatedSince} (with ${settings.sync.incrementalSyncMarginMinutes} min margin)`);
+        } else {
+          console.log(`[SyncService] No previous sync data found, performing full sync`);
         }
       } else if (checkpoint) {
         updatedSince = lastProcessedUpdatedAt;
+        console.log(`[SyncService] Using checkpoint date: ${updatedSince}`);
       }
       let totalIssues = 0;
       const generator = checkpoint ? client.getIssuesFromCheckpoint(

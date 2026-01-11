@@ -182,9 +182,13 @@ export class JiraClient {
       const date = new Date(updatedSince);
       const jiraDate = formatJiraDate(date);
       jql += ` AND updated >= "${jiraDate}"`;
+      console.log(`[JIRA Client] Incremental sync: updatedSince=${updatedSince}, jiraDate=${jiraDate}`);
+    } else {
+      console.log(`[JIRA Client] Full sync: no updatedSince filter`);
     }
 
     jql += ' ORDER BY updated ASC';
+    console.log(`[JIRA Client] JQL query: ${jql}`);
 
     let startAt = 0;
     const maxResults = 100;

@@ -13,69 +13,112 @@ function extractClaudeInstructions(description) {
   return matches.join("\n\n");
 }
 async function sendToClaudeCode(instructions, issueKey) {
+  console.log("[Claude Code] sendToClaudeCode called for issue:", issueKey);
   const fullPrompt = `[JIRA: ${issueKey}]
 
 ${instructions}`;
+  console.log("[Claude Code] Prompt length:", fullPrompt.length);
   await chrome.storage.local.set({
     claudeCodePendingPrompt: fullPrompt,
     claudeCodeTimestamp: Date.now()
   });
-  const url = "https://claude.ai/code";
-  const tabs = await chrome.tabs.query({ url: "https://claude.ai/code*" });
+  console.log("[Claude Code] Stored prompt in chrome.storage");
+  const url = "https://claude.ai/new";
+  const tabs = await chrome.tabs.query({ url: "https://claude.ai/*" });
+  console.log("[Claude Code] Found existing Claude tabs:", tabs.length);
   if (tabs.length > 0 && tabs[0].id) {
+    console.log("[Claude Code] Focusing existing tab:", tabs[0].id, "URL:", tabs[0].url);
     await chrome.tabs.update(tabs[0].id, { active: true });
     await injectPasteScript(tabs[0].id);
   } else {
+    console.log("[Claude Code] Creating new tab with URL:", url);
     const tab = await chrome.tabs.create({ url });
+    console.log("[Claude Code] Created tab:", tab.id);
     chrome.tabs.onUpdated.addListener(function listener(tabId, info) {
       if (tabId === tab.id && info.status === "complete") {
+        console.log("[Claude Code] Tab loaded, injecting script in 2 seconds");
         chrome.tabs.onUpdated.removeListener(listener);
-        setTimeout(() => injectPasteScript(tabId), 1e3);
+        setTimeout(() => injectPasteScript(tabId), 2e3);
       }
     });
   }
 }
 async function injectPasteScript(tabId) {
+  console.log("[Claude Code] injectPasteScript called for tab:", tabId);
   try {
-    await chrome.scripting.executeScript({
+    const results = await chrome.scripting.executeScript({
       target: { tabId },
       func: async () => {
-        const result = await chrome.storage.local.get(["claudeCodePendingPrompt", "claudeCodeTimestamp"]);
-        const prompt = result.claudeCodePendingPrompt;
-        const timestamp = result.claudeCodeTimestamp;
-        if (!prompt || !timestamp || Date.now() - timestamp > 3e4) {
+        console.log("[JIRA DB] Injected script running...");
+        const result2 = await chrome.storage.local.get(["claudeCodePendingPrompt", "claudeCodeTimestamp"]);
+        const prompt = result2.claudeCodePendingPrompt;
+        const timestamp = result2.claudeCodeTimestamp;
+        console.log("[JIRA DB] Retrieved prompt:", prompt ? `${prompt.length} chars` : "none", "timestamp:", timestamp);
+        if (!prompt || !timestamp || Date.now() - timestamp > 6e4) {
           console.log("[JIRA DB] No pending prompt or expired");
-          return;
+          return { success: false, error: "No pending prompt or expired" };
         }
         await chrome.storage.local.remove(["claudeCodePendingPrompt", "claudeCodeTimestamp"]);
-        const textarea = document.querySelector('textarea[placeholder*="Claude"]');
-        if (!textarea) {
-          console.error("[JIRA DB] Could not find Claude Code textarea");
-          alert("Could not find Claude Code input. Please paste manually.");
+        const selectors = [
+          'div[contenteditable="true"]',
+          // Claude uses contenteditable
+          "textarea",
+          "textarea[placeholder]",
+          "[data-placeholder]",
+          ".ProseMirror"
+          // Claude uses ProseMirror
+        ];
+        let inputEl = null;
+        for (const selector of selectors) {
+          inputEl = document.querySelector(selector);
+          if (inputEl) {
+            console.log("[JIRA DB] Found input element with selector:", selector);
+            break;
+          }
+        }
+        if (!inputEl) {
+          console.error("[JIRA DB] Could not find Claude input element");
+          console.log("[JIRA DB] Available elements:", document.body.innerHTML.substring(0, 1e3));
           await navigator.clipboard.writeText(prompt);
-          return;
+          return { success: false, error: "Could not find input element - copied to clipboard" };
         }
-        const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-          window.HTMLTextAreaElement.prototype,
-          "value"
-        )?.set;
-        if (nativeInputValueSetter) {
-          nativeInputValueSetter.call(textarea, prompt);
+        if (inputEl.tagName === "TEXTAREA") {
+          const textarea = inputEl;
+          const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+            window.HTMLTextAreaElement.prototype,
+            "value"
+          )?.set;
+          if (nativeInputValueSetter) {
+            nativeInputValueSetter.call(textarea, prompt);
+          } else {
+            textarea.value = prompt;
+          }
+          textarea.dispatchEvent(new Event("input", { bubbles: true }));
+          textarea.dispatchEvent(new Event("change", { bubbles: true }));
+          textarea.focus();
         } else {
-          textarea.value = prompt;
+          inputEl.focus();
+          document.execCommand("selectAll", false);
+          document.execCommand("insertText", false, prompt);
         }
-        textarea.dispatchEvent(new Event("input", { bubbles: true }));
-        textarea.dispatchEvent(new Event("change", { bubbles: true }));
-        textarea.focus();
         console.log("[JIRA DB] Prompt pasted successfully");
+        return { success: true };
       }
     });
+    console.log("[Claude Code] Script execution results:", results);
+    const result = results?.[0]?.result;
+    if (result && !result.success && result.error?.includes("copied to clipboard")) {
+      alert("Copied to clipboard. Please paste into Claude manually (Ctrl/Cmd+V).");
+    }
   } catch (error) {
-    console.error("[JIRA DB] Failed to inject paste script:", error);
-    const result = await chrome.storage.local.get(["claudeCodePendingPrompt"]);
-    if (result.claudeCodePendingPrompt) {
-      await navigator.clipboard.writeText(result.claudeCodePendingPrompt);
-      alert("Copied to clipboard. Please paste into Claude Code manually.");
+    console.error("[Claude Code] Failed to inject paste script:", error);
+    try {
+      const result = await chrome.storage.local.get(["claudeCodePendingPrompt"]);
+      if (result.claudeCodePendingPrompt) {
+        alert("Could not paste automatically. The prompt is stored - try opening Claude and pasting manually.");
+      }
+    } catch (e) {
+      console.error("[Claude Code] Fallback also failed:", e);
     }
   }
 }
@@ -377,14 +420,18 @@ function renderIssueDetail(issue, history) {
   `;
   const sendToClaudeBtn = document.getElementById("sendToClaudeBtn");
   if (sendToClaudeBtn && claudeInstructions) {
+    console.log("[SidePanel] Setting up Claude Code button handler");
     sendToClaudeBtn.addEventListener("click", async () => {
+      console.log("[SidePanel] Send to Claude Code button clicked");
       try {
         sendToClaudeBtn.textContent = "Sending...";
         sendToClaudeBtn.disabled = true;
+        console.log("[SidePanel] Calling sendToClaudeCode with issue:", issue.key);
         await sendToClaudeCode(claudeInstructions, issue.key);
+        console.log("[SidePanel] sendToClaudeCode completed");
       } catch (error) {
-        console.error("Failed to send to Claude Code:", error);
-        alert("Failed to send to Claude Code. Please try again.");
+        console.error("[SidePanel] Failed to send to Claude Code:", error);
+        alert(`Failed to send to Claude Code: ${error instanceof Error ? error.message : String(error)}`);
       } finally {
         sendToClaudeBtn.innerHTML = `
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -395,6 +442,8 @@ function renderIssueDetail(issue, history) {
         sendToClaudeBtn.disabled = false;
       }
     });
+  } else {
+    console.log("[SidePanel] No Claude Code button to set up:", { hasButton: !!sendToClaudeBtn, hasInstructions: !!claudeInstructions });
   }
 }
 function hideDetail() {

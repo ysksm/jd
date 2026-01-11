@@ -9,7 +9,9 @@
     "offscreen",
     "sidePanel",
     "scripting",
-    "clipboardWrite"
+    "clipboardWrite",
+    "tabs",
+    "activeTab"
   ],
   "host_permissions": [
     "https://*.atlassian.net/*",

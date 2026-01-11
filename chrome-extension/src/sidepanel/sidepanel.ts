@@ -355,14 +355,18 @@ function renderIssueDetail(issue: DbIssue, history: DbChangeHistory[]) {
   // Add click handler for Send to Claude Code button
   const sendToClaudeBtn = document.getElementById('sendToClaudeBtn');
   if (sendToClaudeBtn && claudeInstructions) {
+    console.log('[SidePanel] Setting up Claude Code button handler');
     sendToClaudeBtn.addEventListener('click', async () => {
+      console.log('[SidePanel] Send to Claude Code button clicked');
       try {
         sendToClaudeBtn.textContent = 'Sending...';
         (sendToClaudeBtn as HTMLButtonElement).disabled = true;
+        console.log('[SidePanel] Calling sendToClaudeCode with issue:', issue.key);
         await sendToClaudeCode(claudeInstructions, issue.key);
+        console.log('[SidePanel] sendToClaudeCode completed');
       } catch (error) {
-        console.error('Failed to send to Claude Code:', error);
-        alert('Failed to send to Claude Code. Please try again.');
+        console.error('[SidePanel] Failed to send to Claude Code:', error);
+        alert(`Failed to send to Claude Code: ${error instanceof Error ? error.message : String(error)}`);
       } finally {
         sendToClaudeBtn.innerHTML = `
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -373,6 +377,8 @@ function renderIssueDetail(issue: DbIssue, history: DbChangeHistory[]) {
         (sendToClaudeBtn as HTMLButtonElement).disabled = false;
       }
     });
+  } else {
+    console.log('[SidePanel] No Claude Code button to set up:', { hasButton: !!sendToClaudeBtn, hasInstructions: !!claudeInstructions });
   }
 }
 

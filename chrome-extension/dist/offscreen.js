@@ -12839,12 +12839,23 @@ return true;`);
     if (!conn)
       throw new Error("Database not initialized");
     const sql = `SELECT MAX(updated_at) as max_updated FROM issues WHERE project_key = ${escapeSQL(projectKey)} AND is_deleted = FALSE`;
+    console.log(`[Offscreen] getLatestUpdatedAt SQL: ${sql}`);
     const result = await conn.query(sql);
     const rows = result.toArray();
-    if (rows.length === 0)
+    console.log(`[Offscreen] getLatestUpdatedAt rows:`, rows);
+    if (rows.length === 0) {
+      console.log(`[Offscreen] getLatestUpdatedAt: no rows, returning null`);
       return null;
+    }
     const row = rows[0];
-    return row.max_updated ? timestampToISOString(row.max_updated) : null;
+    console.log(`[Offscreen] getLatestUpdatedAt raw value:`, row.max_updated, `type:`, typeof row.max_updated);
+    if (!row.max_updated) {
+      console.log(`[Offscreen] getLatestUpdatedAt: max_updated is null/undefined, returning null`);
+      return null;
+    }
+    const isoString = timestampToISOString(row.max_updated);
+    console.log(`[Offscreen] getLatestUpdatedAt converted to ISO:`, isoString);
+    return isoString;
   }
   async function getIssueCount(projectKey) {
     if (!conn)

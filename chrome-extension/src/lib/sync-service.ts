@@ -96,18 +96,28 @@ export async function syncProject(
 
     // Determine if we should do incremental sync
     let updatedSince: string | undefined;
+    console.log(`[SyncService] Incremental sync settings: enabled=${settings.sync.incrementalSyncEnabled}, hasCheckpoint=${!!checkpoint}`);
+
     if (settings.sync.incrementalSyncEnabled && !checkpoint) {
       const latestInDb = await getLatestUpdatedAt(projectKey);
+      console.log(`[SyncService] Latest updated_at in DB for ${projectKey}: "${latestInDb}" (type: ${typeof latestInDb})`);
+
       if (latestInDb) {
         // Apply safety margin
         const marginMs = settings.sync.incrementalSyncMarginMinutes * 60 * 1000;
-        const date = new Date(new Date(latestInDb).getTime() - marginMs);
+        const parsedDate = new Date(latestInDb);
+        console.log(`[SyncService] Parsed date: ${parsedDate.toISOString()}, valid: ${!isNaN(parsedDate.getTime())}`);
+
+        const date = new Date(parsedDate.getTime() - marginMs);
         updatedSince = date.toISOString();
-        console.log(`Incremental sync from ${updatedSince}`);
+        console.log(`[SyncService] Incremental sync from ${updatedSince} (with ${settings.sync.incrementalSyncMarginMinutes} min margin)`);
+      } else {
+        console.log(`[SyncService] No previous sync data found, performing full sync`);
       }
     } else if (checkpoint) {
       // Use checkpoint's last processed date for resume
       updatedSince = lastProcessedUpdatedAt;
+      console.log(`[SyncService] Using checkpoint date: ${updatedSince}`);
     }
 
     // Fetch and sync issues
