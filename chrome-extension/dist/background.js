@@ -525,9 +525,16 @@
       }
       let updatedSince;
       console.log(`[SyncService] Incremental sync settings: enabled=${settings.sync.incrementalSyncEnabled}, hasCheckpoint=${!!checkpoint}`);
+      try {
+        const { getIssueCount: getIssueCount2 } = await Promise.resolve().then(() => (init_database(), database_exports));
+        const currentCount = await getIssueCount2(projectKey);
+        console.log(`[SyncService] Current issue count in DB for ${projectKey}: ${currentCount}`);
+      } catch (e) {
+        console.warn(`[SyncService] Could not get issue count:`, e);
+      }
       if (settings.sync.incrementalSyncEnabled && !checkpoint) {
         const latestInDb = await getLatestUpdatedAt(projectKey);
-        console.log(`[SyncService] Latest updated_at in DB for ${projectKey}: "${latestInDb}" (type: ${typeof latestInDb})`);
+        console.log(`[SyncService] Latest updated_at in DB for ${projectKey}: "${latestInDb}" (type: ${typeof latestInDb}), value: ${JSON.stringify(latestInDb)}`);
         if (latestInDb) {
           const marginMs = settings.sync.incrementalSyncMarginMinutes * 60 * 1e3;
           const parsedDate = new Date(latestInDb);

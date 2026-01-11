@@ -98,9 +98,18 @@ export async function syncProject(
     let updatedSince: string | undefined;
     console.log(`[SyncService] Incremental sync settings: enabled=${settings.sync.incrementalSyncEnabled}, hasCheckpoint=${!!checkpoint}`);
 
+    // First, check current issue count in database
+    try {
+      const { getIssueCount } = await import('./database');
+      const currentCount = await getIssueCount(projectKey);
+      console.log(`[SyncService] Current issue count in DB for ${projectKey}: ${currentCount}`);
+    } catch (e) {
+      console.warn(`[SyncService] Could not get issue count:`, e);
+    }
+
     if (settings.sync.incrementalSyncEnabled && !checkpoint) {
       const latestInDb = await getLatestUpdatedAt(projectKey);
-      console.log(`[SyncService] Latest updated_at in DB for ${projectKey}: "${latestInDb}" (type: ${typeof latestInDb})`);
+      console.log(`[SyncService] Latest updated_at in DB for ${projectKey}: "${latestInDb}" (type: ${typeof latestInDb}), value: ${JSON.stringify(latestInDb)}`);
 
       if (latestInDb) {
         // Apply safety margin

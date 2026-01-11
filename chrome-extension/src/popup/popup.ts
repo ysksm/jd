@@ -40,6 +40,17 @@ const openSettingsBtnEl = document.getElementById('openSettingsBtn') as HTMLButt
 const closeModalBtnEl = document.getElementById('closeModalBtn') as HTMLButtonElement;
 const openInJiraBtnEl = document.getElementById('openInJiraBtn') as HTMLButtonElement;
 const cancelSyncBtnEl = document.getElementById('cancelSyncBtn') as HTMLButtonElement;
+const copyTemplateBtnEl = document.getElementById('copyTemplateBtn') as HTMLButtonElement;
+
+// AI instruction template
+const AI_TEMPLATE = `\`\`\`ai
+ここにAIへの指示を記述してください。
+
+例:
+- このチケットの内容を分析して、実装に必要なタスクを洗い出してください
+- このバグの原因を調査し、修正方法を提案してください
+- このチケットに基づいてテストケースを作成してください
+\`\`\``;
 
 // Initialize
 async function init() {
@@ -401,6 +412,23 @@ function openSettings() {
   chrome.runtime.openOptionsPage();
 }
 
+async function copyTemplateToClipboard() {
+  try {
+    await navigator.clipboard.writeText(AI_TEMPLATE);
+    // Show visual feedback
+    const originalTitle = copyTemplateBtnEl.title;
+    copyTemplateBtnEl.title = 'コピーしました!';
+    copyTemplateBtnEl.style.color = '#00875a';
+    setTimeout(() => {
+      copyTemplateBtnEl.title = originalTitle;
+      copyTemplateBtnEl.style.color = '';
+    }, 2000);
+  } catch (error) {
+    console.error('Failed to copy template:', error);
+    alert('テンプレートのコピーに失敗しました');
+  }
+}
+
 // Message helper
 async function sendMessage<T>(message: { type: string; payload?: unknown }): Promise<{
   success: boolean;
@@ -450,6 +478,7 @@ openSettingsBtnEl.addEventListener('click', openSettings);
 closeModalBtnEl.addEventListener('click', closeModal);
 openInJiraBtnEl.addEventListener('click', openInJira);
 cancelSyncBtnEl.addEventListener('click', cancelSyncHandler);
+copyTemplateBtnEl.addEventListener('click', copyTemplateToClipboard);
 
 // Listen for sync progress updates
 chrome.runtime.onMessage.addListener((message) => {

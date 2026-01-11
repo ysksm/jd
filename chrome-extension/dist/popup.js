@@ -29,6 +29,15 @@ var openSettingsBtnEl = document.getElementById("openSettingsBtn");
 var closeModalBtnEl = document.getElementById("closeModalBtn");
 var openInJiraBtnEl = document.getElementById("openInJiraBtn");
 var cancelSyncBtnEl = document.getElementById("cancelSyncBtn");
+var copyTemplateBtnEl = document.getElementById("copyTemplateBtn");
+var AI_TEMPLATE = `\`\`\`ai
+\u3053\u3053\u306BAI\u3078\u306E\u6307\u793A\u3092\u8A18\u8FF0\u3057\u3066\u304F\u3060\u3055\u3044\u3002
+
+\u4F8B:
+- \u3053\u306E\u30C1\u30B1\u30C3\u30C8\u306E\u5185\u5BB9\u3092\u5206\u6790\u3057\u3066\u3001\u5B9F\u88C5\u306B\u5FC5\u8981\u306A\u30BF\u30B9\u30AF\u3092\u6D17\u3044\u51FA\u3057\u3066\u304F\u3060\u3055\u3044
+- \u3053\u306E\u30D0\u30B0\u306E\u539F\u56E0\u3092\u8ABF\u67FB\u3057\u3001\u4FEE\u6B63\u65B9\u6CD5\u3092\u63D0\u6848\u3057\u3066\u304F\u3060\u3055\u3044
+- \u3053\u306E\u30C1\u30B1\u30C3\u30C8\u306B\u57FA\u3065\u3044\u3066\u30C6\u30B9\u30C8\u30B1\u30FC\u30B9\u3092\u4F5C\u6210\u3057\u3066\u304F\u3060\u3055\u3044
+\`\`\``;
 async function init() {
   const response = await sendMessage({ type: "GET_SETTINGS" });
   if (response.success && response.data) {
@@ -329,6 +338,21 @@ async function checkSyncStatus() {
 function openSettings() {
   chrome.runtime.openOptionsPage();
 }
+async function copyTemplateToClipboard() {
+  try {
+    await navigator.clipboard.writeText(AI_TEMPLATE);
+    const originalTitle = copyTemplateBtnEl.title;
+    copyTemplateBtnEl.title = "\u30B3\u30D4\u30FC\u3057\u307E\u3057\u305F!";
+    copyTemplateBtnEl.style.color = "#00875a";
+    setTimeout(() => {
+      copyTemplateBtnEl.title = originalTitle;
+      copyTemplateBtnEl.style.color = "";
+    }, 2e3);
+  } catch (error) {
+    console.error("Failed to copy template:", error);
+    alert("\u30C6\u30F3\u30D7\u30EC\u30FC\u30C8\u306E\u30B3\u30D4\u30FC\u306B\u5931\u6557\u3057\u307E\u3057\u305F");
+  }
+}
 async function sendMessage(message) {
   return new Promise((resolve) => {
     chrome.runtime.sendMessage(message, (response) => {
@@ -368,6 +392,7 @@ openSettingsBtnEl.addEventListener("click", openSettings);
 closeModalBtnEl.addEventListener("click", closeModal);
 openInJiraBtnEl.addEventListener("click", openInJira);
 cancelSyncBtnEl.addEventListener("click", cancelSyncHandler);
+copyTemplateBtnEl.addEventListener("click", copyTemplateToClipboard);
 chrome.runtime.onMessage.addListener((message) => {
   if (message.type === "SYNC_PROGRESS") {
     const progress = message.payload;
