@@ -12386,24 +12386,39 @@ var Y = Z(q());
 var db = null;
 var conn = null;
 async function initDatabase() {
-  if (db)
+  if (db && conn) {
+    console.log("[Offscreen] Database already initialized, skipping");
     return;
+  }
   console.log("[Offscreen] Initializing DuckDB WASM...");
-  const JSDELIVR_BUNDLES = Je();
-  const bundle = await Xe(JSDELIVR_BUNDLES);
-  const worker_url = URL.createObjectURL(
-    new Blob([`importScripts("${bundle.mainWorker}");`], {
-      type: "text/javascript"
-    })
-  );
-  const worker = new Worker(worker_url);
-  const logger = new A();
-  db = new f(logger, worker);
-  await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
-  URL.revokeObjectURL(worker_url);
-  conn = await db.connect();
-  await createTables();
-  console.log("[Offscreen] DuckDB initialized successfully");
+  try {
+    const JSDELIVR_BUNDLES = Je();
+    console.log("[Offscreen] Got bundles, selecting...");
+    const bundle = await Xe(JSDELIVR_BUNDLES);
+    console.log("[Offscreen] Bundle selected:", bundle.mainModule);
+    const worker_url = URL.createObjectURL(
+      new Blob([`importScripts("${bundle.mainWorker}");`], {
+        type: "text/javascript"
+      })
+    );
+    console.log("[Offscreen] Creating worker...");
+    const worker = new Worker(worker_url);
+    const logger = new A();
+    db = new f(logger, worker);
+    console.log("[Offscreen] Instantiating DuckDB...");
+    await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
+    URL.revokeObjectURL(worker_url);
+    console.log("[Offscreen] Connecting...");
+    conn = await db.connect();
+    console.log("[Offscreen] Creating tables...");
+    await createTables();
+    console.log("[Offscreen] DuckDB initialized successfully");
+  } catch (error) {
+    console.error("[Offscreen] Failed to initialize DuckDB:", error);
+    db = null;
+    conn = null;
+    throw error;
+  }
 }
 async function runSql(sql) {
   if (!conn)
@@ -12815,10 +12830,12 @@ chrome.runtime.onMessage.addListener(
   (message, _sender, sendResponse) => {
     if (message.target !== "offscreen")
       return;
+    console.log("[Offscreen] Received message:", message.action);
     handleAction(message.action, message.payload).then((data) => {
+      console.log("[Offscreen] Action completed:", message.action);
       sendResponse({ success: true, data });
     }).catch((error) => {
-      console.error("[Offscreen] Error:", error);
+      console.error("[Offscreen] Action failed:", message.action, error);
       sendResponse({
         success: false,
         error: error instanceof Error ? error.message : String(error)
