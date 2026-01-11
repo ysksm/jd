@@ -552,31 +552,56 @@ async function upsertIssue(issue: JiraIssue): Promise<void> {
   if (issue.changelog?.histories) {
     for (const history of issue.changelog.histories) {
       for (const item of history.items) {
-        const historySql = `
-          INSERT INTO issue_change_history (
-            issue_id, issue_key, history_id,
-            author_account_id, author_display_name,
-            field, field_type, from_value, from_string, to_value, to_string,
-            changed_at
-          ) VALUES (
-            ${escapeSQL(issue.id)}, ${escapeSQL(issue.key)}, ${escapeSQL(history.id)},
-            ${escapeSQL(history.author?.accountId || null)}, ${escapeSQL(history.author?.displayName || null)},
-            ${escapeSQL(item.field)}, ${escapeSQL(item.fieldtype)},
-            ${escapeSQL(item.from || null)}, ${escapeSQL(item.fromString || null)},
-            ${escapeSQL(item.to || null)}, ${escapeSQL(item.toString || null)},
-            ${escapeTimestamp(history.created)}
-          )
-          ON CONFLICT (issue_id, history_id, field) DO UPDATE SET
-            author_account_id = excluded.author_account_id,
-            author_display_name = excluded.author_display_name,
-            field_type = excluded.field_type,
-            from_value = excluded.from_value,
-            from_string = excluded.from_string,
-            to_value = excluded.to_value,
-            to_string = excluded.to_string,
-            changed_at = excluded.changed_at
+        // Check if this record already exists (by unique constraint)
+        const checkSql = `
+          SELECT id FROM issue_change_history
+          WHERE issue_id = ${escapeSQL(issue.id)}
+            AND history_id = ${escapeSQL(history.id)}
+            AND field = ${escapeSQL(item.field)}
         `;
-        await runSql(historySql);
+        const existingResult = await conn!.query(checkSql);
+        const existingRows = existingResult.toArray();
+
+        if (existingRows.length > 0) {
+          // Update existing record
+          const updateSql = `
+            UPDATE issue_change_history SET
+              author_account_id = ${escapeSQL(history.author?.accountId || null)},
+              author_display_name = ${escapeSQL(history.author?.displayName || null)},
+              field_type = ${escapeSQL(item.fieldtype)},
+              from_value = ${escapeSQL(item.from || null)},
+              from_string = ${escapeSQL(item.fromString || null)},
+              to_value = ${escapeSQL(item.to || null)},
+              to_string = ${escapeSQL(item.toString || null)},
+              changed_at = ${escapeTimestamp(history.created)}
+            WHERE issue_id = ${escapeSQL(issue.id)}
+              AND history_id = ${escapeSQL(history.id)}
+              AND field = ${escapeSQL(item.field)}
+          `;
+          await runSql(updateSql);
+        } else {
+          // Manually calculate next ID to avoid sequence issues after restore
+          const maxIdResult = await conn!.query('SELECT COALESCE(MAX(id), 0) + 1 as next_id FROM issue_change_history');
+          const maxIdRow = maxIdResult.toArray()[0] as Record<string, unknown>;
+          const nextId = Number(maxIdRow.next_id || 1);
+
+          const insertSql = `
+            INSERT INTO issue_change_history (
+              id, issue_id, issue_key, history_id,
+              author_account_id, author_display_name,
+              field, field_type, from_value, from_string, to_value, to_string,
+              changed_at
+            ) VALUES (
+              ${nextId}, ${escapeSQL(issue.id)}, ${escapeSQL(issue.key)}, ${escapeSQL(history.id)},
+              ${escapeSQL(history.author?.accountId || null)}, ${escapeSQL(history.author?.displayName || null)},
+              ${escapeSQL(item.field)}, ${escapeSQL(item.fieldtype)},
+              ${escapeSQL(item.from || null)}, ${escapeSQL(item.fromString || null)},
+              ${escapeSQL(item.to || null)}, ${escapeSQL(item.toString || null)},
+              ${escapeTimestamp(history.created)}
+            )
+          `;
+          await runSql(insertSql);
+        }
       }
     }
   }
@@ -776,19 +801,17 @@ async function getIssueCount(projectKey: string): Promise<number> {
 async function startSyncHistory(projectKey: string): Promise<number> {
   if (!conn) throw new Error('Database not initialized');
 
-  // Use RETURNING to get the auto-generated ID
+  // Manually calculate next ID to avoid sequence issues after restore
+  const maxIdResult = await conn.query('SELECT COALESCE(MAX(id), 0) + 1 as next_id FROM sync_history');
+  const maxIdRow = maxIdResult.toArray()[0] as Record<string, unknown>;
+  const nextId = Number(maxIdRow.next_id || 1);
+
   const sql = `
-    INSERT INTO sync_history (project_key, started_at, status, issues_synced)
-    VALUES (${escapeSQL(projectKey)}, now(), 'running', 0)
-    RETURNING id
+    INSERT INTO sync_history (id, project_key, started_at, status, issues_synced)
+    VALUES (${nextId}, ${escapeSQL(projectKey)}, now(), 'running', 0)
   `;
-  const result = await conn.query(sql);
-  const rows = result.toArray();
-  if (rows.length === 0) {
-    throw new Error('Failed to insert sync history');
-  }
-  const row = rows[0] as Record<string, unknown>;
-  return Number(row.id);
+  await runSql(sql);
+  return nextId;
 }
 
 async function completeSyncHistory(
