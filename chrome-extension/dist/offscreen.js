@@ -12507,15 +12507,19 @@ return true;`);
       console.log("[Offscreen] Checking for saved database...");
       const savedData = await loadFromIndexedDB();
       if (savedData && savedData.length > 0) {
-        console.log("[Offscreen] Restoring database from IndexedDB...");
+        console.log("[Offscreen] Restoring database from IndexedDB...", savedData.length, "bytes");
         try {
           await db.registerFileBuffer("jira.db", savedData);
-          await db.open({ path: "jira.db" });
-          console.log("[Offscreen] Database restored from IndexedDB");
+          console.log("[Offscreen] File registered in virtual file system");
         } catch (restoreError) {
-          console.error("[Offscreen] Failed to restore database, starting fresh:", restoreError);
+          console.error("[Offscreen] Failed to register database file:", restoreError);
         }
       }
+      console.log("[Offscreen] Opening database...");
+      await db.open({
+        path: "jira.db",
+        accessMode: ee.READ_WRITE
+      });
       console.log("[Offscreen] Connecting...");
       conn = await db.connect();
       console.log("[Offscreen] Creating tables (if not exist)...");
@@ -12965,12 +12969,25 @@ return true;`);
     return await db.copyFileToBuffer("jira.db");
   }
   async function persistDatabase() {
-    if (!db)
+    if (!db || !conn)
       throw new Error("Database not initialized");
     console.log("[Offscreen] Persisting database to IndexedDB...");
-    const data = await db.copyFileToBuffer("jira.db");
-    await saveToIndexedDB(data);
-    console.log("[Offscreen] Database persisted successfully");
+    try {
+      console.log("[Offscreen] Running CHECKPOINT...");
+      await conn.query("CHECKPOINT");
+      console.log("[Offscreen] Copying database to buffer...");
+      const data = await db.copyFileToBuffer("jira.db");
+      console.log("[Offscreen] Database size:", data.length, "bytes");
+      if (data.length > 0) {
+        await saveToIndexedDB(data);
+        console.log("[Offscreen] Database persisted successfully");
+      } else {
+        console.warn("[Offscreen] Database buffer is empty, skipping save");
+      }
+    } catch (error) {
+      console.error("[Offscreen] Failed to persist database:", error);
+      throw error;
+    }
   }
   chrome.runtime.onMessage.addListener(
     (message, _sender, sendResponse) => {
