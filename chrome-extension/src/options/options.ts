@@ -80,6 +80,18 @@ async function loadProjects() {
   if (response.success && response.data) {
     projects = response.data;
     renderProjects();
+  } else if (response.error) {
+    // If GET_PROJECTS fails (e.g., database not ready), try to at least show projects from settings
+    console.warn('Failed to load projects with status:', response.error);
+    const settingsResponse = await sendMessage<Settings>({ type: 'GET_SETTINGS' });
+    if (settingsResponse.success && settingsResponse.data?.projects) {
+      projects = settingsResponse.data.projects.map(p => ({
+        ...p,
+        issueCount: undefined,
+        hasCheckpoint: !!p.syncCheckpoint,
+      }));
+      renderProjects();
+    }
   }
 }
 
@@ -127,10 +139,15 @@ function renderProjects() {
       const target = e.target as HTMLInputElement;
       const projectKey = target.dataset.project;
       if (projectKey) {
-        await sendMessage({
+        const response = await sendMessage({
           type: 'ENABLE_PROJECT',
           payload: { projectKey, enabled: target.checked },
         });
+        if (!response.success) {
+          showStatus(projectsStatusEl, 'error', `Failed to update project: ${response.error}`);
+          // Revert checkbox state
+          target.checked = !target.checked;
+        }
       }
     });
   });

@@ -222,8 +222,14 @@
         ...settings.projects[projectIndex],
         ...updates
       };
+      await saveSettings(settings);
+      console.log(`[Settings] Updated project ${projectKey}:`, updates);
+    } else {
+      console.warn(
+        `[Settings] Project ${projectKey} not found in settings. Available projects:`,
+        settings.projects.map((p) => p.key)
+      );
     }
-    await saveSettings(settings);
   }
   async function saveSyncCheckpoint(projectKey, checkpoint) {
     await updateProjectConfig(projectKey, { syncCheckpoint: checkpoint });
@@ -587,24 +593,25 @@
   }
   async function getProjectsWithStatus() {
     const settings = await loadSettings();
-    const { getIssueCount: getIssueCount2 } = await Promise.resolve().then(() => (init_database(), database_exports));
-    const projectsWithStatus = await Promise.all(
-      settings.projects.map(async (project) => {
-        let issueCount;
+    let issueCountMap = /* @__PURE__ */ new Map();
+    try {
+      const { getIssueCount: getIssueCount2 } = await Promise.resolve().then(() => (init_database(), database_exports));
+      await initDatabase();
+      for (const project of settings.projects) {
         try {
-          await initDatabase();
-          issueCount = await getIssueCount2(project.key);
+          const count = await getIssueCount2(project.key);
+          issueCountMap.set(project.key, count);
         } catch {
-          issueCount = void 0;
         }
-        return {
-          ...project,
-          issueCount,
-          hasCheckpoint: !!project.syncCheckpoint
-        };
-      })
-    );
-    return projectsWithStatus;
+      }
+    } catch (error) {
+      console.warn("Could not load issue counts from database:", error);
+    }
+    return settings.projects.map((project) => ({
+      ...project,
+      issueCount: issueCountMap.get(project.key),
+      hasCheckpoint: !!project.syncCheckpoint
+    }));
   }
 
   // src/background/index.ts

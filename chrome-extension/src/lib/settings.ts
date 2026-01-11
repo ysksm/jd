@@ -71,9 +71,12 @@ export async function updateProjectConfig(
       ...settings.projects[projectIndex],
       ...updates,
     };
+    await saveSettings(settings);
+    console.log(`[Settings] Updated project ${projectKey}:`, updates);
+  } else {
+    console.warn(`[Settings] Project ${projectKey} not found in settings. Available projects:`,
+      settings.projects.map(p => p.key));
   }
-
-  await saveSettings(settings);
 }
 
 // Save sync checkpoint for resume support

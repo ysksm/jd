@@ -235,25 +235,28 @@ export async function getProjectsWithStatus(): Promise<
   (ProjectConfig & { issueCount?: number; hasCheckpoint?: boolean })[]
 > {
   const settings = await loadSettings();
-  const { getIssueCount } = await import('./database');
 
-  const projectsWithStatus = await Promise.all(
-    settings.projects.map(async (project) => {
-      let issueCount: number | undefined;
+  // Try to get issue counts from database, but don't fail if database isn't ready
+  let issueCountMap: Map<string, number> = new Map();
+  try {
+    const { getIssueCount } = await import('./database');
+    await initDatabase();
+    for (const project of settings.projects) {
       try {
-        await initDatabase();
-        issueCount = await getIssueCount(project.key);
+        const count = await getIssueCount(project.key);
+        issueCountMap.set(project.key, count);
       } catch {
-        issueCount = undefined;
+        // Ignore individual project errors
       }
+    }
+  } catch (error) {
+    console.warn('Could not load issue counts from database:', error);
+    // Continue without issue counts
+  }
 
-      return {
-        ...project,
-        issueCount,
-        hasCheckpoint: !!project.syncCheckpoint,
-      };
-    })
-  );
-
-  return projectsWithStatus;
+  return settings.projects.map((project) => ({
+    ...project,
+    issueCount: issueCountMap.get(project.key),
+    hasCheckpoint: !!project.syncCheckpoint,
+  }));
 }

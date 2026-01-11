@@ -59,6 +59,17 @@ async function loadProjects() {
   if (response.success && response.data) {
     projects = response.data;
     renderProjects();
+  } else if (response.error) {
+    console.warn("Failed to load projects with status:", response.error);
+    const settingsResponse = await sendMessage({ type: "GET_SETTINGS" });
+    if (settingsResponse.success && settingsResponse.data?.projects) {
+      projects = settingsResponse.data.projects.map((p) => ({
+        ...p,
+        issueCount: void 0,
+        hasCheckpoint: !!p.syncCheckpoint
+      }));
+      renderProjects();
+    }
   }
 }
 function renderProjects() {
@@ -97,10 +108,14 @@ function renderProjects() {
       const target = e.target;
       const projectKey = target.dataset.project;
       if (projectKey) {
-        await sendMessage({
+        const response = await sendMessage({
           type: "ENABLE_PROJECT",
           payload: { projectKey, enabled: target.checked }
         });
+        if (!response.success) {
+          showStatus(projectsStatusEl, "error", `Failed to update project: ${response.error}`);
+          target.checked = !target.checked;
+        }
       }
     });
   });
