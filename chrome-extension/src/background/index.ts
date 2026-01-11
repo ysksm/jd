@@ -267,24 +267,9 @@ async function openAiAndPaste(service: AiServiceType, instructions: string, issu
 
   let targetTabId: number;
 
-  if (tabs.length > 0 && tabs[0].id) {
-    // Focus existing tab and bring window to front
-    console.log('[Background] Focusing existing tab:', tabs[0].id, 'windowId:', tabs[0].windowId);
-    try {
-      await chrome.tabs.update(tabs[0].id, { active: true });
-      // Also bring the window to front
-      if (tabs[0].windowId) {
-        await chrome.windows.update(tabs[0].windowId, { focused: true });
-      }
-      targetTabId = tabs[0].id;
-    } catch (updateError) {
-      console.error('[Background] Failed to update tab:', updateError);
-      throw updateError;
-    }
-    // Wait a moment then inject
-    await new Promise(resolve => setTimeout(resolve, 500));
-    await injectAiScript(targetTabId, service);
-  } else {
+  // Always create a new tab for reliability
+  // (Existing tab reuse had issues with script injection)
+  {
     // Create new tab
     console.log('[Background] Creating new tab:', config.url);
 

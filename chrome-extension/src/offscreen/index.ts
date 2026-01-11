@@ -241,6 +241,20 @@ async function initDatabase(): Promise<void> {
     console.log('[Offscreen] Checking for saved data in IndexedDB...');
     await restoreFromJson();
 
+    // Verify restoration by checking issue count
+    try {
+      const countResult = await conn.query('SELECT COUNT(*) as count FROM issues');
+      const countRow = countResult.toArray()[0] as Record<string, unknown>;
+      console.log(`[Offscreen] After restore: ${countRow?.count || 0} issues in database`);
+
+      // Also check for latest updated_at
+      const latestResult = await conn.query('SELECT MAX(updated_at) as max_updated FROM issues');
+      const latestRow = latestResult.toArray()[0] as Record<string, unknown>;
+      console.log(`[Offscreen] Latest updated_at in DB:`, latestRow?.max_updated);
+    } catch (e) {
+      console.warn('[Offscreen] Could not verify issue count:', e);
+    }
+
     console.log('[Offscreen] DuckDB initialized successfully');
   } catch (error) {
     console.error('[Offscreen] Failed to initialize DuckDB:', error);
@@ -1006,6 +1020,15 @@ async function persistDatabase(): Promise<void> {
   console.log('[Offscreen] Persisting database to IndexedDB...');
   try {
     const data = await exportToJson();
+    console.log(`[Offscreen] Exporting: ${data.projects.length} projects, ${data.issues.length} issues`);
+    if (data.issues.length > 0) {
+      // Log the latest updated_at from exported data
+      const latestUpdated = data.issues.reduce((max, issue) => {
+        const updated = issue.updated_at as string;
+        return updated > max ? updated : max;
+      }, '');
+      console.log(`[Offscreen] Latest updated_at in export: ${latestUpdated}`);
+    }
     await saveJsonToIndexedDB(data);
     console.log('[Offscreen] Database persisted successfully');
   } catch (error) {
