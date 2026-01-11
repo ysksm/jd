@@ -64,18 +64,23 @@ export async function syncProject(
   projectKey: string,
   onProgress?: (progress: SyncProgress) => void
 ): Promise<SyncResult> {
+  console.log(`[SyncService] syncProject started for ${projectKey}`);
   const startedAt = new Date().toISOString();
   let issuesSynced = 0;
   let syncHistoryId = 0;
 
   try {
     const settings = await loadSettings();
+    console.log(`[SyncService] Settings loaded, creating JIRA client`);
     const client = new JiraClient(settings.jira);
 
+    console.log(`[SyncService] Initializing database...`);
     await initDatabase();
+    console.log(`[SyncService] Database initialized`);
 
     // Start sync history record
     syncHistoryId = await startSyncHistory(projectKey);
+    console.log(`[SyncService] Sync history started with ID ${syncHistoryId}`);
 
     // Check for existing checkpoint (resume support)
     const checkpoint = await getSyncCheckpoint(projectKey);
@@ -184,8 +189,13 @@ export async function syncProject(
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error(`[SyncService] syncProject error for ${projectKey}:`, errorMessage, error);
     if (syncHistoryId) {
-      await completeSyncHistory(syncHistoryId, false, issuesSynced, errorMessage);
+      try {
+        await completeSyncHistory(syncHistoryId, false, issuesSynced, errorMessage);
+      } catch (e) {
+        console.error(`[SyncService] Failed to complete sync history:`, e);
+      }
     }
     return {
       projectKey,
@@ -232,7 +242,7 @@ export async function syncAllProjects(
 
       console.log('[SyncService] Syncing project:', project.key);
       const result = await syncProject(project.key, onProgress);
-      console.log('[SyncService] Project sync result:', result);
+      console.log('[SyncService] Project sync result:', JSON.stringify(result, null, 2));
       results.push(result);
     }
 
