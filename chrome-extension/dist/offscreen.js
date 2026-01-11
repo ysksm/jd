@@ -12389,6 +12389,66 @@ return true;`);
   }
   var db = null;
   var conn = null;
+  var IDB_NAME = "jira-db-storage";
+  var IDB_STORE = "database";
+  var IDB_JSON_KEY = "duckdb-json-data";
+  function openIndexedDB() {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open(IDB_NAME, 1);
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => resolve(request.result);
+      request.onupgradeneeded = (event) => {
+        const db2 = event.target.result;
+        if (!db2.objectStoreNames.contains(IDB_STORE)) {
+          db2.createObjectStore(IDB_STORE);
+        }
+      };
+    });
+  }
+  async function saveJsonToIndexedDB(data) {
+    console.log(
+      "[Offscreen] Saving database JSON to IndexedDB...",
+      `projects: ${data.projects.length}, issues: ${data.issues.length}, history: ${data.changeHistory.length}`
+    );
+    const idb = await openIndexedDB();
+    return new Promise((resolve, reject) => {
+      const tx = idb.transaction(IDB_STORE, "readwrite");
+      const store = tx.objectStore(IDB_STORE);
+      const request = store.put(data, IDB_JSON_KEY);
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        console.log("[Offscreen] Database JSON saved to IndexedDB");
+        resolve();
+      };
+    });
+  }
+  async function loadJsonFromIndexedDB() {
+    try {
+      const idb = await openIndexedDB();
+      return new Promise((resolve, reject) => {
+        const tx = idb.transaction(IDB_STORE, "readonly");
+        const store = tx.objectStore(IDB_STORE);
+        const request = store.get(IDB_JSON_KEY);
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => {
+          const data = request.result;
+          if (data && typeof data === "object" && "version" in data) {
+            console.log(
+              "[Offscreen] Loaded database JSON from IndexedDB:",
+              `projects: ${data.projects?.length || 0}, issues: ${data.issues?.length || 0}`
+            );
+            resolve(data);
+          } else {
+            console.log("[Offscreen] No saved database JSON found in IndexedDB");
+            resolve(null);
+          }
+        };
+      });
+    } catch (error) {
+      console.error("[Offscreen] Failed to load JSON from IndexedDB:", error);
+      return null;
+    }
+  }
   function getLocalBundles() {
     const baseUrl = chrome.runtime.getURL("dist/");
     return {
@@ -12454,6 +12514,8 @@ return true;`);
       conn = await db.connect();
       console.log("[Offscreen] Creating tables...");
       await createTables();
+      console.log("[Offscreen] Checking for saved data in IndexedDB...");
+      await restoreFromJson();
       console.log("[Offscreen] DuckDB initialized successfully");
     } catch (error) {
       console.error("[Offscreen] Failed to initialize DuckDB:", error);
@@ -12923,8 +12985,205 @@ return true;`);
       throw new Error("Database not initialized");
     return await db.copyFileToBuffer("jira.db");
   }
+  async function exportToJson() {
+    if (!conn)
+      throw new Error("Database not initialized");
+    const projectsResult = await conn.query("SELECT * FROM projects");
+    const projects = projectsResult.toArray().map((row) => {
+      const r = row;
+      return {
+        id: String(r.id || ""),
+        key: String(r.key || ""),
+        name: String(r.name || ""),
+        project_type: r.project_type ? String(r.project_type) : null,
+        created_at: timestampToISOString(r.created_at),
+        updated_at: timestampToISOString(r.updated_at)
+      };
+    });
+    const issuesResult = await conn.query("SELECT * FROM issues");
+    const issues = issuesResult.toArray().map((row) => {
+      const r = row;
+      return {
+        id: String(r.id || ""),
+        key: String(r.key || ""),
+        project_id: String(r.project_id || ""),
+        project_key: String(r.project_key || ""),
+        summary: String(r.summary || ""),
+        description: r.description ? String(r.description) : null,
+        status: String(r.status || ""),
+        status_category: r.status_category ? String(r.status_category) : null,
+        priority: r.priority ? String(r.priority) : null,
+        issue_type: String(r.issue_type || ""),
+        assignee_id: r.assignee_id ? String(r.assignee_id) : null,
+        assignee_name: r.assignee_name ? String(r.assignee_name) : null,
+        reporter_id: r.reporter_id ? String(r.reporter_id) : null,
+        reporter_name: r.reporter_name ? String(r.reporter_name) : null,
+        labels: r.labels ? String(r.labels) : null,
+        components: r.components ? String(r.components) : null,
+        fix_versions: r.fix_versions ? String(r.fix_versions) : null,
+        created_at: timestampToISOString(r.created_at),
+        updated_at: timestampToISOString(r.updated_at),
+        raw_data: String(r.raw_data || "{}"),
+        is_deleted: Boolean(r.is_deleted),
+        synced_at: timestampToISOString(r.synced_at)
+      };
+    });
+    const historyResult = await conn.query("SELECT * FROM issue_change_history");
+    const changeHistory = historyResult.toArray().map((row) => {
+      const r = row;
+      return {
+        id: Number(r.id || 0),
+        issue_id: String(r.issue_id || ""),
+        issue_key: String(r.issue_key || ""),
+        history_id: String(r.history_id || ""),
+        author_account_id: r.author_account_id ? String(r.author_account_id) : null,
+        author_display_name: r.author_display_name ? String(r.author_display_name) : null,
+        field: String(r.field || ""),
+        field_type: String(r.field_type || ""),
+        from_value: r.from_value ? String(r.from_value) : null,
+        from_string: r.from_string ? String(r.from_string) : null,
+        to_value: r.to_value ? String(r.to_value) : null,
+        to_string: r.to_string ? String(r.to_string) : null,
+        changed_at: timestampToISOString(r.changed_at)
+      };
+    });
+    const syncResult = await conn.query("SELECT * FROM sync_history");
+    const syncHistory = syncResult.toArray().map((row) => {
+      const r = row;
+      return {
+        id: Number(r.id || 0),
+        project_key: String(r.project_key || ""),
+        started_at: timestampToISOString(r.started_at),
+        completed_at: r.completed_at ? timestampToISOString(r.completed_at) : null,
+        status: String(r.status || ""),
+        issues_synced: Number(r.issues_synced || 0),
+        error_message: r.error_message ? String(r.error_message) : null
+      };
+    });
+    return {
+      version: 1,
+      exportedAt: (/* @__PURE__ */ new Date()).toISOString(),
+      projects,
+      issues,
+      changeHistory,
+      syncHistory
+    };
+  }
+  async function restoreFromJson() {
+    const data = await loadJsonFromIndexedDB();
+    if (!data) {
+      console.log("[Offscreen] No saved data to restore");
+      return;
+    }
+    console.log("[Offscreen] Restoring data from JSON...");
+    for (const project of data.projects) {
+      const sql = `
+      INSERT INTO projects (id, key, name, project_type, created_at, updated_at)
+      VALUES (${escapeSQL(project.id)}, ${escapeSQL(project.key)},
+              ${escapeSQL(project.name)}, ${escapeSQL(project.project_type)},
+              ${escapeSQL(project.created_at)}, ${escapeSQL(project.updated_at)})
+      ON CONFLICT (id) DO NOTHING
+    `;
+      try {
+        await runSql(sql);
+      } catch (error) {
+        console.warn("[Offscreen] Failed to restore project:", project.key, error);
+      }
+    }
+    for (const issue of data.issues) {
+      const sql = `
+      INSERT INTO issues (
+        id, key, project_id, project_key, summary, description,
+        status, status_category, priority, issue_type,
+        assignee_id, assignee_name, reporter_id, reporter_name,
+        labels, components, fix_versions,
+        created_at, updated_at, raw_data, is_deleted, synced_at
+      ) VALUES (
+        ${escapeSQL(issue.id)}, ${escapeSQL(issue.key)},
+        ${escapeSQL(issue.project_id)}, ${escapeSQL(issue.project_key)},
+        ${escapeSQL(issue.summary)}, ${escapeSQL(issue.description)},
+        ${escapeSQL(issue.status)}, ${escapeSQL(issue.status_category)},
+        ${escapeSQL(issue.priority)}, ${escapeSQL(issue.issue_type)},
+        ${escapeSQL(issue.assignee_id)}, ${escapeSQL(issue.assignee_name)},
+        ${escapeSQL(issue.reporter_id)}, ${escapeSQL(issue.reporter_name)},
+        ${escapeSQL(issue.labels)}, ${escapeSQL(issue.components)},
+        ${escapeSQL(issue.fix_versions)},
+        ${escapeSQL(issue.created_at)}, ${escapeSQL(issue.updated_at)},
+        ${escapeSQL(issue.raw_data)}, ${issue.is_deleted ? "TRUE" : "FALSE"},
+        ${escapeSQL(issue.synced_at)}
+      )
+      ON CONFLICT (id) DO NOTHING
+    `;
+      try {
+        await runSql(sql);
+      } catch (error) {
+        console.warn("[Offscreen] Failed to restore issue:", issue.key, error);
+      }
+    }
+    for (const history of data.changeHistory) {
+      const sql = `
+      INSERT INTO issue_change_history (
+        id, issue_id, issue_key, history_id,
+        author_account_id, author_display_name,
+        field, field_type, from_value, from_string, to_value, to_string,
+        changed_at
+      ) VALUES (
+        ${history.id}, ${escapeSQL(history.issue_id)}, ${escapeSQL(history.issue_key)},
+        ${escapeSQL(history.history_id)},
+        ${escapeSQL(history.author_account_id)}, ${escapeSQL(history.author_display_name)},
+        ${escapeSQL(history.field)}, ${escapeSQL(history.field_type)},
+        ${escapeSQL(history.from_value)}, ${escapeSQL(history.from_string)},
+        ${escapeSQL(history.to_value)}, ${escapeSQL(history.to_string)},
+        ${escapeSQL(history.changed_at)}
+      )
+      ON CONFLICT (issue_id, history_id, field) DO NOTHING
+    `;
+      try {
+        await runSql(sql);
+      } catch (error) {
+        console.warn("[Offscreen] Failed to restore change history:", history.issue_key, error);
+      }
+    }
+    for (const sync of data.syncHistory) {
+      const sql = `
+      INSERT INTO sync_history (
+        id, project_key, started_at, completed_at, status, issues_synced, error_message
+      ) VALUES (
+        ${sync.id}, ${escapeSQL(sync.project_key)},
+        ${escapeSQL(sync.started_at)}, ${escapeSQL(sync.completed_at)},
+        ${escapeSQL(sync.status)}, ${sync.issues_synced},
+        ${escapeSQL(sync.error_message)}
+      )
+      ON CONFLICT DO NOTHING
+    `;
+      try {
+        await runSql(sql);
+      } catch (error) {
+        console.warn("[Offscreen] Failed to restore sync history:", error);
+      }
+    }
+    try {
+      const maxHistoryId = data.changeHistory.length > 0 ? Math.max(...data.changeHistory.map((h2) => h2.id)) + 1 : 1;
+      await runSql(`DROP SEQUENCE IF EXISTS seq_change_history_id`);
+      await runSql(`CREATE SEQUENCE seq_change_history_id START ${maxHistoryId}`);
+      const maxSyncId = data.syncHistory.length > 0 ? Math.max(...data.syncHistory.map((s) => s.id)) + 1 : 1;
+      await runSql(`DROP SEQUENCE IF EXISTS seq_sync_history_id`);
+      await runSql(`CREATE SEQUENCE seq_sync_history_id START ${maxSyncId}`);
+    } catch (error) {
+      console.warn("[Offscreen] Failed to update sequences:", error);
+    }
+    console.log(`[Offscreen] Restored ${data.projects.length} projects, ${data.issues.length} issues, ${data.changeHistory.length} change history records`);
+  }
   async function persistDatabase() {
-    console.log("[Offscreen] Persist requested (not implemented for in-memory mode)");
+    console.log("[Offscreen] Persisting database to IndexedDB...");
+    try {
+      const data = await exportToJson();
+      await saveJsonToIndexedDB(data);
+      console.log("[Offscreen] Database persisted successfully");
+    } catch (error) {
+      console.error("[Offscreen] Failed to persist database:", error);
+      throw error;
+    }
   }
   chrome.runtime.onMessage.addListener(
     (message, _sender, sendResponse) => {

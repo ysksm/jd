@@ -185,6 +185,27 @@ function formatDate(dateStr) {
     return `${Math.floor(diff / 864e5)}d ago`;
   return date.toLocaleDateString();
 }
+function formatDateTime(dateStr) {
+  if (!dateStr)
+    return "Unknown";
+  try {
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) {
+      console.warn("[SidePanel] Invalid date string:", dateStr);
+      return dateStr;
+    }
+    return date.toLocaleString(void 0, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+  } catch (error) {
+    console.error("[SidePanel] Error formatting date:", error, dateStr);
+    return dateStr;
+  }
+}
 function escapeHtml(str) {
   const div = document.createElement("div");
   div.textContent = str;
@@ -304,7 +325,7 @@ function renderIssueDetail(issue, history) {
           <div class="history-item">
             <div class="history-header">
               <span>${escapeHtml(h.author_display_name || "Unknown")}</span>
-              <span>${new Date(h.changed_at).toLocaleString()}</span>
+              <span>${formatDateTime(h.changed_at)}</span>
             </div>
             <div class="history-change">
               <span class="history-field">${escapeHtml(h.field)}</span>:
