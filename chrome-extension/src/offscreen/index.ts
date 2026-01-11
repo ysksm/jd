@@ -71,20 +71,14 @@ async function initDatabase(): Promise<void> {
     const bundle = await duckdb.selectBundle(bundles);
     console.log('[Offscreen] Bundle selected:', bundle.mainModule);
 
-    // For local files, we need to fetch the worker script and create a blob
-    console.log('[Offscreen] Fetching worker script...');
-    const workerResponse = await fetch(bundle.mainWorker!);
-    const workerBlob = await workerResponse.blob();
-    const workerUrl = URL.createObjectURL(workerBlob);
-
-    console.log('[Offscreen] Creating worker...');
-    const worker = new Worker(workerUrl);
+    // Load worker directly from extension URL (no blob needed)
+    console.log('[Offscreen] Creating worker from:', bundle.mainWorker);
+    const worker = new Worker(bundle.mainWorker!);
     const logger = new duckdb.ConsoleLogger();
     db = new duckdb.AsyncDuckDB(logger, worker);
 
     console.log('[Offscreen] Instantiating DuckDB...');
     await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
-    URL.revokeObjectURL(workerUrl);
 
     console.log('[Offscreen] Connecting...');
     conn = await db.connect();
