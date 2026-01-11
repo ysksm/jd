@@ -398,9 +398,11 @@ impl JiraService for JiraApiClient {
         );
 
         // Build query parameters
+        // Note: *navigable may not include created/updated fields in all JIRA configurations,
+        // so we explicitly request them to ensure they are always returned.
         let mut query_params: Vec<(&str, String)> = vec![
             ("jql", jql.clone()),
-            ("fields", "*navigable".to_string()),
+            ("fields", "*navigable,created,updated".to_string()),
             ("expand", "changelog".to_string()),
             ("maxResults", max_results.to_string()),
         ];
