@@ -41,6 +41,7 @@ async function ensureOffscreenDocument(): Promise<void> {
   }
 
   if (existingContexts.length === 0) {
+    console.log('[Database] Creating offscreen document...');
     creatingOffscreen = true;
     try {
       await chrome.offscreen.createDocument({
@@ -48,13 +49,22 @@ async function ensureOffscreenDocument(): Promise<void> {
         reasons: [chrome.offscreen.Reason.WORKERS],
         justification: 'DuckDB WASM requires Web Workers which are not available in service workers',
       });
+      console.log('[Database] Offscreen document created, waiting for it to be ready...');
+      // Give the document some time to load
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    } catch (error) {
+      console.error('[Database] Failed to create offscreen document:', error);
+      throw error;
     } finally {
       creatingOffscreen = false;
     }
+  } else {
+    console.log('[Database] Offscreen document already exists');
   }
 
   // Wait for the offscreen document to signal it's ready
   // by sending a ping and waiting for a pong
+  console.log('[Database] Sending PING to offscreen document...');
   let retries = 50; // 5 seconds max
   while (retries > 0) {
     try {
@@ -63,24 +73,28 @@ async function ensureOffscreenDocument(): Promise<void> {
           { target: 'offscreen', action: 'PING' },
           (resp) => {
             if (chrome.runtime.lastError) {
+              console.log('[Database] PING error:', chrome.runtime.lastError.message);
               resolve({ success: false });
             } else {
+              console.log('[Database] PING response:', resp);
               resolve(resp || { success: false });
             }
           }
         );
       });
       if (response.success && response.data === 'PONG') {
+        console.log('[Database] Offscreen document is ready!');
         offscreenReady = true;
         return;
       }
-    } catch {
-      // Ignore errors, keep retrying
+    } catch (error) {
+      console.log('[Database] PING exception:', error);
     }
     await new Promise((resolve) => setTimeout(resolve, 100));
     retries--;
   }
 
+  console.error('[Database] Offscreen document failed to respond after 5 seconds');
   throw new Error('Offscreen document failed to initialize');
 }
 

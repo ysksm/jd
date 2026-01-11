@@ -44,6 +44,7 @@
       return;
     }
     if (existingContexts.length === 0) {
+      console.log("[Database] Creating offscreen document...");
       creatingOffscreen = true;
       try {
         await chrome.offscreen.createDocument({
@@ -51,10 +52,18 @@
           reasons: [chrome.offscreen.Reason.WORKERS],
           justification: "DuckDB WASM requires Web Workers which are not available in service workers"
         });
+        console.log("[Database] Offscreen document created, waiting for it to be ready...");
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      } catch (error) {
+        console.error("[Database] Failed to create offscreen document:", error);
+        throw error;
       } finally {
         creatingOffscreen = false;
       }
+    } else {
+      console.log("[Database] Offscreen document already exists");
     }
+    console.log("[Database] Sending PING to offscreen document...");
     let retries = 50;
     while (retries > 0) {
       try {
@@ -63,22 +72,27 @@
             { target: "offscreen", action: "PING" },
             (resp) => {
               if (chrome.runtime.lastError) {
+                console.log("[Database] PING error:", chrome.runtime.lastError.message);
                 resolve({ success: false });
               } else {
+                console.log("[Database] PING response:", resp);
                 resolve(resp || { success: false });
               }
             }
           );
         });
         if (response.success && response.data === "PONG") {
+          console.log("[Database] Offscreen document is ready!");
           offscreenReady = true;
           return;
         }
-      } catch {
+      } catch (error) {
+        console.log("[Database] PING exception:", error);
       }
       await new Promise((resolve) => setTimeout(resolve, 100));
       retries--;
     }
+    console.error("[Database] Offscreen document failed to respond after 5 seconds");
     throw new Error("Offscreen document failed to initialize");
   }
   async function sendToOffscreen(action, payload) {
