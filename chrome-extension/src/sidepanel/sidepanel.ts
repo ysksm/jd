@@ -6,6 +6,7 @@ import type {
   DbChangeHistory,
   Settings,
 } from '../lib/types';
+import { extractClaudeInstructions, sendToClaudeCode } from '../lib/claude-code';
 
 // State
 let currentPage = 0;
@@ -262,8 +263,24 @@ async function showIssueDetail(key: string) {
 function renderIssueDetail(issue: DbIssue, history: DbChangeHistory[]) {
   const labels = issue.labels ? JSON.parse(issue.labels) : [];
   const components = issue.components ? JSON.parse(issue.components) : [];
+  const claudeInstructions = extractClaudeInstructions(issue.description);
 
   detailBodyEl.innerHTML = `
+    ${claudeInstructions ? `
+    <div class="detail-section claude-section">
+      <div class="detail-label">Claude Instructions</div>
+      <div class="claude-instructions">
+        <pre>${escapeHtml(claudeInstructions)}</pre>
+        <button id="sendToClaudeBtn" class="btn btn-claude">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
+          </svg>
+          Send to Claude Code
+        </button>
+      </div>
+    </div>
+    ` : ''}
+
     <div class="detail-section">
       <div class="detail-label">Summary</div>
       <div class="detail-value">${escapeHtml(issue.summary)}</div>
@@ -334,6 +351,29 @@ function renderIssueDetail(issue: DbIssue, history: DbChangeHistory[]) {
     </div>
     ` : ''}
   `;
+
+  // Add click handler for Send to Claude Code button
+  const sendToClaudeBtn = document.getElementById('sendToClaudeBtn');
+  if (sendToClaudeBtn && claudeInstructions) {
+    sendToClaudeBtn.addEventListener('click', async () => {
+      try {
+        sendToClaudeBtn.textContent = 'Sending...';
+        (sendToClaudeBtn as HTMLButtonElement).disabled = true;
+        await sendToClaudeCode(claudeInstructions, issue.key);
+      } catch (error) {
+        console.error('Failed to send to Claude Code:', error);
+        alert('Failed to send to Claude Code. Please try again.');
+      } finally {
+        sendToClaudeBtn.innerHTML = `
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
+          </svg>
+          Send to Claude Code
+        `;
+        (sendToClaudeBtn as HTMLButtonElement).disabled = false;
+      }
+    });
+  }
 }
 
 function hideDetail() {

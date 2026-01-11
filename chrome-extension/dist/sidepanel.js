@@ -1,3 +1,85 @@
+// src/lib/claude-code.ts
+function extractClaudeInstructions(description) {
+  if (!description)
+    return null;
+  const codeBlockRegex = /```claude\s*\n([\s\S]*?)```/gi;
+  const matches = [];
+  let match;
+  while ((match = codeBlockRegex.exec(description)) !== null) {
+    matches.push(match[1].trim());
+  }
+  if (matches.length === 0)
+    return null;
+  return matches.join("\n\n");
+}
+async function sendToClaudeCode(instructions, issueKey) {
+  const fullPrompt = `[JIRA: ${issueKey}]
+
+${instructions}`;
+  await chrome.storage.local.set({
+    claudeCodePendingPrompt: fullPrompt,
+    claudeCodeTimestamp: Date.now()
+  });
+  const url = "https://claude.ai/code";
+  const tabs = await chrome.tabs.query({ url: "https://claude.ai/code*" });
+  if (tabs.length > 0 && tabs[0].id) {
+    await chrome.tabs.update(tabs[0].id, { active: true });
+    await injectPasteScript(tabs[0].id);
+  } else {
+    const tab = await chrome.tabs.create({ url });
+    chrome.tabs.onUpdated.addListener(function listener(tabId, info) {
+      if (tabId === tab.id && info.status === "complete") {
+        chrome.tabs.onUpdated.removeListener(listener);
+        setTimeout(() => injectPasteScript(tabId), 1e3);
+      }
+    });
+  }
+}
+async function injectPasteScript(tabId) {
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      func: async () => {
+        const result = await chrome.storage.local.get(["claudeCodePendingPrompt", "claudeCodeTimestamp"]);
+        const prompt = result.claudeCodePendingPrompt;
+        const timestamp = result.claudeCodeTimestamp;
+        if (!prompt || !timestamp || Date.now() - timestamp > 3e4) {
+          console.log("[JIRA DB] No pending prompt or expired");
+          return;
+        }
+        await chrome.storage.local.remove(["claudeCodePendingPrompt", "claudeCodeTimestamp"]);
+        const textarea = document.querySelector('textarea[placeholder*="Claude"]');
+        if (!textarea) {
+          console.error("[JIRA DB] Could not find Claude Code textarea");
+          alert("Could not find Claude Code input. Please paste manually.");
+          await navigator.clipboard.writeText(prompt);
+          return;
+        }
+        const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+          window.HTMLTextAreaElement.prototype,
+          "value"
+        )?.set;
+        if (nativeInputValueSetter) {
+          nativeInputValueSetter.call(textarea, prompt);
+        } else {
+          textarea.value = prompt;
+        }
+        textarea.dispatchEvent(new Event("input", { bubbles: true }));
+        textarea.dispatchEvent(new Event("change", { bubbles: true }));
+        textarea.focus();
+        console.log("[JIRA DB] Prompt pasted successfully");
+      }
+    });
+  } catch (error) {
+    console.error("[JIRA DB] Failed to inject paste script:", error);
+    const result = await chrome.storage.local.get(["claudeCodePendingPrompt"]);
+    if (result.claudeCodePendingPrompt) {
+      await navigator.clipboard.writeText(result.claudeCodePendingPrompt);
+      alert("Copied to clipboard. Please paste into Claude Code manually.");
+    }
+  }
+}
+
 // src/sidepanel/sidepanel.ts
 var currentPage = 0;
 var pageSize = 20;
@@ -206,7 +288,23 @@ async function showIssueDetail(key) {
 function renderIssueDetail(issue, history) {
   const labels = issue.labels ? JSON.parse(issue.labels) : [];
   const components = issue.components ? JSON.parse(issue.components) : [];
+  const claudeInstructions = extractClaudeInstructions(issue.description);
   detailBodyEl.innerHTML = `
+    ${claudeInstructions ? `
+    <div class="detail-section claude-section">
+      <div class="detail-label">Claude Instructions</div>
+      <div class="claude-instructions">
+        <pre>${escapeHtml(claudeInstructions)}</pre>
+        <button id="sendToClaudeBtn" class="btn btn-claude">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
+          </svg>
+          Send to Claude Code
+        </button>
+      </div>
+    </div>
+    ` : ""}
+
     <div class="detail-section">
       <div class="detail-label">Summary</div>
       <div class="detail-value">${escapeHtml(issue.summary)}</div>
@@ -277,6 +375,27 @@ function renderIssueDetail(issue, history) {
     </div>
     ` : ""}
   `;
+  const sendToClaudeBtn = document.getElementById("sendToClaudeBtn");
+  if (sendToClaudeBtn && claudeInstructions) {
+    sendToClaudeBtn.addEventListener("click", async () => {
+      try {
+        sendToClaudeBtn.textContent = "Sending...";
+        sendToClaudeBtn.disabled = true;
+        await sendToClaudeCode(claudeInstructions, issue.key);
+      } catch (error) {
+        console.error("Failed to send to Claude Code:", error);
+        alert("Failed to send to Claude Code. Please try again.");
+      } finally {
+        sendToClaudeBtn.innerHTML = `
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
+          </svg>
+          Send to Claude Code
+        `;
+        sendToClaudeBtn.disabled = false;
+      }
+    });
+  }
 }
 function hideDetail() {
   issueDetailEl.style.display = "none";

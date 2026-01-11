@@ -7,10 +7,13 @@
     "storage",
     "alarms",
     "offscreen",
-    "sidePanel"
+    "sidePanel",
+    "scripting",
+    "clipboardWrite"
   ],
   "host_permissions": [
-    "https://*.atlassian.net/*"
+    "https://*.atlassian.net/*",
+    "https://claude.ai/*"
   ],
   "background": {
     "service_worker": "dist/background.js"

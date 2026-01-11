@@ -505,3 +505,68 @@ main {
 ::-webkit-scrollbar-thumb:hover {
   background: #a5adba;
 }
+
+/* Claude Code integration */
+.claude-section {
+  background: linear-gradient(135deg, #f8f4ee 0%, #fff5eb 100%);
+  border: 1px solid #e8d5c4;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 16px;
+}
+
+.claude-section .detail-label {
+  color: #9a6b3a;
+}
+
+.claude-instructions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.claude-instructions pre {
+  background: #fff;
+  border: 1px solid #e8d5c4;
+  border-radius: 4px;
+  padding: 12px;
+  font-size: 12px;
+  font-family: 'Monaco', 'Menlo', monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 200px;
+  overflow-y: auto;
+  margin: 0;
+}
+
+.btn-claude {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-claude:hover {
+  background: linear-gradient(135deg, #b45309 0%, #92400e 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(180, 83, 9, 0.3);
+}
+
+.btn-claude:active {
+  transform: translateY(0);
+}
+
+.btn-claude:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
