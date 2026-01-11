@@ -67,13 +67,51 @@ async function initDatabase(): Promise<void> {
   try {
     // Use local bundles instead of CDN (required for Manifest V3 CSP)
     const bundles = getLocalBundles();
-    console.log('[Offscreen] Got local bundles, selecting...');
+    console.log('[Offscreen] Got local bundles:', JSON.stringify(bundles, null, 2));
+
+    console.log('[Offscreen] Selecting bundle...');
     const bundle = await duckdb.selectBundle(bundles);
     console.log('[Offscreen] Bundle selected:', bundle.mainModule);
+    console.log('[Offscreen] Worker URL:', bundle.mainWorker);
 
-    // Load worker directly from extension URL (no blob needed)
-    console.log('[Offscreen] Creating worker from:', bundle.mainWorker);
-    const worker = new Worker(bundle.mainWorker!);
+    // First, verify the worker script is accessible
+    console.log('[Offscreen] Verifying worker script is accessible...');
+    try {
+      const testFetch = await fetch(bundle.mainWorker!);
+      console.log('[Offscreen] Worker script fetch status:', testFetch.status, testFetch.statusText);
+      if (!testFetch.ok) {
+        throw new Error(`Worker script not accessible: ${testFetch.status}`);
+      }
+    } catch (fetchError) {
+      console.error('[Offscreen] Failed to fetch worker script:', fetchError);
+      throw fetchError;
+    }
+
+    // Create worker - try different approaches
+    console.log('[Offscreen] Creating worker...');
+    let worker: Worker;
+    try {
+      // First try: direct URL
+      worker = new Worker(bundle.mainWorker!);
+      console.log('[Offscreen] Worker created successfully (direct URL)');
+    } catch (workerError) {
+      console.error('[Offscreen] Direct worker creation failed:', workerError);
+
+      // Second try: fetch and create blob
+      console.log('[Offscreen] Trying blob approach...');
+      try {
+        const response = await fetch(bundle.mainWorker!);
+        const text = await response.text();
+        const blob = new Blob([text], { type: 'application/javascript' });
+        const blobUrl = URL.createObjectURL(blob);
+        worker = new Worker(blobUrl);
+        console.log('[Offscreen] Worker created successfully (blob URL)');
+      } catch (blobError) {
+        console.error('[Offscreen] Blob worker creation failed:', blobError);
+        throw blobError;
+      }
+    }
+
     const logger = new duckdb.ConsoleLogger();
     db = new duckdb.AsyncDuckDB(logger, worker);
 
@@ -88,6 +126,11 @@ async function initDatabase(): Promise<void> {
     console.log('[Offscreen] DuckDB initialized successfully');
   } catch (error) {
     console.error('[Offscreen] Failed to initialize DuckDB:', error);
+    if (error instanceof Error) {
+      console.error('[Offscreen] Error name:', error.name);
+      console.error('[Offscreen] Error message:', error.message);
+      console.error('[Offscreen] Error stack:', error.stack);
+    }
     // Reset state on failure
     db = null;
     conn = null;
@@ -142,10 +185,14 @@ async function createTables(): Promise<void> {
     )
   `);
 
+  // Create sequences for auto-increment IDs
+  await runSql(`CREATE SEQUENCE IF NOT EXISTS seq_change_history_id START 1`);
+  await runSql(`CREATE SEQUENCE IF NOT EXISTS seq_sync_history_id START 1`);
+
   // Change history table
   await runSql(`
     CREATE TABLE IF NOT EXISTS issue_change_history (
-      id INTEGER PRIMARY KEY,
+      id INTEGER DEFAULT nextval('seq_change_history_id') PRIMARY KEY,
       issue_id VARCHAR NOT NULL,
       issue_key VARCHAR NOT NULL,
       history_id VARCHAR NOT NULL,
@@ -165,7 +212,7 @@ async function createTables(): Promise<void> {
   // Sync history table
   await runSql(`
     CREATE TABLE IF NOT EXISTS sync_history (
-      id INTEGER PRIMARY KEY,
+      id INTEGER DEFAULT nextval('seq_sync_history_id') PRIMARY KEY,
       project_key VARCHAR NOT NULL,
       started_at TIMESTAMP NOT NULL,
       completed_at TIMESTAMP,
@@ -502,16 +549,21 @@ async function getIssueCount(projectKey: string): Promise<number> {
 }
 
 async function startSyncHistory(projectKey: string): Promise<number> {
+  if (!conn) throw new Error('Database not initialized');
+
+  // Use RETURNING to get the auto-generated ID
   const sql = `
     INSERT INTO sync_history (project_key, started_at, status, issues_synced)
     VALUES (${escapeSQL(projectKey)}, CURRENT_TIMESTAMP, 'running', 0)
+    RETURNING id
   `;
-  await runSql(sql);
-
-  if (!conn) throw new Error('Database not initialized');
-  const idResult = await conn.query(`SELECT MAX(id) as id FROM sync_history WHERE project_key = ${escapeSQL(projectKey)}`);
-  const row = idResult.toArray()[0] as Record<string, unknown>;
-  return Number(row?.id || 0);
+  const result = await conn.query(sql);
+  const rows = result.toArray();
+  if (rows.length === 0) {
+    throw new Error('Failed to insert sync history');
+  }
+  const row = rows[0] as Record<string, unknown>;
+  return Number(row.id);
 }
 
 async function completeSyncHistory(

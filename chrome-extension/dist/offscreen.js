@@ -12410,11 +12410,42 @@ return true;`);
     console.log("[Offscreen] Initializing DuckDB WASM...");
     try {
       const bundles = getLocalBundles();
-      console.log("[Offscreen] Got local bundles, selecting...");
+      console.log("[Offscreen] Got local bundles:", JSON.stringify(bundles, null, 2));
+      console.log("[Offscreen] Selecting bundle...");
       const bundle = await Xe(bundles);
       console.log("[Offscreen] Bundle selected:", bundle.mainModule);
-      console.log("[Offscreen] Creating worker from:", bundle.mainWorker);
-      const worker = new Worker(bundle.mainWorker);
+      console.log("[Offscreen] Worker URL:", bundle.mainWorker);
+      console.log("[Offscreen] Verifying worker script is accessible...");
+      try {
+        const testFetch = await fetch(bundle.mainWorker);
+        console.log("[Offscreen] Worker script fetch status:", testFetch.status, testFetch.statusText);
+        if (!testFetch.ok) {
+          throw new Error(`Worker script not accessible: ${testFetch.status}`);
+        }
+      } catch (fetchError) {
+        console.error("[Offscreen] Failed to fetch worker script:", fetchError);
+        throw fetchError;
+      }
+      console.log("[Offscreen] Creating worker...");
+      let worker;
+      try {
+        worker = new Worker(bundle.mainWorker);
+        console.log("[Offscreen] Worker created successfully (direct URL)");
+      } catch (workerError) {
+        console.error("[Offscreen] Direct worker creation failed:", workerError);
+        console.log("[Offscreen] Trying blob approach...");
+        try {
+          const response = await fetch(bundle.mainWorker);
+          const text = await response.text();
+          const blob = new Blob([text], { type: "application/javascript" });
+          const blobUrl = URL.createObjectURL(blob);
+          worker = new Worker(blobUrl);
+          console.log("[Offscreen] Worker created successfully (blob URL)");
+        } catch (blobError) {
+          console.error("[Offscreen] Blob worker creation failed:", blobError);
+          throw blobError;
+        }
+      }
       const logger = new A();
       db = new f(logger, worker);
       console.log("[Offscreen] Instantiating DuckDB...");
@@ -12426,6 +12457,11 @@ return true;`);
       console.log("[Offscreen] DuckDB initialized successfully");
     } catch (error) {
       console.error("[Offscreen] Failed to initialize DuckDB:", error);
+      if (error instanceof Error) {
+        console.error("[Offscreen] Error name:", error.name);
+        console.error("[Offscreen] Error message:", error.message);
+        console.error("[Offscreen] Error stack:", error.stack);
+      }
       db = null;
       conn = null;
       throw error;
@@ -12473,9 +12509,11 @@ return true;`);
       synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
+    await runSql(`CREATE SEQUENCE IF NOT EXISTS seq_change_history_id START 1`);
+    await runSql(`CREATE SEQUENCE IF NOT EXISTS seq_sync_history_id START 1`);
     await runSql(`
     CREATE TABLE IF NOT EXISTS issue_change_history (
-      id INTEGER PRIMARY KEY,
+      id INTEGER DEFAULT nextval('seq_change_history_id') PRIMARY KEY,
       issue_id VARCHAR NOT NULL,
       issue_key VARCHAR NOT NULL,
       history_id VARCHAR NOT NULL,
@@ -12493,7 +12531,7 @@ return true;`);
   `);
     await runSql(`
     CREATE TABLE IF NOT EXISTS sync_history (
-      id INTEGER PRIMARY KEY,
+      id INTEGER DEFAULT nextval('seq_sync_history_id') PRIMARY KEY,
       project_key VARCHAR NOT NULL,
       started_at TIMESTAMP NOT NULL,
       completed_at TIMESTAMP,
@@ -12798,16 +12836,20 @@ return true;`);
     return Number(row?.count || 0);
   }
   async function startSyncHistory(projectKey) {
+    if (!conn)
+      throw new Error("Database not initialized");
     const sql = `
     INSERT INTO sync_history (project_key, started_at, status, issues_synced)
     VALUES (${escapeSQL(projectKey)}, CURRENT_TIMESTAMP, 'running', 0)
+    RETURNING id
   `;
-    await runSql(sql);
-    if (!conn)
-      throw new Error("Database not initialized");
-    const idResult = await conn.query(`SELECT MAX(id) as id FROM sync_history WHERE project_key = ${escapeSQL(projectKey)}`);
-    const row = idResult.toArray()[0];
-    return Number(row?.id || 0);
+    const result = await conn.query(sql);
+    const rows = result.toArray();
+    if (rows.length === 0) {
+      throw new Error("Failed to insert sync history");
+    }
+    const row = rows[0];
+    return Number(row.id);
   }
   async function completeSyncHistory(id, success, issuesSynced, errorMessage) {
     const status = success ? "completed" : "failed";
