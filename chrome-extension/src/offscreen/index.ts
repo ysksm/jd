@@ -399,6 +399,8 @@ async function getProjects(): Promise<DbProject[]> {
 // Issue operations
 async function upsertIssue(issue: JiraIssue): Promise<void> {
   const fields = issue.fields;
+  console.log(`[Offscreen] upsertIssue: ${issue.key} created=${fields.created} updated=${fields.updated}`);
+
   const description = descriptionToString(fields.description);
   const labels = fields.labels ? JSON.stringify(fields.labels) : null;
   const components = fields.components ? JSON.stringify(fields.components.map(c => c.name)) : null;
@@ -483,6 +485,9 @@ async function upsertIssue(issue: JiraIssue): Promise<void> {
 }
 
 function rowToDbIssue(row: Record<string, unknown>): DbIssue {
+  // Debug: log raw timestamp values from DB
+  console.log(`[Offscreen] rowToDbIssue: key=${row.key} raw updated_at=`, row.updated_at, `type=${typeof row.updated_at}`);
+
   return {
     id: String(row.id || ''),
     key: String(row.key || ''),
@@ -566,28 +571,41 @@ function timestampToISOString(value: unknown): string {
   if (!value) return '';
 
   // If it's already a string, return it
-  if (typeof value === 'string') return value;
+  if (typeof value === 'string') {
+    console.log(`[Offscreen] timestampToISOString: string "${value}"`);
+    return value;
+  }
 
   // If it's a BigInt (microseconds since epoch), convert to milliseconds
   if (typeof value === 'bigint') {
-    return new Date(Number(value / 1000n)).toISOString();
+    const ms = Number(value / 1000n);
+    const isoStr = new Date(ms).toISOString();
+    console.log(`[Offscreen] timestampToISOString: bigint ${value} -> ms ${ms} -> "${isoStr}"`);
+    return isoStr;
   }
 
   // If it's a number (milliseconds or seconds)
   if (typeof value === 'number') {
     // If it's in seconds (< year 3000 in seconds), convert to milliseconds
     if (value < 32503680000) {
-      return new Date(value * 1000).toISOString();
+      const isoStr = new Date(value * 1000).toISOString();
+      console.log(`[Offscreen] timestampToISOString: number(seconds) ${value} -> "${isoStr}"`);
+      return isoStr;
     }
-    return new Date(value).toISOString();
+    const isoStr = new Date(value).toISOString();
+    console.log(`[Offscreen] timestampToISOString: number(ms) ${value} -> "${isoStr}"`);
+    return isoStr;
   }
 
   // If it's a Date object
   if (value instanceof Date) {
-    return value.toISOString();
+    const isoStr = value.toISOString();
+    console.log(`[Offscreen] timestampToISOString: Date -> "${isoStr}"`);
+    return isoStr;
   }
 
   // Try to convert to string
+  console.log(`[Offscreen] timestampToISOString: unknown type ${typeof value}:`, value);
   return String(value);
 }
 

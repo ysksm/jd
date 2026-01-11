@@ -12641,6 +12641,7 @@ return true;`);
   }
   async function upsertIssue(issue) {
     const fields = issue.fields;
+    console.log(`[Offscreen] upsertIssue: ${issue.key} created=${fields.created} updated=${fields.updated}`);
     const description = descriptionToString(fields.description);
     const labels = fields.labels ? JSON.stringify(fields.labels) : null;
     const components = fields.components ? JSON.stringify(fields.components.map((c) => c.name)) : null;
@@ -12721,6 +12722,7 @@ return true;`);
     }
   }
   function rowToDbIssue(row) {
+    console.log(`[Offscreen] rowToDbIssue: key=${row.key} raw updated_at=`, row.updated_at, `type=${typeof row.updated_at}`);
     return {
       id: String(row.id || ""),
       key: String(row.key || ""),
@@ -12791,20 +12793,32 @@ return true;`);
   function timestampToISOString(value) {
     if (!value)
       return "";
-    if (typeof value === "string")
+    if (typeof value === "string") {
+      console.log(`[Offscreen] timestampToISOString: string "${value}"`);
       return value;
+    }
     if (typeof value === "bigint") {
-      return new Date(Number(value / 1000n)).toISOString();
+      const ms = Number(value / 1000n);
+      const isoStr = new Date(ms).toISOString();
+      console.log(`[Offscreen] timestampToISOString: bigint ${value} -> ms ${ms} -> "${isoStr}"`);
+      return isoStr;
     }
     if (typeof value === "number") {
       if (value < 3250368e4) {
-        return new Date(value * 1e3).toISOString();
+        const isoStr2 = new Date(value * 1e3).toISOString();
+        console.log(`[Offscreen] timestampToISOString: number(seconds) ${value} -> "${isoStr2}"`);
+        return isoStr2;
       }
-      return new Date(value).toISOString();
+      const isoStr = new Date(value).toISOString();
+      console.log(`[Offscreen] timestampToISOString: number(ms) ${value} -> "${isoStr}"`);
+      return isoStr;
     }
     if (value instanceof Date) {
-      return value.toISOString();
+      const isoStr = value.toISOString();
+      console.log(`[Offscreen] timestampToISOString: Date -> "${isoStr}"`);
+      return isoStr;
     }
+    console.log(`[Offscreen] timestampToISOString: unknown type ${typeof value}:`, value);
     return String(value);
   }
   async function getIssueHistory(issueKey, field) {
