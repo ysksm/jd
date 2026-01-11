@@ -372,6 +372,8 @@ export interface ReportGenerateResponse {
 
 export interface SqlExecuteRequest {
   projectKey?: string;
+  /** If true, query across all synced projects instead of just one */
+  allProjects?: boolean;
   query: string;
   limit?: number;
 }
@@ -385,6 +387,8 @@ export interface SqlExecuteResponse {
 
 export interface SqlGetSchemaRequest {
   projectKey?: string;
+  /** If true, show schema for all synced projects */
+  allProjects?: boolean;
   table?: string;
 }
 

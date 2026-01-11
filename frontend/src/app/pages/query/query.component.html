@@ -135,6 +135,14 @@
             {{ loading() ? 'Executing...' : 'Execute' }}
           </button>
           <button class="btn btn-secondary" (click)="clearResults()">Clear Results</button>
+          <label class="all-projects-toggle" [class.standalone]="!projectKey">
+            <input
+              type="checkbox"
+              [ngModel]="allProjects()"
+              (ngModelChange)="toggleAllProjects($event)"
+            />
+            <span class="toggle-label">All Projects</span>
+          </label>
         </div>
       </div>
 

@@ -407,6 +407,8 @@ model ReportGenerateResponse {
 // -- SQL Query --
 model SqlExecuteRequest {
   projectKey?: string;
+  /** If true, query across all synced projects instead of just one */
+  allProjects?: boolean;
   query: string;
   limit?: int32;
 }
@@ -420,6 +422,8 @@ model SqlExecuteResponse {
 
 model SqlGetSchemaRequest {
   projectKey?: string;
+  /** If true, show schema for all synced projects */
+  allProjects?: boolean;
   table?: string;
 }
 

@@ -224,6 +224,43 @@
     display: flex;
     gap: 0.5rem;
     margin-top: 0.75rem;
+    align-items: center;
+  }
+
+  .all-projects-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-left: auto;
+    cursor: pointer;
+    font-size: 0.875rem;
+    color: #374151;
+    padding: 0.5rem 0.75rem;
+    border-radius: 6px;
+    background-color: #f3f4f6;
+    transition: background-color 0.2s;
+
+    &:hover {
+      background-color: #e5e7eb;
+    }
+
+    input[type='checkbox'] {
+      width: 1rem;
+      height: 1rem;
+      cursor: pointer;
+    }
+
+    .toggle-label {
+      font-weight: 500;
+    }
+
+    &.standalone {
+      background-color: #e0e7ff;
+
+      .toggle-label {
+        color: #4a4ae0;
+      }
+    }
   }
 }
 

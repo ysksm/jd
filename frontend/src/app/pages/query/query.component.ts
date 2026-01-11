@@ -17,6 +17,9 @@ export class QueryComponent implements OnInit, OnChanges {
   // Input for project context (when used inside project detail)
   @Input() projectKey: string = '';
 
+  // All projects mode (query across all synced projects)
+  allProjects = signal(false);
+
   // Query editor state
   queryText = signal('SELECT * FROM issues LIMIT 10');
   queryName = signal('');
@@ -117,7 +120,10 @@ ORDER BY date`;
 
   loadSchema(): void {
     this.schemaLoading.set(true);
-    this.api.sqlGetSchema({ projectKey: this.projectKey || undefined }).subscribe({
+    const request = this.allProjects()
+      ? { allProjects: true }
+      : { projectKey: this.projectKey || undefined };
+    this.api.sqlGetSchema(request).subscribe({
       next: (response) => {
         this.tables.set(response.tables);
         this.schemaLoading.set(false);
@@ -136,7 +142,10 @@ ORDER BY date`;
       return;
     }
 
-    this.api.sqlGetSchema({ projectKey: this.projectKey || undefined, table: table.name }).subscribe({
+    const request = this.allProjects()
+      ? { allProjects: true, table: table.name }
+      : { projectKey: this.projectKey || undefined, table: table.name };
+    this.api.sqlGetSchema(request).subscribe({
       next: (response) => {
         if (response.tables.length > 0 && response.tables[0].columns) {
           const updatedTable = { ...table, columns: response.tables[0].columns };
@@ -148,6 +157,14 @@ ORDER BY date`;
         console.error('Failed to load table columns:', err);
       }
     });
+  }
+
+  toggleAllProjects(enabled: boolean): void {
+    this.allProjects.set(enabled);
+    // Reload schema when toggling
+    this.selectedTable.set(null);
+    this.tableColumns.set([]);
+    this.loadSchema();
   }
 
   loadSavedQueries(): void {
@@ -166,7 +183,11 @@ ORDER BY date`;
     this.error.set(null);
     this.successMessage.set(null);
 
-    this.api.sqlExecute({ projectKey: this.projectKey || undefined, query: this.queryText(), limit: 500 }).subscribe({
+    const request = this.allProjects()
+      ? { allProjects: true, query: this.queryText(), limit: 500 }
+      : { projectKey: this.projectKey || undefined, query: this.queryText(), limit: 500 };
+
+    this.api.sqlExecute(request).subscribe({
       next: (response) => {
         this.columns.set(response.columns);
         this.rows.set(response.rows as Record<string, unknown>[]);
