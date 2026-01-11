@@ -89,8 +89,10 @@ async function handleMessage(message: Message): Promise<MessageResponse> {
     }
 
     case 'START_SYNC': {
+      console.log('[Background] START_SYNC received');
       // Run sync in background
       syncAllProjects((progress) => {
+        console.log('[Background] Sync progress:', progress);
         // Broadcast progress to all extension pages
         chrome.runtime.sendMessage({
           type: 'SYNC_PROGRESS',
@@ -100,12 +102,14 @@ async function handleMessage(message: Message): Promise<MessageResponse> {
         });
       })
         .then((results) => {
+          console.log('[Background] Sync complete:', results);
           chrome.runtime.sendMessage({
             type: 'SYNC_COMPLETE',
             payload: results,
           }).catch(() => {});
         })
         .catch((error) => {
+          console.error('[Background] Sync error:', error);
           chrome.runtime.sendMessage({
             type: 'SYNC_ERROR',
             payload: error instanceof Error ? error.message : String(error),

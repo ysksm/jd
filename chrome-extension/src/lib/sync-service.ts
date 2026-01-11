@@ -203,7 +203,10 @@ export async function syncProject(
 export async function syncAllProjects(
   onProgress?: (progress: SyncProgress) => void
 ): Promise<SyncResult[]> {
+  console.log('[SyncService] syncAllProjects called');
+
   if (isSyncing) {
+    console.log('[SyncService] Sync already in progress');
     throw new Error('Sync is already in progress');
   }
 
@@ -214,17 +217,22 @@ export async function syncAllProjects(
   try {
     const settings = await loadSettings();
     const enabledProjects = settings.projects.filter((p) => p.enabled);
+    console.log('[SyncService] Enabled projects:', enabledProjects.map(p => p.key));
 
     if (enabledProjects.length === 0) {
+      console.log('[SyncService] No projects enabled for sync');
       throw new Error('No projects enabled for sync');
     }
 
     for (const project of enabledProjects) {
       if (cancelRequested) {
+        console.log('[SyncService] Sync cancelled');
         break;
       }
 
+      console.log('[SyncService] Syncing project:', project.key);
       const result = await syncProject(project.key, onProgress);
+      console.log('[SyncService] Project sync result:', result);
       results.push(result);
     }
 

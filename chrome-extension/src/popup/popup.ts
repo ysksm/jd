@@ -353,9 +353,17 @@ async function startSync() {
   syncBtnEl.disabled = true;
   syncBtnEl.classList.add('syncing');
 
-  await sendMessage({ type: 'START_SYNC' });
-
+  console.log('[Popup] Starting sync...');
   showSyncStatus('Starting sync...');
+
+  const response = await sendMessage({ type: 'START_SYNC' });
+  console.log('[Popup] START_SYNC response:', response);
+
+  if (!response.success) {
+    console.error('[Popup] Sync failed to start:', response.error);
+    hideSyncStatus();
+    alert(`Failed to start sync: ${response.error}`);
+  }
 }
 
 function showSyncStatus(message: string, progress: number = 0) {
