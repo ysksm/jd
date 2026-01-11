@@ -13,6 +13,36 @@ use crate::domain::error::{DomainError, DomainResult};
 use crate::infrastructure::config::JiraConfig;
 use chrono::{DateTime, Utc};
 
+/// Parse JIRA date string which can be in multiple formats:
+/// - RFC3339: "2024-01-15T10:30:00.000+00:00"
+/// - JIRA format: "2024-01-15T10:30:00.000+0000" (no colon in timezone)
+fn parse_jira_datetime(s: &str) -> Option<DateTime<Utc>> {
+    // Try RFC3339 first
+    if let Ok(dt) = DateTime::parse_from_rfc3339(s) {
+        return Some(dt.with_timezone(&Utc));
+    }
+
+    // Try JIRA format (insert colon in timezone offset)
+    // "2024-01-15T10:30:00.000+0000" -> "2024-01-15T10:30:00.000+00:00"
+    if s.len() >= 5 {
+        let len = s.len();
+        // Check if it ends with a timezone without colon like +0000 or -0530
+        let last5 = &s[len.saturating_sub(5)..];
+        if (last5.starts_with('+') || last5.starts_with('-'))
+            && last5[1..].chars().all(|c| c.is_ascii_digit())
+        {
+            let mut fixed = s[..len - 2].to_string();
+            fixed.push(':');
+            fixed.push_str(&s[len - 2..]);
+            if let Ok(dt) = DateTime::parse_from_rfc3339(&fixed) {
+                return Some(dt.with_timezone(&Utc));
+            }
+        }
+    }
+
+    None
+}
+
 pub struct JiraApiClient {
     client: jira_api::JiraClient,
     http_client: reqwest::Client,
@@ -253,15 +283,9 @@ impl JiraApiClient {
             })
             .map(|dt| dt.with_timezone(&chrono::Utc));
 
-        let created_date = fields["created"]
-            .as_str()
-            .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
-            .map(|dt| dt.with_timezone(&chrono::Utc));
+        let created_date = fields["created"].as_str().and_then(parse_jira_datetime);
 
-        let updated_date = fields["updated"]
-            .as_str()
-            .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
-            .map(|dt| dt.with_timezone(&chrono::Utc));
+        let updated_date = fields["updated"].as_str().and_then(parse_jira_datetime);
 
         let raw_json = serde_json::to_string(&issue_json).ok();
 
