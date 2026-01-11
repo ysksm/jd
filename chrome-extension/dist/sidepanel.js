@@ -1,8 +1,8 @@
-// src/lib/claude-code.ts
-function extractClaudeInstructions(description) {
+// src/lib/ai-instructions.ts
+function extractAiInstructions(description) {
   if (!description)
     return null;
-  const codeBlockRegex = /```claude\s*\n([\s\S]*?)```/gi;
+  const codeBlockRegex = /```ai\s*\n([\s\S]*?)```/gi;
   const matches = [];
   let match;
   while ((match = codeBlockRegex.exec(description)) !== null) {
@@ -221,19 +221,28 @@ async function showIssueDetail(key) {
 function renderIssueDetail(issue, history) {
   const labels = issue.labels ? JSON.parse(issue.labels) : [];
   const components = issue.components ? JSON.parse(issue.components) : [];
-  const claudeInstructions = extractClaudeInstructions(issue.description);
+  const aiInstructions = extractAiInstructions(issue.description);
   detailBodyEl.innerHTML = `
-    ${claudeInstructions ? `
-    <div class="detail-section claude-section">
-      <div class="detail-label">Claude Instructions</div>
-      <div class="claude-instructions">
-        <pre>${escapeHtml(claudeInstructions)}</pre>
-        <button id="sendToClaudeBtn" class="btn btn-claude">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
-          </svg>
-          Send to Claude Code
-        </button>
+    ${aiInstructions ? `
+    <div class="detail-section ai-section">
+      <div class="detail-label">AI Instructions</div>
+      <div class="ai-instructions">
+        <pre>${escapeHtml(aiInstructions)}</pre>
+        <div class="ai-buttons">
+          <button id="sendToClaudeBtn" class="btn btn-ai btn-claude">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
+            </svg>
+            Claude
+          </button>
+          <button id="sendToChatGptBtn" class="btn btn-ai btn-chatgpt">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M12 6v6l4 2"/>
+            </svg>
+            ChatGPT Codex
+          </button>
+        </div>
       </div>
     </div>
     ` : ""}
@@ -308,38 +317,42 @@ function renderIssueDetail(issue, history) {
     </div>
     ` : ""}
   `;
-  const sendToClaudeBtn = document.getElementById("sendToClaudeBtn");
-  if (sendToClaudeBtn && claudeInstructions) {
-    console.log("[SidePanel] Setting up Claude Code button handler");
-    sendToClaudeBtn.addEventListener("click", async () => {
-      console.log("[SidePanel] Send to Claude Code button clicked");
-      try {
-        sendToClaudeBtn.textContent = "Sending...";
-        sendToClaudeBtn.disabled = true;
-        console.log("[SidePanel] Sending SEND_TO_CLAUDE message for issue:", issue.key);
-        const response = await sendMessage({
-          type: "SEND_TO_CLAUDE",
-          payload: { instructions: claudeInstructions, issueKey: issue.key }
-        });
-        console.log("[SidePanel] SEND_TO_CLAUDE response:", response);
-        if (!response.success) {
-          throw new Error(response.error || "Failed to send to Claude");
-        }
-      } catch (error) {
-        console.error("[SidePanel] Failed to send to Claude Code:", error);
-        alert(`Failed to send to Claude Code: ${error instanceof Error ? error.message : String(error)}`);
-      } finally {
-        sendToClaudeBtn.innerHTML = `
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
-          </svg>
-          Send to Claude Code
-        `;
-        sendToClaudeBtn.disabled = false;
-      }
+  if (aiInstructions) {
+    const sendToClaudeBtn = document.getElementById("sendToClaudeBtn");
+    if (sendToClaudeBtn) {
+      sendToClaudeBtn.addEventListener("click", async () => {
+        console.log("[SidePanel] Send to Claude clicked");
+        await sendToAi("SEND_TO_CLAUDE", sendToClaudeBtn, aiInstructions, issue.key, "Claude");
+      });
+    }
+    const sendToChatGptBtn = document.getElementById("sendToChatGptBtn");
+    if (sendToChatGptBtn) {
+      sendToChatGptBtn.addEventListener("click", async () => {
+        console.log("[SidePanel] Send to ChatGPT Codex clicked");
+        await sendToAi("SEND_TO_CHATGPT", sendToChatGptBtn, aiInstructions, issue.key, "ChatGPT Codex");
+      });
+    }
+  }
+}
+async function sendToAi(messageType, button, instructions, issueKey, serviceName) {
+  const originalHtml = button.innerHTML;
+  try {
+    button.textContent = "Sending...";
+    button.disabled = true;
+    const response = await sendMessage({
+      type: messageType,
+      payload: { instructions, issueKey }
     });
-  } else {
-    console.log("[SidePanel] No Claude Code button to set up:", { hasButton: !!sendToClaudeBtn, hasInstructions: !!claudeInstructions });
+    console.log(`[SidePanel] ${messageType} response:`, response);
+    if (!response.success) {
+      throw new Error(response.error || `Failed to send to ${serviceName}`);
+    }
+  } catch (error) {
+    console.error(`[SidePanel] Failed to send to ${serviceName}:`, error);
+    alert(`Failed to send to ${serviceName}: ${error instanceof Error ? error.message : String(error)}`);
+  } finally {
+    button.innerHTML = originalHtml;
+    button.disabled = false;
   }
 }
 function hideDetail() {
@@ -449,8 +462,10 @@ chrome.runtime.onMessage.addListener((message) => {
   } else if (message.type === "SYNC_ERROR") {
     hideSyncStatus();
     alert(`Sync failed: ${message.payload}`);
-  } else if (message.type === "CLAUDE_CLIPBOARD_FALLBACK") {
-    alert("\u5165\u529B\u6B04\u304C\u898B\u3064\u304B\u3089\u306A\u304B\u3063\u305F\u305F\u3081\u3001\u30AF\u30EA\u30C3\u30D7\u30DC\u30FC\u30C9\u306B\u30B3\u30D4\u30FC\u3057\u307E\u3057\u305F\u3002\nCtrl+V (Cmd+V) \u3067\u8CBC\u308A\u4ED8\u3051\u3066\u304F\u3060\u3055\u3044\u3002");
+  } else if (message.type === "AI_CLIPBOARD_FALLBACK") {
+    const service = message.payload?.service === "chatgpt" ? "ChatGPT" : "Claude";
+    alert(`${service}\u306E\u5165\u529B\u6B04\u304C\u898B\u3064\u304B\u3089\u306A\u304B\u3063\u305F\u305F\u3081\u3001\u30AF\u30EA\u30C3\u30D7\u30DC\u30FC\u30C9\u306B\u30B3\u30D4\u30FC\u3057\u307E\u3057\u305F\u3002
+Ctrl+V (Cmd+V) \u3067\u8CBC\u308A\u4ED8\u3051\u3066\u304F\u3060\u3055\u3044\u3002`);
   }
 });
 function debounce(fn, delay) {

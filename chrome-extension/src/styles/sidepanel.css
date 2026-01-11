@@ -506,28 +506,28 @@ main {
   background: #a5adba;
 }
 
-/* Claude Code integration */
-.claude-section {
-  background: linear-gradient(135deg, #f8f4ee 0%, #fff5eb 100%);
-  border: 1px solid #e8d5c4;
+/* AI Instructions section */
+.ai-section {
+  background: linear-gradient(135deg, #f0f4ff 0%, #e8f0fe 100%);
+  border: 1px solid #c4d4f4;
   border-radius: 8px;
   padding: 12px;
   margin-bottom: 16px;
 }
 
-.claude-section .detail-label {
-  color: #9a6b3a;
+.ai-section .detail-label {
+  color: #3b5998;
 }
 
-.claude-instructions {
+.ai-instructions {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
-.claude-instructions pre {
+.ai-instructions pre {
   background: #fff;
-  border: 1px solid #e8d5c4;
+  border: 1px solid #c4d4f4;
   border-radius: 4px;
   padding: 12px;
   font-size: 12px;
@@ -539,34 +539,57 @@ main {
   margin: 0;
 }
 
-.btn-claude {
+.ai-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.btn-ai {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 10px 16px;
-  background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
+  gap: 6px;
+  padding: 8px 14px;
   color: #fff;
   border: none;
   border-radius: 6px;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
 }
 
-.btn-claude:hover {
-  background: linear-gradient(135deg, #b45309 0%, #92400e 100%);
+.btn-ai:hover {
   transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(180, 83, 9, 0.3);
 }
 
-.btn-claude:active {
+.btn-ai:active {
   transform: translateY(0);
 }
 
-.btn-claude:disabled {
+.btn-ai:disabled {
   opacity: 0.6;
   cursor: not-allowed;
   transform: none;
+}
+
+/* Claude button - orange/amber */
+.btn-claude {
+  background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
+}
+
+.btn-claude:hover {
+  background: linear-gradient(135deg, #b45309 0%, #92400e 100%);
+  box-shadow: 0 2px 8px rgba(180, 83, 9, 0.3);
+}
+
+/* ChatGPT button - green */
+.btn-chatgpt {
+  background: linear-gradient(135deg, #10a37f 0%, #0d8a6a 100%);
+}
+
+.btn-chatgpt:hover {
+  background: linear-gradient(135deg, #0d8a6a 0%, #0a7358 100%);
+  box-shadow: 0 2px 8px rgba(16, 163, 127, 0.3);
 }

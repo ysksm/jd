@@ -15,7 +15,8 @@
   ],
   "host_permissions": [
     "https://*.atlassian.net/*",
-    "https://claude.ai/*"
+    "https://claude.ai/*",
+    "https://chatgpt.com/*"
   ],
   "background": {
     "service_worker": "dist/background.js"

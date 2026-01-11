@@ -792,10 +792,24 @@
         const { instructions, issueKey } = message.payload;
         console.log("[Background] SEND_TO_CLAUDE received for issue:", issueKey);
         try {
-          await openClaudeAndPaste(instructions, issueKey);
+          await openAiAndPaste("claude", instructions, issueKey);
           return { success: true };
         } catch (error) {
           console.error("[Background] Failed to send to Claude:", error);
+          return {
+            success: false,
+            error: error instanceof Error ? error.message : String(error)
+          };
+        }
+      }
+      case "SEND_TO_CHATGPT": {
+        const { instructions, issueKey } = message.payload;
+        console.log("[Background] SEND_TO_CHATGPT received for issue:", issueKey);
+        try {
+          await openAiAndPaste("chatgpt", instructions, issueKey);
+          return { success: true };
+        } catch (error) {
+          console.error("[Background] Failed to send to ChatGPT:", error);
           return {
             success: false,
             error: error instanceof Error ? error.message : String(error)
@@ -806,15 +820,48 @@
         return { success: false, error: `Unknown message type: ${message.type}` };
     }
   }
-  async function openClaudeAndPaste(instructions, issueKey) {
+  var AI_CONFIGS = {
+    claude: {
+      name: "Claude",
+      url: "https://claude.ai/new",
+      urlPattern: "https://claude.ai/*",
+      selectors: [
+        '[data-placeholder="How can Claude help you today?"]',
+        "[data-placeholder]",
+        'div.ProseMirror[contenteditable="true"]',
+        'div[contenteditable="true"].ProseMirror',
+        '.ProseMirror[contenteditable="true"]',
+        'div[contenteditable="true"]',
+        '[contenteditable="true"]',
+        "textarea[placeholder]",
+        "textarea"
+      ]
+    },
+    chatgpt: {
+      name: "ChatGPT Codex",
+      url: "https://chatgpt.com/codex",
+      urlPattern: "https://chatgpt.com/*",
+      selectors: [
+        "#prompt-textarea",
+        'textarea[data-id="root"]',
+        "textarea[placeholder]",
+        'div[contenteditable="true"]',
+        '[contenteditable="true"]',
+        "textarea"
+      ]
+    }
+  };
+  async function openAiAndPaste(service, instructions, issueKey) {
+    const config = AI_CONFIGS[service];
     const fullPrompt = `[JIRA: ${issueKey}]
 
 ${instructions}`;
-    console.log("[Background] Opening Claude with prompt length:", fullPrompt.length);
+    console.log(`[Background] Opening ${config.name} with prompt length:`, fullPrompt.length);
     try {
       await chrome.storage.local.set({
-        claudeCodePendingPrompt: fullPrompt,
-        claudeCodeTimestamp: Date.now()
+        aiPendingPrompt: fullPrompt,
+        aiPendingService: service,
+        aiPendingTimestamp: Date.now()
       });
       console.log("[Background] Stored prompt in storage");
     } catch (storageError) {
@@ -823,8 +870,8 @@ ${instructions}`;
     }
     let tabs = [];
     try {
-      tabs = await chrome.tabs.query({ url: "https://claude.ai/*" });
-      console.log("[Background] Found existing Claude tabs:", tabs.length);
+      tabs = await chrome.tabs.query({ url: config.urlPattern });
+      console.log(`[Background] Found existing ${config.name} tabs:`, tabs.length);
     } catch (queryError) {
       console.error("[Background] Failed to query tabs:", queryError);
       throw queryError;
@@ -840,13 +887,12 @@ ${instructions}`;
         throw updateError;
       }
       await new Promise((resolve) => setTimeout(resolve, 500));
-      await injectClaudeScript(targetTabId);
+      await injectAiScript(targetTabId, service);
     } else {
-      const url = "https://claude.ai/new";
-      console.log("[Background] Creating new tab:", url);
+      console.log("[Background] Creating new tab:", config.url);
       let tab;
       try {
-        tab = await chrome.tabs.create({ url });
+        tab = await chrome.tabs.create({ url: config.url });
         console.log("[Background] Tab created:", tab.id, tab.url);
       } catch (createError) {
         console.error("[Background] Failed to create tab:", createError);
@@ -872,57 +918,43 @@ ${instructions}`;
           resolve();
         }, 1e4);
       });
-      console.log("[Background] Waiting for React to render...");
+      console.log("[Background] Waiting for page to render...");
       await new Promise((resolve) => setTimeout(resolve, 2e3));
-      await injectClaudeScript(targetTabId);
+      await injectAiScript(targetTabId, service);
     }
   }
-  async function injectClaudeScript(tabId) {
-    console.log("[Background] Injecting script into tab:", tabId);
+  async function injectAiScript(tabId, service) {
+    const config = AI_CONFIGS[service];
+    console.log(`[Background] Injecting script into ${config.name} tab:`, tabId);
     try {
+      const selectorsJson = JSON.stringify(config.selectors);
       const results = await chrome.scripting.executeScript({
         target: { tabId },
-        func: async () => {
-          console.log("[JIRA DB] Injected script running in Claude...");
-          const result2 = await chrome.storage.local.get(["claudeCodePendingPrompt", "claudeCodeTimestamp"]);
-          const prompt = result2.claudeCodePendingPrompt;
-          const timestamp = result2.claudeCodeTimestamp;
+        func: async (selectorsStr) => {
+          const selectors = JSON.parse(selectorsStr);
+          console.log("[JIRA DB] Injected script running...");
+          const result2 = await chrome.storage.local.get(["aiPendingPrompt", "aiPendingService", "aiPendingTimestamp"]);
+          const prompt = result2.aiPendingPrompt;
+          const timestamp = result2.aiPendingTimestamp;
           if (!prompt || !timestamp || Date.now() - timestamp > 6e4) {
             console.log("[JIRA DB] No pending prompt or expired");
             return { success: false, error: "expired" };
           }
-          await chrome.storage.local.remove(["claudeCodePendingPrompt", "claudeCodeTimestamp"]);
-          const selectors = [
-            // Claude's main input area
-            '[data-placeholder="How can Claude help you today?"]',
-            "[data-placeholder]",
-            // ProseMirror editor
-            'div.ProseMirror[contenteditable="true"]',
-            'div[contenteditable="true"].ProseMirror',
-            '.ProseMirror[contenteditable="true"]',
-            // Generic contenteditable
-            'div[contenteditable="true"]',
-            '[contenteditable="true"]',
-            // Fallback to textarea
-            "textarea[placeholder]",
-            "textarea",
-            // Any input-like element in the chat area
-            "form div[contenteditable]",
-            "main div[contenteditable]"
-          ];
+          await chrome.storage.local.remove(["aiPendingPrompt", "aiPendingService", "aiPendingTimestamp"]);
           let inputEl = null;
           for (const selector of selectors) {
             const elements = document.querySelectorAll(selector);
             console.log(`[JIRA DB] Selector "${selector}" found ${elements.length} elements`);
             if (elements.length > 0) {
               inputEl = elements[0];
-              console.log("[JIRA DB] Found input with selector:", selector, inputEl);
+              console.log("[JIRA DB] Found input with selector:", selector);
               break;
             }
           }
           if (!inputEl) {
             console.error("[JIRA DB] Could not find input element");
-            console.log("[JIRA DB] Page content:", document.body.innerHTML.substring(0, 2e3));
+            console.log("[JIRA DB] Page URL:", window.location.href);
+            console.log("[JIRA DB] Page content preview:", document.body.innerHTML.substring(0, 3e3));
             try {
               await navigator.clipboard.writeText(prompt);
               return { success: false, error: "no_input_clipboard" };
@@ -932,8 +964,18 @@ ${instructions}`;
           }
           inputEl.focus();
           if (inputEl.tagName === "TEXTAREA") {
-            inputEl.value = prompt;
-            inputEl.dispatchEvent(new Event("input", { bubbles: true }));
+            const textarea = inputEl;
+            const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+              window.HTMLTextAreaElement.prototype,
+              "value"
+            )?.set;
+            if (nativeInputValueSetter) {
+              nativeInputValueSetter.call(textarea, prompt);
+            } else {
+              textarea.value = prompt;
+            }
+            textarea.dispatchEvent(new Event("input", { bubbles: true }));
+            textarea.dispatchEvent(new Event("change", { bubbles: true }));
           } else {
             const selection = window.getSelection();
             const range = document.createRange();
@@ -944,7 +986,8 @@ ${instructions}`;
           }
           console.log("[JIRA DB] Prompt pasted successfully");
           return { success: true };
-        }
+        },
+        args: [selectorsJson]
       });
       console.log("[Background] Script results:", results);
       const result = results?.[0]?.result;
@@ -952,7 +995,8 @@ ${instructions}`;
         if (result.error === "no_input_clipboard") {
           console.log("[Background] Copied to clipboard as fallback");
           chrome.runtime.sendMessage({
-            type: "CLAUDE_CLIPBOARD_FALLBACK"
+            type: "AI_CLIPBOARD_FALLBACK",
+            payload: { service }
           }).catch(() => {
           });
         }

@@ -6,7 +6,7 @@ import type {
   DbChangeHistory,
   Settings,
 } from '../lib/types';
-import { extractClaudeInstructions } from '../lib/claude-code';
+import { extractAiInstructions } from '../lib/ai-instructions';
 
 // State
 let currentPage = 0;
@@ -263,20 +263,29 @@ async function showIssueDetail(key: string) {
 function renderIssueDetail(issue: DbIssue, history: DbChangeHistory[]) {
   const labels = issue.labels ? JSON.parse(issue.labels) : [];
   const components = issue.components ? JSON.parse(issue.components) : [];
-  const claudeInstructions = extractClaudeInstructions(issue.description);
+  const aiInstructions = extractAiInstructions(issue.description);
 
   detailBodyEl.innerHTML = `
-    ${claudeInstructions ? `
-    <div class="detail-section claude-section">
-      <div class="detail-label">Claude Instructions</div>
-      <div class="claude-instructions">
-        <pre>${escapeHtml(claudeInstructions)}</pre>
-        <button id="sendToClaudeBtn" class="btn btn-claude">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
-          </svg>
-          Send to Claude Code
-        </button>
+    ${aiInstructions ? `
+    <div class="detail-section ai-section">
+      <div class="detail-label">AI Instructions</div>
+      <div class="ai-instructions">
+        <pre>${escapeHtml(aiInstructions)}</pre>
+        <div class="ai-buttons">
+          <button id="sendToClaudeBtn" class="btn btn-ai btn-claude">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
+            </svg>
+            Claude
+          </button>
+          <button id="sendToChatGptBtn" class="btn btn-ai btn-chatgpt">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M12 6v6l4 2"/>
+            </svg>
+            ChatGPT Codex
+          </button>
+        </div>
       </div>
     </div>
     ` : ''}
@@ -352,43 +361,57 @@ function renderIssueDetail(issue: DbIssue, history: DbChangeHistory[]) {
     ` : ''}
   `;
 
-  // Add click handler for Send to Claude Code button
-  const sendToClaudeBtn = document.getElementById('sendToClaudeBtn');
-  if (sendToClaudeBtn && claudeInstructions) {
-    console.log('[SidePanel] Setting up Claude Code button handler');
-    sendToClaudeBtn.addEventListener('click', async () => {
-      console.log('[SidePanel] Send to Claude Code button clicked');
-      try {
-        sendToClaudeBtn.textContent = 'Sending...';
-        (sendToClaudeBtn as HTMLButtonElement).disabled = true;
-        console.log('[SidePanel] Sending SEND_TO_CLAUDE message for issue:', issue.key);
+  // Add click handlers for AI buttons
+  if (aiInstructions) {
+    // Claude button
+    const sendToClaudeBtn = document.getElementById('sendToClaudeBtn');
+    if (sendToClaudeBtn) {
+      sendToClaudeBtn.addEventListener('click', async () => {
+        console.log('[SidePanel] Send to Claude clicked');
+        await sendToAi('SEND_TO_CLAUDE', sendToClaudeBtn as HTMLButtonElement, aiInstructions, issue.key, 'Claude');
+      });
+    }
 
-        // Send message to background script to handle tab operations
-        const response = await sendMessage({
-          type: 'SEND_TO_CLAUDE',
-          payload: { instructions: claudeInstructions, issueKey: issue.key },
-        });
+    // ChatGPT button
+    const sendToChatGptBtn = document.getElementById('sendToChatGptBtn');
+    if (sendToChatGptBtn) {
+      sendToChatGptBtn.addEventListener('click', async () => {
+        console.log('[SidePanel] Send to ChatGPT Codex clicked');
+        await sendToAi('SEND_TO_CHATGPT', sendToChatGptBtn as HTMLButtonElement, aiInstructions, issue.key, 'ChatGPT Codex');
+      });
+    }
+  }
+}
 
-        console.log('[SidePanel] SEND_TO_CLAUDE response:', response);
+// Helper function to send to AI service
+async function sendToAi(
+  messageType: string,
+  button: HTMLButtonElement,
+  instructions: string,
+  issueKey: string,
+  serviceName: string
+) {
+  const originalHtml = button.innerHTML;
+  try {
+    button.textContent = 'Sending...';
+    button.disabled = true;
 
-        if (!response.success) {
-          throw new Error(response.error || 'Failed to send to Claude');
-        }
-      } catch (error) {
-        console.error('[SidePanel] Failed to send to Claude Code:', error);
-        alert(`Failed to send to Claude Code: ${error instanceof Error ? error.message : String(error)}`);
-      } finally {
-        sendToClaudeBtn.innerHTML = `
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
-          </svg>
-          Send to Claude Code
-        `;
-        (sendToClaudeBtn as HTMLButtonElement).disabled = false;
-      }
+    const response = await sendMessage({
+      type: messageType,
+      payload: { instructions, issueKey },
     });
-  } else {
-    console.log('[SidePanel] No Claude Code button to set up:', { hasButton: !!sendToClaudeBtn, hasInstructions: !!claudeInstructions });
+
+    console.log(`[SidePanel] ${messageType} response:`, response);
+
+    if (!response.success) {
+      throw new Error(response.error || `Failed to send to ${serviceName}`);
+    }
+  } catch (error) {
+    console.error(`[SidePanel] Failed to send to ${serviceName}:`, error);
+    alert(`Failed to send to ${serviceName}: ${error instanceof Error ? error.message : String(error)}`);
+  } finally {
+    button.innerHTML = originalHtml;
+    button.disabled = false;
   }
 }
 
@@ -523,9 +546,10 @@ chrome.runtime.onMessage.addListener((message) => {
   } else if (message.type === 'SYNC_ERROR') {
     hideSyncStatus();
     alert(`Sync failed: ${message.payload}`);
-  } else if (message.type === 'CLAUDE_CLIPBOARD_FALLBACK') {
+  } else if (message.type === 'AI_CLIPBOARD_FALLBACK') {
     // Show notification that text was copied to clipboard
-    alert('入力欄が見つからなかったため、クリップボードにコピーしました。\nCtrl+V (Cmd+V) で貼り付けてください。');
+    const service = message.payload?.service === 'chatgpt' ? 'ChatGPT' : 'Claude';
+    alert(`${service}の入力欄が見つからなかったため、クリップボードにコピーしました。\nCtrl+V (Cmd+V) で貼り付けてください。`);
   }
 });
 

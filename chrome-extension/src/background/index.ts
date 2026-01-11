@@ -161,10 +161,29 @@ async function handleMessage(message: Message): Promise<MessageResponse> {
       console.log('[Background] SEND_TO_CLAUDE received for issue:', issueKey);
 
       try {
-        await openClaudeAndPaste(instructions, issueKey);
+        await openAiAndPaste('claude', instructions, issueKey);
         return { success: true };
       } catch (error) {
         console.error('[Background] Failed to send to Claude:', error);
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : String(error),
+        };
+      }
+    }
+
+    case 'SEND_TO_CHATGPT': {
+      const { instructions, issueKey } = message.payload as {
+        instructions: string;
+        issueKey: string;
+      };
+      console.log('[Background] SEND_TO_CHATGPT received for issue:', issueKey);
+
+      try {
+        await openAiAndPaste('chatgpt', instructions, issueKey);
+        return { success: true };
+      } catch (error) {
+        console.error('[Background] Failed to send to ChatGPT:', error);
         return {
           success: false,
           error: error instanceof Error ? error.message : String(error),
@@ -177,16 +196,58 @@ async function handleMessage(message: Message): Promise<MessageResponse> {
   }
 }
 
-// Open Claude and paste instructions
-async function openClaudeAndPaste(instructions: string, issueKey: string): Promise<void> {
+// AI service configurations
+type AiServiceType = 'claude' | 'chatgpt';
+
+const AI_CONFIGS: Record<AiServiceType, {
+  name: string;
+  url: string;
+  urlPattern: string;
+  selectors: string[];
+}> = {
+  claude: {
+    name: 'Claude',
+    url: 'https://claude.ai/new',
+    urlPattern: 'https://claude.ai/*',
+    selectors: [
+      '[data-placeholder="How can Claude help you today?"]',
+      '[data-placeholder]',
+      'div.ProseMirror[contenteditable="true"]',
+      'div[contenteditable="true"].ProseMirror',
+      '.ProseMirror[contenteditable="true"]',
+      'div[contenteditable="true"]',
+      '[contenteditable="true"]',
+      'textarea[placeholder]',
+      'textarea',
+    ],
+  },
+  chatgpt: {
+    name: 'ChatGPT Codex',
+    url: 'https://chatgpt.com/codex',
+    urlPattern: 'https://chatgpt.com/*',
+    selectors: [
+      '#prompt-textarea',
+      'textarea[data-id="root"]',
+      'textarea[placeholder]',
+      'div[contenteditable="true"]',
+      '[contenteditable="true"]',
+      'textarea',
+    ],
+  },
+};
+
+// Open AI service and paste instructions
+async function openAiAndPaste(service: AiServiceType, instructions: string, issueKey: string): Promise<void> {
+  const config = AI_CONFIGS[service];
   const fullPrompt = `[JIRA: ${issueKey}]\n\n${instructions}`;
-  console.log('[Background] Opening Claude with prompt length:', fullPrompt.length);
+  console.log(`[Background] Opening ${config.name} with prompt length:`, fullPrompt.length);
 
   // Store prompt for the injected script to use
   try {
     await chrome.storage.local.set({
-      claudeCodePendingPrompt: fullPrompt,
-      claudeCodeTimestamp: Date.now(),
+      aiPendingPrompt: fullPrompt,
+      aiPendingService: service,
+      aiPendingTimestamp: Date.now(),
     });
     console.log('[Background] Stored prompt in storage');
   } catch (storageError) {
@@ -194,11 +255,11 @@ async function openClaudeAndPaste(instructions: string, issueKey: string): Promi
     throw storageError;
   }
 
-  // Check if Claude is already open
+  // Check if AI service is already open
   let tabs: chrome.tabs.Tab[] = [];
   try {
-    tabs = await chrome.tabs.query({ url: 'https://claude.ai/*' });
-    console.log('[Background] Found existing Claude tabs:', tabs.length);
+    tabs = await chrome.tabs.query({ url: config.urlPattern });
+    console.log(`[Background] Found existing ${config.name} tabs:`, tabs.length);
   } catch (queryError) {
     console.error('[Background] Failed to query tabs:', queryError);
     throw queryError;
@@ -218,15 +279,14 @@ async function openClaudeAndPaste(instructions: string, issueKey: string): Promi
     }
     // Wait a moment then inject
     await new Promise(resolve => setTimeout(resolve, 500));
-    await injectClaudeScript(targetTabId);
+    await injectAiScript(targetTabId, service);
   } else {
     // Create new tab
-    const url = 'https://claude.ai/new';
-    console.log('[Background] Creating new tab:', url);
+    console.log('[Background] Creating new tab:', config.url);
 
     let tab: chrome.tabs.Tab;
     try {
-      tab = await chrome.tabs.create({ url });
+      tab = await chrome.tabs.create({ url: config.url });
       console.log('[Background] Tab created:', tab.id, tab.url);
     } catch (createError) {
       console.error('[Background] Failed to create tab:', createError);
@@ -260,26 +320,31 @@ async function openClaudeAndPaste(instructions: string, issueKey: string): Promi
     });
 
     // Wait for React to render
-    console.log('[Background] Waiting for React to render...');
+    console.log('[Background] Waiting for page to render...');
     await new Promise(resolve => setTimeout(resolve, 2000));
-    await injectClaudeScript(targetTabId);
+    await injectAiScript(targetTabId, service);
   }
 }
 
-// Inject script to paste into Claude
-async function injectClaudeScript(tabId: number): Promise<void> {
-  console.log('[Background] Injecting script into tab:', tabId);
+// Inject script to paste into AI service
+async function injectAiScript(tabId: number, service: AiServiceType): Promise<void> {
+  const config = AI_CONFIGS[service];
+  console.log(`[Background] Injecting script into ${config.name} tab:`, tabId);
 
   try {
+    // We need to pass selectors to the injected script
+    const selectorsJson = JSON.stringify(config.selectors);
+
     const results = await chrome.scripting.executeScript({
       target: { tabId },
-      func: async () => {
-        console.log('[JIRA DB] Injected script running in Claude...');
+      func: async (selectorsStr: string) => {
+        const selectors = JSON.parse(selectorsStr) as string[];
+        console.log('[JIRA DB] Injected script running...');
 
         // Get the pending prompt
-        const result = await chrome.storage.local.get(['claudeCodePendingPrompt', 'claudeCodeTimestamp']);
-        const prompt = result.claudeCodePendingPrompt;
-        const timestamp = result.claudeCodeTimestamp;
+        const result = await chrome.storage.local.get(['aiPendingPrompt', 'aiPendingService', 'aiPendingTimestamp']);
+        const prompt = result.aiPendingPrompt;
+        const timestamp = result.aiPendingTimestamp;
 
         if (!prompt || !timestamp || Date.now() - timestamp > 60000) {
           console.log('[JIRA DB] No pending prompt or expired');
@@ -287,42 +352,24 @@ async function injectClaudeScript(tabId: number): Promise<void> {
         }
 
         // Clear the prompt
-        await chrome.storage.local.remove(['claudeCodePendingPrompt', 'claudeCodeTimestamp']);
+        await chrome.storage.local.remove(['aiPendingPrompt', 'aiPendingService', 'aiPendingTimestamp']);
 
-        // Try multiple selectors for Claude's input (Claude UI changes frequently)
-        const selectors = [
-          // Claude's main input area
-          '[data-placeholder="How can Claude help you today?"]',
-          '[data-placeholder]',
-          // ProseMirror editor
-          'div.ProseMirror[contenteditable="true"]',
-          'div[contenteditable="true"].ProseMirror',
-          '.ProseMirror[contenteditable="true"]',
-          // Generic contenteditable
-          'div[contenteditable="true"]',
-          '[contenteditable="true"]',
-          // Fallback to textarea
-          'textarea[placeholder]',
-          'textarea',
-          // Any input-like element in the chat area
-          'form div[contenteditable]',
-          'main div[contenteditable]',
-        ];
-
+        // Try selectors
         let inputEl: HTMLElement | null = null;
         for (const selector of selectors) {
           const elements = document.querySelectorAll(selector);
           console.log(`[JIRA DB] Selector "${selector}" found ${elements.length} elements`);
           if (elements.length > 0) {
             inputEl = elements[0] as HTMLElement;
-            console.log('[JIRA DB] Found input with selector:', selector, inputEl);
+            console.log('[JIRA DB] Found input with selector:', selector);
             break;
           }
         }
 
         if (!inputEl) {
           console.error('[JIRA DB] Could not find input element');
-          console.log('[JIRA DB] Page content:', document.body.innerHTML.substring(0, 2000));
+          console.log('[JIRA DB] Page URL:', window.location.href);
+          console.log('[JIRA DB] Page content preview:', document.body.innerHTML.substring(0, 3000));
           // Try to copy to clipboard as fallback
           try {
             await navigator.clipboard.writeText(prompt);
@@ -336,11 +383,24 @@ async function injectClaudeScript(tabId: number): Promise<void> {
         inputEl.focus();
 
         if (inputEl.tagName === 'TEXTAREA') {
-          (inputEl as HTMLTextAreaElement).value = prompt;
-          inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+          const textarea = inputEl as HTMLTextAreaElement;
+          // Set the value and trigger React's change detection
+          const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+            window.HTMLTextAreaElement.prototype,
+            'value'
+          )?.set;
+
+          if (nativeInputValueSetter) {
+            nativeInputValueSetter.call(textarea, prompt);
+          } else {
+            textarea.value = prompt;
+          }
+
+          // Dispatch events to trigger React state update
+          textarea.dispatchEvent(new Event('input', { bubbles: true }));
+          textarea.dispatchEvent(new Event('change', { bubbles: true }));
         } else {
           // For contenteditable - clear and insert
-          // Select all existing content first
           const selection = window.getSelection();
           const range = document.createRange();
           range.selectNodeContents(inputEl);
@@ -354,6 +414,7 @@ async function injectClaudeScript(tabId: number): Promise<void> {
         console.log('[JIRA DB] Prompt pasted successfully');
         return { success: true };
       },
+      args: [selectorsJson],
     });
 
     console.log('[Background] Script results:', results);
@@ -365,7 +426,8 @@ async function injectClaudeScript(tabId: number): Promise<void> {
         console.log('[Background] Copied to clipboard as fallback');
         // Send notification to sidepanel
         chrome.runtime.sendMessage({
-          type: 'CLAUDE_CLIPBOARD_FALLBACK',
+          type: 'AI_CLIPBOARD_FALLBACK',
+          payload: { service },
         }).catch(() => {});
       }
     }
