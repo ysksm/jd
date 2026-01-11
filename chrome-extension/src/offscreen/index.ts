@@ -152,8 +152,8 @@ async function createTables(): Promise<void> {
       key VARCHAR UNIQUE NOT NULL,
       name VARCHAR NOT NULL,
       project_type VARCHAR,
-      created_at TIMESTAMP DEFAULT current_timestamp,
-      updated_at TIMESTAMP DEFAULT current_timestamp
+      created_at TIMESTAMP DEFAULT now(),
+      updated_at TIMESTAMP DEFAULT now()
     )
   `);
 
@@ -181,7 +181,7 @@ async function createTables(): Promise<void> {
       updated_at TIMESTAMP NOT NULL,
       raw_data VARCHAR NOT NULL,
       is_deleted BOOLEAN DEFAULT FALSE,
-      synced_at TIMESTAMP DEFAULT current_timestamp
+      synced_at TIMESTAMP DEFAULT now()
     )
   `);
 
@@ -230,8 +230,8 @@ async function createTables(): Promise<void> {
       name VARCHAR NOT NULL,
       description VARCHAR,
       category VARCHAR,
-      created_at TIMESTAMP DEFAULT current_timestamp,
-      updated_at TIMESTAMP DEFAULT current_timestamp,
+      created_at TIMESTAMP DEFAULT now(),
+      updated_at TIMESTAMP DEFAULT now(),
       PRIMARY KEY (project_id, name)
     )
   `);
@@ -242,8 +242,8 @@ async function createTables(): Promise<void> {
       name VARCHAR UNIQUE NOT NULL,
       description VARCHAR,
       icon_url VARCHAR,
-      created_at TIMESTAMP DEFAULT current_timestamp,
-      updated_at TIMESTAMP DEFAULT current_timestamp
+      created_at TIMESTAMP DEFAULT now(),
+      updated_at TIMESTAMP DEFAULT now()
     )
   `);
 
@@ -255,8 +255,8 @@ async function createTables(): Promise<void> {
       description VARCHAR,
       icon_url VARCHAR,
       subtask BOOLEAN DEFAULT FALSE,
-      created_at TIMESTAMP DEFAULT current_timestamp,
-      updated_at TIMESTAMP DEFAULT current_timestamp,
+      created_at TIMESTAMP DEFAULT now(),
+      updated_at TIMESTAMP DEFAULT now(),
       PRIMARY KEY (project_id, name)
     )
   `);
@@ -307,12 +307,12 @@ function escapeSQL(value: string | null): string {
 async function upsertProject(project: JiraProject): Promise<void> {
   const sql = `
     INSERT INTO projects (id, key, name, project_type, updated_at)
-    VALUES (${escapeSQL(project.id)}, ${escapeSQL(project.key)}, ${escapeSQL(project.name)}, ${escapeSQL(project.projectTypeKey)}, current_timestamp)
+    VALUES (${escapeSQL(project.id)}, ${escapeSQL(project.key)}, ${escapeSQL(project.name)}, ${escapeSQL(project.projectTypeKey)}, now())
     ON CONFLICT (id) DO UPDATE SET
       key = excluded.key,
       name = excluded.name,
       project_type = excluded.project_type,
-      updated_at = current_timestamp
+      updated_at = now()
   `;
   await runSql(sql);
 }
@@ -358,7 +358,7 @@ async function upsertIssue(issue: JiraIssue): Promise<void> {
       ${escapeSQL(fields.reporter?.accountId || null)}, ${escapeSQL(fields.reporter?.displayName || null)},
       ${escapeSQL(labels)}, ${escapeSQL(components)}, ${escapeSQL(fixVersions)},
       ${escapeSQL(fields.created)}, ${escapeSQL(fields.updated)}, ${escapeSQL(rawData)},
-      FALSE, current_timestamp
+      FALSE, now()
     )
     ON CONFLICT (id) DO UPDATE SET
       key = excluded.key,
@@ -381,7 +381,7 @@ async function upsertIssue(issue: JiraIssue): Promise<void> {
       updated_at = excluded.updated_at,
       raw_data = excluded.raw_data,
       is_deleted = FALSE,
-      synced_at = current_timestamp
+      synced_at = now()
   `;
   await runSql(sql);
 
@@ -554,7 +554,7 @@ async function startSyncHistory(projectKey: string): Promise<number> {
   // Use RETURNING to get the auto-generated ID
   const sql = `
     INSERT INTO sync_history (project_key, started_at, status, issues_synced)
-    VALUES (${escapeSQL(projectKey)}, current_timestamp, 'running', 0)
+    VALUES (${escapeSQL(projectKey)}, now(), 'running', 0)
     RETURNING id
   `;
   const result = await conn.query(sql);
@@ -575,7 +575,7 @@ async function completeSyncHistory(
   const status = success ? 'completed' : 'failed';
   const sql = `
     UPDATE sync_history SET
-      completed_at = current_timestamp,
+      completed_at = now(),
       status = ${escapeSQL(status)},
       issues_synced = ${issuesSynced},
       error_message = ${escapeSQL(errorMessage || null)}
