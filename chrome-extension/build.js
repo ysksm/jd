@@ -1,9 +1,6 @@
 import * as esbuild from 'esbuild';
-import { copyFileSync, mkdirSync, existsSync, readdirSync } from 'fs';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
+import { mkdirSync, existsSync } from 'fs';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
 const isWatch = process.argv.includes('--watch');
 
 // Ensure dist directory exists
@@ -11,18 +8,8 @@ if (!existsSync('dist')) {
   mkdirSync('dist', { recursive: true });
 }
 
-// Copy DuckDB WASM files
-const duckdbPath = join(__dirname, 'node_modules', '@duckdb', 'duckdb-wasm', 'dist');
-if (existsSync(duckdbPath)) {
-  const wasmFiles = readdirSync(duckdbPath).filter(f => f.endsWith('.wasm') || f.endsWith('.js'));
-  for (const file of wasmFiles) {
-    try {
-      copyFileSync(join(duckdbPath, file), join('dist', file));
-    } catch (e) {
-      console.warn(`Could not copy ${file}:`, e.message);
-    }
-  }
-}
+// Note: DuckDB WASM files are loaded from jsDelivr CDN at runtime
+// No need to copy them locally
 
 const buildOptions = {
   entryPoints: [
