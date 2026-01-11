@@ -56,9 +56,9 @@ impl IssueRepository for DuckDbIssueRepository {
                     id, project_id, key, summary, description,
                     status, priority, assignee, reporter,
                     issue_type, resolution, labels, components, fix_versions, sprint, team, parent_key,
-                    due_date, created_date, updated_date, raw_data, synced_at
+                    due_date, created_date, updated_date, raw_data, synced_at, is_deleted
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, false)
                 ON CONFLICT (id) DO UPDATE SET
                     project_id = excluded.project_id,
                     key = excluded.key,
@@ -80,7 +80,8 @@ impl IssueRepository for DuckDbIssueRepository {
                     created_date = excluded.created_date,
                     updated_date = excluded.updated_date,
                     raw_data = excluded.raw_data,
-                    synced_at = ?
+                    synced_at = ?,
+                    is_deleted = false
                 "#,
                 duckdb::params![
                     &issue.id,
