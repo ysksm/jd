@@ -1,4 +1,10 @@
 .project-detail {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-height: 100%;
+  overflow: hidden;
+
   h3 {
     margin: 0 0 1rem 0;
     color: #333;
@@ -147,7 +153,11 @@
 
 // Tab Content
 .tab-content {
-  min-height: 400px;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 // Overview Tab

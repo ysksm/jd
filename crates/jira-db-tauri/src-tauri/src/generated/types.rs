@@ -630,6 +630,10 @@ pub struct SqlExecuteRequest {
     #[serde(rename = "projectKey")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub project_key: Option<String>,
+    /// If true, query across all synced projects instead of just one
+    #[serde(rename = "allProjects")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub all_projects: Option<bool>,
     pub query: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub limit: Option<i32>,
@@ -652,6 +656,10 @@ pub struct SqlGetSchemaRequest {
     #[serde(rename = "projectKey")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub project_key: Option<String>,
+    /// If true, show schema for all synced projects
+    #[serde(rename = "allProjects")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub all_projects: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub table: Option<String>,
 }

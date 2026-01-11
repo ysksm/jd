@@ -1,37 +1,48 @@
-<div class="app-container">
+<div class="app-container" [class.sidebar-collapsed]="sidebarCollapsed()">
   <nav class="sidebar">
     <div class="sidebar-header">
       <h1>{{ title }}</h1>
+      <button class="collapse-btn" (click)="toggleSidebar()" title="Toggle sidebar">
+        <span class="collapse-icon">{{ sidebarCollapsed() ? '→' : '←' }}</span>
+      </button>
     </div>
     <ul class="nav-menu">
       <li>
         <a routerLink="/dashboard" routerLinkActive="active">
-          Dashboard
+          <span class="nav-icon">📊</span>
+          <span class="nav-text">Dashboard</span>
         </a>
       </li>
       <li>
         <a routerLink="/projects" routerLinkActive="active">
-          Projects
+          <span class="nav-icon">📁</span>
+          <span class="nav-text">Projects</span>
         </a>
       </li>
       <li>
         <a routerLink="/sync" routerLinkActive="active">
-          Sync
+          <span class="nav-icon">🔄</span>
+          <span class="nav-text">Sync</span>
         </a>
       </li>
       <li>
         <a routerLink="/settings" routerLinkActive="active">
-          Settings
+          <span class="nav-icon">⚙️</span>
+          <span class="nav-text">Settings</span>
         </a>
       </li>
       <li>
         <a routerLink="/debug" routerLinkActive="active">
-          Debug
+          <span class="nav-icon">🔧</span>
+          <span class="nav-text">Debug</span>
         </a>
       </li>
     </ul>
   </nav>
   <main class="main-content">
+    <button class="expand-btn" (click)="toggleSidebar()" title="Expand sidebar">
+      <span>☰</span>
+    </button>
     <router-outlet></router-outlet>
   </main>
 </div>
