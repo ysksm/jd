@@ -435,6 +435,35 @@ function escapeSQL(value: string | null): string {
   return `'${value.replace(/'/g, "''")}'`;
 }
 
+// Convert ISO timestamp string to DuckDB-compatible format
+// DuckDB needs 'YYYY-MM-DD HH:MM:SS' format without timezone suffix
+function escapeTimestamp(isoString: string | null): string {
+  if (!isoString) return 'NULL';
+
+  try {
+    // Parse the ISO string and get UTC components
+    const date = new Date(isoString);
+    if (isNaN(date.getTime())) {
+      console.warn(`[Offscreen] Invalid timestamp: ${isoString}`);
+      return 'NULL';
+    }
+
+    // Format as DuckDB-compatible timestamp string (in UTC)
+    const year = date.getUTCFullYear();
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(date.getUTCDate()).padStart(2, '0');
+    const hours = String(date.getUTCHours()).padStart(2, '0');
+    const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+    const seconds = String(date.getUTCSeconds()).padStart(2, '0');
+
+    const formatted = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+    return `'${formatted}'`;
+  } catch (e) {
+    console.warn(`[Offscreen] Failed to parse timestamp: ${isoString}`, e);
+    return 'NULL';
+  }
+}
+
 // Project operations
 async function upsertProject(project: JiraProject): Promise<void> {
   const sql = `
@@ -491,7 +520,7 @@ async function upsertIssue(issue: JiraIssue): Promise<void> {
       ${escapeSQL(fields.assignee?.accountId || null)}, ${escapeSQL(fields.assignee?.displayName || null)},
       ${escapeSQL(fields.reporter?.accountId || null)}, ${escapeSQL(fields.reporter?.displayName || null)},
       ${escapeSQL(labels)}, ${escapeSQL(components)}, ${escapeSQL(fixVersions)},
-      ${escapeSQL(fields.created)}, ${escapeSQL(fields.updated)}, ${escapeSQL(rawData)},
+      ${escapeTimestamp(fields.created)}, ${escapeTimestamp(fields.updated)}, ${escapeSQL(rawData)},
       FALSE, now()
     )
     ON CONFLICT (id) DO UPDATE SET
@@ -535,7 +564,7 @@ async function upsertIssue(issue: JiraIssue): Promise<void> {
             ${escapeSQL(item.field)}, ${escapeSQL(item.fieldtype)},
             ${escapeSQL(item.from || null)}, ${escapeSQL(item.fromString || null)},
             ${escapeSQL(item.to || null)}, ${escapeSQL(item.toString || null)},
-            ${escapeSQL(history.created)}
+            ${escapeTimestamp(history.created)}
           )
           ON CONFLICT (issue_id, history_id, field) DO UPDATE SET
             author_account_id = excluded.author_account_id,
@@ -907,7 +936,7 @@ async function restoreFromJson(): Promise<void> {
       INSERT INTO projects (id, key, name, project_type, created_at, updated_at)
       VALUES (${escapeSQL(project.id as string)}, ${escapeSQL(project.key as string)},
               ${escapeSQL(project.name as string)}, ${escapeSQL(project.project_type as string | null)},
-              ${escapeSQL(project.created_at as string)}, ${escapeSQL(project.updated_at as string)})
+              ${escapeTimestamp(project.created_at as string)}, ${escapeTimestamp(project.updated_at as string)})
       ON CONFLICT (id) DO NOTHING
     `;
     try {
@@ -936,9 +965,9 @@ async function restoreFromJson(): Promise<void> {
         ${escapeSQL(issue.reporter_id as string | null)}, ${escapeSQL(issue.reporter_name as string | null)},
         ${escapeSQL(issue.labels as string | null)}, ${escapeSQL(issue.components as string | null)},
         ${escapeSQL(issue.fix_versions as string | null)},
-        ${escapeSQL(issue.created_at as string)}, ${escapeSQL(issue.updated_at as string)},
+        ${escapeTimestamp(issue.created_at as string)}, ${escapeTimestamp(issue.updated_at as string)},
         ${escapeSQL(issue.raw_data as string)}, ${issue.is_deleted ? 'TRUE' : 'FALSE'},
-        ${escapeSQL(issue.synced_at as string)}
+        ${escapeTimestamp(issue.synced_at as string)}
       )
       ON CONFLICT (id) DO NOTHING
     `;
@@ -964,7 +993,7 @@ async function restoreFromJson(): Promise<void> {
         ${escapeSQL(history.field as string)}, ${escapeSQL(history.field_type as string)},
         ${escapeSQL(history.from_value as string | null)}, ${escapeSQL(history.from_string as string | null)},
         ${escapeSQL(history.to_value as string | null)}, ${escapeSQL(history.to_string as string | null)},
-        ${escapeSQL(history.changed_at as string)}
+        ${escapeTimestamp(history.changed_at as string)}
       )
       ON CONFLICT (issue_id, history_id, field) DO NOTHING
     `;
@@ -982,7 +1011,7 @@ async function restoreFromJson(): Promise<void> {
         id, project_key, started_at, completed_at, status, issues_synced, error_message
       ) VALUES (
         ${sync.id}, ${escapeSQL(sync.project_key as string)},
-        ${escapeSQL(sync.started_at as string)}, ${escapeSQL(sync.completed_at as string | null)},
+        ${escapeTimestamp(sync.started_at as string)}, ${escapeTimestamp(sync.completed_at as string | null)},
         ${escapeSQL(sync.status as string)}, ${sync.issues_synced},
         ${escapeSQL(sync.error_message as string | null)}
       )

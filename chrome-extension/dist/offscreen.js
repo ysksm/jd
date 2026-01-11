@@ -12683,6 +12683,28 @@ return true;`);
       return "NULL";
     return `'${value.replace(/'/g, "''")}'`;
   }
+  function escapeTimestamp(isoString) {
+    if (!isoString)
+      return "NULL";
+    try {
+      const date = new Date(isoString);
+      if (isNaN(date.getTime())) {
+        console.warn(`[Offscreen] Invalid timestamp: ${isoString}`);
+        return "NULL";
+      }
+      const year = date.getUTCFullYear();
+      const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+      const day = String(date.getUTCDate()).padStart(2, "0");
+      const hours = String(date.getUTCHours()).padStart(2, "0");
+      const minutes = String(date.getUTCMinutes()).padStart(2, "0");
+      const seconds = String(date.getUTCSeconds()).padStart(2, "0");
+      const formatted = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+      return `'${formatted}'`;
+    } catch (e) {
+      console.warn(`[Offscreen] Failed to parse timestamp: ${isoString}`, e);
+      return "NULL";
+    }
+  }
   async function upsertProject(project) {
     const sql = `
     INSERT INTO projects (id, key, name, project_type, updated_at)
@@ -12734,7 +12756,7 @@ return true;`);
       ${escapeSQL(fields.assignee?.accountId || null)}, ${escapeSQL(fields.assignee?.displayName || null)},
       ${escapeSQL(fields.reporter?.accountId || null)}, ${escapeSQL(fields.reporter?.displayName || null)},
       ${escapeSQL(labels)}, ${escapeSQL(components)}, ${escapeSQL(fixVersions)},
-      ${escapeSQL(fields.created)}, ${escapeSQL(fields.updated)}, ${escapeSQL(rawData)},
+      ${escapeTimestamp(fields.created)}, ${escapeTimestamp(fields.updated)}, ${escapeSQL(rawData)},
       FALSE, now()
     )
     ON CONFLICT (id) DO UPDATE SET
@@ -12776,7 +12798,7 @@ return true;`);
             ${escapeSQL(item.field)}, ${escapeSQL(item.fieldtype)},
             ${escapeSQL(item.from || null)}, ${escapeSQL(item.fromString || null)},
             ${escapeSQL(item.to || null)}, ${escapeSQL(item.toString || null)},
-            ${escapeSQL(history.created)}
+            ${escapeTimestamp(history.created)}
           )
           ON CONFLICT (issue_id, history_id, field) DO UPDATE SET
             author_account_id = excluded.author_account_id,
@@ -13091,7 +13113,7 @@ return true;`);
       INSERT INTO projects (id, key, name, project_type, created_at, updated_at)
       VALUES (${escapeSQL(project.id)}, ${escapeSQL(project.key)},
               ${escapeSQL(project.name)}, ${escapeSQL(project.project_type)},
-              ${escapeSQL(project.created_at)}, ${escapeSQL(project.updated_at)})
+              ${escapeTimestamp(project.created_at)}, ${escapeTimestamp(project.updated_at)})
       ON CONFLICT (id) DO NOTHING
     `;
       try {
@@ -13118,9 +13140,9 @@ return true;`);
         ${escapeSQL(issue.reporter_id)}, ${escapeSQL(issue.reporter_name)},
         ${escapeSQL(issue.labels)}, ${escapeSQL(issue.components)},
         ${escapeSQL(issue.fix_versions)},
-        ${escapeSQL(issue.created_at)}, ${escapeSQL(issue.updated_at)},
+        ${escapeTimestamp(issue.created_at)}, ${escapeTimestamp(issue.updated_at)},
         ${escapeSQL(issue.raw_data)}, ${issue.is_deleted ? "TRUE" : "FALSE"},
-        ${escapeSQL(issue.synced_at)}
+        ${escapeTimestamp(issue.synced_at)}
       )
       ON CONFLICT (id) DO NOTHING
     `;
@@ -13144,7 +13166,7 @@ return true;`);
         ${escapeSQL(history.field)}, ${escapeSQL(history.field_type)},
         ${escapeSQL(history.from_value)}, ${escapeSQL(history.from_string)},
         ${escapeSQL(history.to_value)}, ${escapeSQL(history.to_string)},
-        ${escapeSQL(history.changed_at)}
+        ${escapeTimestamp(history.changed_at)}
       )
       ON CONFLICT (issue_id, history_id, field) DO NOTHING
     `;
@@ -13160,7 +13182,7 @@ return true;`);
         id, project_key, started_at, completed_at, status, issues_synced, error_message
       ) VALUES (
         ${sync.id}, ${escapeSQL(sync.project_key)},
-        ${escapeSQL(sync.started_at)}, ${escapeSQL(sync.completed_at)},
+        ${escapeTimestamp(sync.started_at)}, ${escapeTimestamp(sync.completed_at)},
         ${escapeSQL(sync.status)}, ${sync.issues_synced},
         ${escapeSQL(sync.error_message)}
       )
