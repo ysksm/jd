@@ -1,0 +1,259 @@
+import { JiraClient } from './jira-client';
+import {
+  initDatabase,
+  upsertIssue,
+  upsertProject,
+  getLatestUpdatedAt,
+  startSyncHistory,
+  completeSyncHistory,
+  updateSyncHistoryProgress,
+} from './database';
+import {
+  loadSettings,
+  saveSyncCheckpoint,
+  clearSyncCheckpoint,
+  getSyncCheckpoint,
+  upsertProjectInSettings,
+} from './settings';
+import type {
+  SyncProgress,
+  SyncResult,
+  SyncCheckpoint,
+  ProjectConfig,
+} from './types';
+
+// Sync state
+let isSyncing = false;
+let cancelRequested = false;
+let currentSyncProgress: SyncProgress | null = null;
+
+export function getSyncStatus(): { isSyncing: boolean; progress: SyncProgress | null } {
+  return { isSyncing, progress: currentSyncProgress };
+}
+
+export function cancelSync(): void {
+  cancelRequested = true;
+}
+
+// Initialize projects from JIRA
+export async function initProjects(): Promise<void> {
+  const settings = await loadSettings();
+  const client = new JiraClient(settings.jira);
+
+  const jiraProjects = await client.getProjects();
+
+  // Add all projects to settings
+  for (const project of jiraProjects) {
+    await upsertProjectInSettings({ key: project.key, name: project.name });
+  }
+
+  // Also add to database
+  await initDatabase();
+  for (const project of jiraProjects) {
+    await upsertProject(project);
+  }
+}
+
+// Sync a single project
+export async function syncProject(
+  projectKey: string,
+  onProgress?: (progress: SyncProgress) => void
+): Promise<SyncResult> {
+  const startedAt = new Date().toISOString();
+  let issuesSynced = 0;
+  let syncHistoryId = 0;
+
+  try {
+    const settings = await loadSettings();
+    const client = new JiraClient(settings.jira);
+
+    await initDatabase();
+
+    // Start sync history record
+    syncHistoryId = await startSyncHistory(projectKey);
+
+    // Check for existing checkpoint (resume support)
+    const checkpoint = await getSyncCheckpoint(projectKey);
+    let startPosition = 0;
+    let lastProcessedUpdatedAt: string | undefined;
+
+    if (checkpoint) {
+      startPosition = checkpoint.startPosition;
+      lastProcessedUpdatedAt = checkpoint.lastProcessedUpdatedAt;
+      console.log(`Resuming sync for ${projectKey} from position ${startPosition}`);
+    }
+
+    // Determine if we should do incremental sync
+    let updatedSince: string | undefined;
+    if (settings.sync.incrementalSyncEnabled && !checkpoint) {
+      const latestInDb = await getLatestUpdatedAt(projectKey);
+      if (latestInDb) {
+        // Apply safety margin
+        const marginMs = settings.sync.incrementalSyncMarginMinutes * 60 * 1000;
+        const date = new Date(new Date(latestInDb).getTime() - marginMs);
+        updatedSince = date.toISOString();
+        console.log(`Incremental sync from ${updatedSince}`);
+      }
+    } else if (checkpoint) {
+      // Use checkpoint's last processed date for resume
+      updatedSince = lastProcessedUpdatedAt;
+    }
+
+    // Fetch and sync issues
+    let totalIssues = 0;
+    const generator = checkpoint
+      ? client.getIssuesFromCheckpoint(
+          projectKey,
+          startPosition,
+          updatedSince,
+          (current, total) => {
+            totalIssues = total;
+            currentSyncProgress = {
+              projectKey,
+              phase: 'issues',
+              current,
+              total,
+              message: `Syncing issues: ${current}/${total}`,
+            };
+            onProgress?.(currentSyncProgress);
+          }
+        )
+      : client.getAllIssues(projectKey, updatedSince, (current, total) => {
+          totalIssues = total;
+          currentSyncProgress = {
+            projectKey,
+            phase: 'issues',
+            current,
+            total,
+            message: `Syncing issues: ${current}/${total}`,
+          };
+          onProgress?.(currentSyncProgress);
+        });
+
+    for await (const batch of generator) {
+      if (cancelRequested) {
+        // Save checkpoint before cancelling
+        const lastIssue = batch[batch.length - 1];
+        if (lastIssue) {
+          await saveSyncCheckpoint(projectKey, {
+            lastProcessedUpdatedAt: lastIssue.fields.updated,
+            startPosition: issuesSynced + batch.length,
+            totalIssues,
+          });
+        }
+        throw new Error('Sync cancelled by user');
+      }
+
+      // Process batch
+      for (const issue of batch) {
+        await upsertIssue(issue);
+        issuesSynced++;
+      }
+
+      // Save checkpoint after each batch
+      const lastIssue = batch[batch.length - 1];
+      if (lastIssue) {
+        const newCheckpoint: SyncCheckpoint = {
+          lastProcessedUpdatedAt: lastIssue.fields.updated,
+          startPosition: issuesSynced,
+          totalIssues,
+        };
+        await saveSyncCheckpoint(projectKey, newCheckpoint);
+      }
+
+      // Update sync history progress
+      await updateSyncHistoryProgress(syncHistoryId, issuesSynced);
+    }
+
+    // Sync completed successfully - clear checkpoint
+    await clearSyncCheckpoint(projectKey);
+    await completeSyncHistory(syncHistoryId, true, issuesSynced);
+
+    return {
+      projectKey,
+      issuesSynced,
+      issuesTotalInJira: totalIssues,
+      startedAt,
+      completedAt: new Date().toISOString(),
+      success: true,
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (syncHistoryId) {
+      await completeSyncHistory(syncHistoryId, false, issuesSynced, errorMessage);
+    }
+    return {
+      projectKey,
+      issuesSynced,
+      issuesTotalInJira: 0,
+      startedAt,
+      completedAt: new Date().toISOString(),
+      success: false,
+      errorMessage,
+    };
+  }
+}
+
+// Sync all enabled projects
+export async function syncAllProjects(
+  onProgress?: (progress: SyncProgress) => void
+): Promise<SyncResult[]> {
+  if (isSyncing) {
+    throw new Error('Sync is already in progress');
+  }
+
+  isSyncing = true;
+  cancelRequested = false;
+  const results: SyncResult[] = [];
+
+  try {
+    const settings = await loadSettings();
+    const enabledProjects = settings.projects.filter((p) => p.enabled);
+
+    if (enabledProjects.length === 0) {
+      throw new Error('No projects enabled for sync');
+    }
+
+    for (const project of enabledProjects) {
+      if (cancelRequested) {
+        break;
+      }
+
+      const result = await syncProject(project.key, onProgress);
+      results.push(result);
+    }
+
+    return results;
+  } finally {
+    isSyncing = false;
+    currentSyncProgress = null;
+  }
+}
+
+// Get projects with sync status
+export async function getProjectsWithStatus(): Promise<
+  (ProjectConfig & { issueCount?: number; hasCheckpoint?: boolean })[]
+> {
+  const settings = await loadSettings();
+  const { getIssueCount } = await import('./database');
+
+  const projectsWithStatus = await Promise.all(
+    settings.projects.map(async (project) => {
+      let issueCount: number | undefined;
+      try {
+        await initDatabase();
+        issueCount = await getIssueCount(project.key);
+      } catch {
+        issueCount = undefined;
+      }
+
+      return {
+        ...project,
+        issueCount,
+        hasCheckpoint: !!project.syncCheckpoint,
+      };
+    })
+  );
+
+  return projectsWithStatus;
+}

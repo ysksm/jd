@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Generate Icons</title>
+</head>
+<body>
+  <p>Right-click each image and save as icon16.png, icon48.png, icon128.png respectively:</p>
+  <div style="display: flex; gap: 20px; align-items: flex-end;">
+    <div>
+      <canvas id="c16" width="16" height="16"></canvas>
+      <p>icon16.png</p>
+    </div>
+    <div>
+      <canvas id="c48" width="48" height="48"></canvas>
+      <p>icon48.png</p>
+    </div>
+    <div>
+      <canvas id="c128" width="128" height="128"></canvas>
+      <p>icon128.png</p>
+    </div>
+  </div>
+  <script>
+    function drawIcon(ctx, size) {
+      // Background
+      ctx.fillStyle = '#0052CC';
+      ctx.fillRect(0, 0, size, size);
+
+      // Text
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = 'bold ' + (size * 0.5) + 'px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('J', size / 2, size / 2 + size * 0.05);
+    }
+
+    var sizes = [16, 48, 128];
+    sizes.forEach(function(size) {
+      var canvas = document.getElementById('c' + size);
+      drawIcon(canvas.getContext('2d'), size);
+    });
+  </script>
+</body>
+</html>
