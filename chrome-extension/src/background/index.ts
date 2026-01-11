@@ -268,10 +268,14 @@ async function openAiAndPaste(service: AiServiceType, instructions: string, issu
   let targetTabId: number;
 
   if (tabs.length > 0 && tabs[0].id) {
-    // Focus existing tab
-    console.log('[Background] Focusing existing tab:', tabs[0].id);
+    // Focus existing tab and bring window to front
+    console.log('[Background] Focusing existing tab:', tabs[0].id, 'windowId:', tabs[0].windowId);
     try {
       await chrome.tabs.update(tabs[0].id, { active: true });
+      // Also bring the window to front
+      if (tabs[0].windowId) {
+        await chrome.windows.update(tabs[0].windowId, { focused: true });
+      }
       targetTabId = tabs[0].id;
     } catch (updateError) {
       console.error('[Background] Failed to update tab:', updateError);

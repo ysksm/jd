@@ -878,9 +878,12 @@ ${instructions}`;
     }
     let targetTabId;
     if (tabs.length > 0 && tabs[0].id) {
-      console.log("[Background] Focusing existing tab:", tabs[0].id);
+      console.log("[Background] Focusing existing tab:", tabs[0].id, "windowId:", tabs[0].windowId);
       try {
         await chrome.tabs.update(tabs[0].id, { active: true });
+        if (tabs[0].windowId) {
+          await chrome.windows.update(tabs[0].windowId, { focused: true });
+        }
         targetTabId = tabs[0].id;
       } catch (updateError) {
         console.error("[Background] Failed to update tab:", updateError);
