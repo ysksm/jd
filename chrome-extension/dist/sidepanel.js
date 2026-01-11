@@ -449,6 +449,8 @@ chrome.runtime.onMessage.addListener((message) => {
   } else if (message.type === "SYNC_ERROR") {
     hideSyncStatus();
     alert(`Sync failed: ${message.payload}`);
+  } else if (message.type === "CLAUDE_CLIPBOARD_FALLBACK") {
+    alert("\u5165\u529B\u6B04\u304C\u898B\u3064\u304B\u3089\u306A\u304B\u3063\u305F\u305F\u3081\u3001\u30AF\u30EA\u30C3\u30D7\u30DC\u30FC\u30C9\u306B\u30B3\u30D4\u30FC\u3057\u307E\u3057\u305F\u3002\nCtrl+V (Cmd+V) \u3067\u8CBC\u308A\u4ED8\u3051\u3066\u304F\u3060\u3055\u3044\u3002");
   }
 });
 function debounce(fn, delay) {

@@ -183,22 +183,39 @@ async function openClaudeAndPaste(instructions: string, issueKey: string): Promi
   console.log('[Background] Opening Claude with prompt length:', fullPrompt.length);
 
   // Store prompt for the injected script to use
-  await chrome.storage.local.set({
-    claudeCodePendingPrompt: fullPrompt,
-    claudeCodeTimestamp: Date.now(),
-  });
+  try {
+    await chrome.storage.local.set({
+      claudeCodePendingPrompt: fullPrompt,
+      claudeCodeTimestamp: Date.now(),
+    });
+    console.log('[Background] Stored prompt in storage');
+  } catch (storageError) {
+    console.error('[Background] Failed to store prompt:', storageError);
+    throw storageError;
+  }
 
   // Check if Claude is already open
-  const tabs = await chrome.tabs.query({ url: 'https://claude.ai/*' });
-  console.log('[Background] Found existing Claude tabs:', tabs.length);
+  let tabs: chrome.tabs.Tab[] = [];
+  try {
+    tabs = await chrome.tabs.query({ url: 'https://claude.ai/*' });
+    console.log('[Background] Found existing Claude tabs:', tabs.length);
+  } catch (queryError) {
+    console.error('[Background] Failed to query tabs:', queryError);
+    throw queryError;
+  }
 
   let targetTabId: number;
 
   if (tabs.length > 0 && tabs[0].id) {
     // Focus existing tab
     console.log('[Background] Focusing existing tab:', tabs[0].id);
-    await chrome.tabs.update(tabs[0].id, { active: true });
-    targetTabId = tabs[0].id;
+    try {
+      await chrome.tabs.update(tabs[0].id, { active: true });
+      targetTabId = tabs[0].id;
+    } catch (updateError) {
+      console.error('[Background] Failed to update tab:', updateError);
+      throw updateError;
+    }
     // Wait a moment then inject
     await new Promise(resolve => setTimeout(resolve, 500));
     await injectClaudeScript(targetTabId);
@@ -206,17 +223,27 @@ async function openClaudeAndPaste(instructions: string, issueKey: string): Promi
     // Create new tab
     const url = 'https://claude.ai/new';
     console.log('[Background] Creating new tab:', url);
-    const tab = await chrome.tabs.create({ url });
+
+    let tab: chrome.tabs.Tab;
+    try {
+      tab = await chrome.tabs.create({ url });
+      console.log('[Background] Tab created:', tab.id, tab.url);
+    } catch (createError) {
+      console.error('[Background] Failed to create tab:', createError);
+      throw createError;
+    }
 
     if (!tab.id) {
-      throw new Error('Failed to create tab');
+      throw new Error('Failed to create tab - no tab ID');
     }
 
     targetTabId = tab.id;
 
     // Wait for tab to load
+    console.log('[Background] Waiting for tab to load...');
     await new Promise<void>((resolve) => {
       const listener = (tabId: number, info: chrome.tabs.TabChangeInfo) => {
+        console.log('[Background] Tab updated:', tabId, info.status);
         if (tabId === targetTabId && info.status === 'complete') {
           chrome.tabs.onUpdated.removeListener(listener);
           resolve();
@@ -226,12 +253,14 @@ async function openClaudeAndPaste(instructions: string, issueKey: string): Promi
 
       // Timeout after 10 seconds
       setTimeout(() => {
+        console.log('[Background] Tab load timeout');
         chrome.tabs.onUpdated.removeListener(listener);
         resolve();
       }, 10000);
     });
 
     // Wait for React to render
+    console.log('[Background] Waiting for React to render...');
     await new Promise(resolve => setTimeout(resolve, 2000));
     await injectClaudeScript(targetTabId);
   }
@@ -260,25 +289,40 @@ async function injectClaudeScript(tabId: number): Promise<void> {
         // Clear the prompt
         await chrome.storage.local.remove(['claudeCodePendingPrompt', 'claudeCodeTimestamp']);
 
-        // Try multiple selectors for Claude's input
+        // Try multiple selectors for Claude's input (Claude UI changes frequently)
         const selectors = [
+          // Claude's main input area
+          '[data-placeholder="How can Claude help you today?"]',
+          '[data-placeholder]',
+          // ProseMirror editor
+          'div.ProseMirror[contenteditable="true"]',
           'div[contenteditable="true"].ProseMirror',
+          '.ProseMirror[contenteditable="true"]',
+          // Generic contenteditable
           'div[contenteditable="true"]',
-          '.ProseMirror',
+          '[contenteditable="true"]',
+          // Fallback to textarea
+          'textarea[placeholder]',
           'textarea',
+          // Any input-like element in the chat area
+          'form div[contenteditable]',
+          'main div[contenteditable]',
         ];
 
         let inputEl: HTMLElement | null = null;
         for (const selector of selectors) {
-          inputEl = document.querySelector(selector);
-          if (inputEl) {
-            console.log('[JIRA DB] Found input with selector:', selector);
+          const elements = document.querySelectorAll(selector);
+          console.log(`[JIRA DB] Selector "${selector}" found ${elements.length} elements`);
+          if (elements.length > 0) {
+            inputEl = elements[0] as HTMLElement;
+            console.log('[JIRA DB] Found input with selector:', selector, inputEl);
             break;
           }
         }
 
         if (!inputEl) {
           console.error('[JIRA DB] Could not find input element');
+          console.log('[JIRA DB] Page content:', document.body.innerHTML.substring(0, 2000));
           // Try to copy to clipboard as fallback
           try {
             await navigator.clipboard.writeText(prompt);
@@ -295,8 +339,15 @@ async function injectClaudeScript(tabId: number): Promise<void> {
           (inputEl as HTMLTextAreaElement).value = prompt;
           inputEl.dispatchEvent(new Event('input', { bubbles: true }));
         } else {
-          // For contenteditable
-          document.execCommand('selectAll', false);
+          // For contenteditable - clear and insert
+          // Select all existing content first
+          const selection = window.getSelection();
+          const range = document.createRange();
+          range.selectNodeContents(inputEl);
+          selection?.removeAllRanges();
+          selection?.addRange(range);
+
+          // Insert the text
           document.execCommand('insertText', false, prompt);
         }
 
@@ -310,8 +361,12 @@ async function injectClaudeScript(tabId: number): Promise<void> {
     const result = results?.[0]?.result as { success: boolean; error?: string } | undefined;
     if (result && !result.success) {
       if (result.error === 'no_input_clipboard') {
-        // Prompt was copied to clipboard
+        // Prompt was copied to clipboard - notify user
         console.log('[Background] Copied to clipboard as fallback');
+        // Send notification to sidepanel
+        chrome.runtime.sendMessage({
+          type: 'CLAUDE_CLIPBOARD_FALLBACK',
+        }).catch(() => {});
       }
     }
   } catch (error) {

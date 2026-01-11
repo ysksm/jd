@@ -510,7 +510,7 @@ backBtnEl.addEventListener('click', hideDetail);
 openInJiraBtnEl.addEventListener('click', openInJira);
 cancelSyncBtnEl.addEventListener('click', cancelSyncHandler);
 
-// Listen for sync progress updates
+// Listen for sync progress updates and other messages
 chrome.runtime.onMessage.addListener((message) => {
   if (message.type === 'SYNC_PROGRESS') {
     const progress = message.payload as SyncProgress;
@@ -523,6 +523,9 @@ chrome.runtime.onMessage.addListener((message) => {
   } else if (message.type === 'SYNC_ERROR') {
     hideSyncStatus();
     alert(`Sync failed: ${message.payload}`);
+  } else if (message.type === 'CLAUDE_CLIPBOARD_FALLBACK') {
+    // Show notification that text was copied to clipboard
+    alert('入力欄が見つからなかったため、クリップボードにコピーしました。\nCtrl+V (Cmd+V) で貼り付けてください。');
   }
 });
 
