@@ -6,7 +6,7 @@ import type {
   DbChangeHistory,
   Settings,
 } from '../lib/types';
-import { extractClaudeInstructions, sendToClaudeCode } from '../lib/claude-code';
+import { extractClaudeInstructions } from '../lib/claude-code';
 
 // State
 let currentPage = 0;
@@ -361,9 +361,19 @@ function renderIssueDetail(issue: DbIssue, history: DbChangeHistory[]) {
       try {
         sendToClaudeBtn.textContent = 'Sending...';
         (sendToClaudeBtn as HTMLButtonElement).disabled = true;
-        console.log('[SidePanel] Calling sendToClaudeCode with issue:', issue.key);
-        await sendToClaudeCode(claudeInstructions, issue.key);
-        console.log('[SidePanel] sendToClaudeCode completed');
+        console.log('[SidePanel] Sending SEND_TO_CLAUDE message for issue:', issue.key);
+
+        // Send message to background script to handle tab operations
+        const response = await sendMessage({
+          type: 'SEND_TO_CLAUDE',
+          payload: { instructions: claudeInstructions, issueKey: issue.key },
+        });
+
+        console.log('[SidePanel] SEND_TO_CLAUDE response:', response);
+
+        if (!response.success) {
+          throw new Error(response.error || 'Failed to send to Claude');
+        }
       } catch (error) {
         console.error('[SidePanel] Failed to send to Claude Code:', error);
         alert(`Failed to send to Claude Code: ${error instanceof Error ? error.message : String(error)}`);

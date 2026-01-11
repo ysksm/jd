@@ -788,8 +788,127 @@
         const history = await getIssueHistory(issueKey, field);
         return { success: true, data: history };
       }
+      case "SEND_TO_CLAUDE": {
+        const { instructions, issueKey } = message.payload;
+        console.log("[Background] SEND_TO_CLAUDE received for issue:", issueKey);
+        try {
+          await openClaudeAndPaste(instructions, issueKey);
+          return { success: true };
+        } catch (error) {
+          console.error("[Background] Failed to send to Claude:", error);
+          return {
+            success: false,
+            error: error instanceof Error ? error.message : String(error)
+          };
+        }
+      }
       default:
         return { success: false, error: `Unknown message type: ${message.type}` };
+    }
+  }
+  async function openClaudeAndPaste(instructions, issueKey) {
+    const fullPrompt = `[JIRA: ${issueKey}]
+
+${instructions}`;
+    console.log("[Background] Opening Claude with prompt length:", fullPrompt.length);
+    await chrome.storage.local.set({
+      claudeCodePendingPrompt: fullPrompt,
+      claudeCodeTimestamp: Date.now()
+    });
+    const tabs = await chrome.tabs.query({ url: "https://claude.ai/*" });
+    console.log("[Background] Found existing Claude tabs:", tabs.length);
+    let targetTabId;
+    if (tabs.length > 0 && tabs[0].id) {
+      console.log("[Background] Focusing existing tab:", tabs[0].id);
+      await chrome.tabs.update(tabs[0].id, { active: true });
+      targetTabId = tabs[0].id;
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      await injectClaudeScript(targetTabId);
+    } else {
+      const url = "https://claude.ai/new";
+      console.log("[Background] Creating new tab:", url);
+      const tab = await chrome.tabs.create({ url });
+      if (!tab.id) {
+        throw new Error("Failed to create tab");
+      }
+      targetTabId = tab.id;
+      await new Promise((resolve) => {
+        const listener = (tabId, info) => {
+          if (tabId === targetTabId && info.status === "complete") {
+            chrome.tabs.onUpdated.removeListener(listener);
+            resolve();
+          }
+        };
+        chrome.tabs.onUpdated.addListener(listener);
+        setTimeout(() => {
+          chrome.tabs.onUpdated.removeListener(listener);
+          resolve();
+        }, 1e4);
+      });
+      await new Promise((resolve) => setTimeout(resolve, 2e3));
+      await injectClaudeScript(targetTabId);
+    }
+  }
+  async function injectClaudeScript(tabId) {
+    console.log("[Background] Injecting script into tab:", tabId);
+    try {
+      const results = await chrome.scripting.executeScript({
+        target: { tabId },
+        func: async () => {
+          console.log("[JIRA DB] Injected script running in Claude...");
+          const result2 = await chrome.storage.local.get(["claudeCodePendingPrompt", "claudeCodeTimestamp"]);
+          const prompt = result2.claudeCodePendingPrompt;
+          const timestamp = result2.claudeCodeTimestamp;
+          if (!prompt || !timestamp || Date.now() - timestamp > 6e4) {
+            console.log("[JIRA DB] No pending prompt or expired");
+            return { success: false, error: "expired" };
+          }
+          await chrome.storage.local.remove(["claudeCodePendingPrompt", "claudeCodeTimestamp"]);
+          const selectors = [
+            'div[contenteditable="true"].ProseMirror',
+            'div[contenteditable="true"]',
+            ".ProseMirror",
+            "textarea"
+          ];
+          let inputEl = null;
+          for (const selector of selectors) {
+            inputEl = document.querySelector(selector);
+            if (inputEl) {
+              console.log("[JIRA DB] Found input with selector:", selector);
+              break;
+            }
+          }
+          if (!inputEl) {
+            console.error("[JIRA DB] Could not find input element");
+            try {
+              await navigator.clipboard.writeText(prompt);
+              return { success: false, error: "no_input_clipboard" };
+            } catch {
+              return { success: false, error: "no_input" };
+            }
+          }
+          inputEl.focus();
+          if (inputEl.tagName === "TEXTAREA") {
+            inputEl.value = prompt;
+            inputEl.dispatchEvent(new Event("input", { bubbles: true }));
+          } else {
+            document.execCommand("selectAll", false);
+            document.execCommand("insertText", false, prompt);
+          }
+          console.log("[JIRA DB] Prompt pasted successfully");
+          return { success: true };
+        }
+      });
+      console.log("[Background] Script results:", results);
+      const result = results?.[0]?.result;
+      if (result && !result.success) {
+        if (result.error === "no_input_clipboard") {
+          console.log("[Background] Copied to clipboard as fallback");
+        }
+      }
+    } catch (error) {
+      console.error("[Background] Script injection failed:", error);
+      throw error;
     }
   }
   console.log("JIRA DB Sync background service started");
