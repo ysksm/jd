@@ -1,0 +1,19 @@
+{
+  "name": "jira-db-chrome-extension",
+  "version": "1.0.0",
+  "description": "Chrome extension for syncing JIRA data to local DuckDB",
+  "type": "module",
+  "scripts": {
+    "build": "node build.js",
+    "watch": "node build.js --watch",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@duckdb/duckdb-wasm": "^1.29.0"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.1.33",
+    "esbuild": "^0.20.0",
+    "typescript": "^5.3.0"
+  }
+}

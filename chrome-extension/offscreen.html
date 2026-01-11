@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>JIRA DB Offscreen</title>
+</head>
+<body>
+  <!-- Offscreen document for DuckDB WASM operations -->
+  <script>
+    // Set up error handlers BEFORE loading the main script
+    console.log('[Offscreen HTML] Setting up error handlers...');
+
+    window.onerror = function(message, source, lineno, colno, error) {
+      console.error('[Offscreen HTML] Script error:', { message, source, lineno, colno, error });
+      return true;
+    };
+
+    window.addEventListener('unhandledrejection', function(event) {
+      console.error('[Offscreen HTML] Unhandled rejection:', event.reason);
+    });
+
+    console.log('[Offscreen HTML] Error handlers ready, loading main script...');
+  </script>
+  <script src="dist/offscreen.js"></script>
+  <script>
+    console.log('[Offscreen HTML] Main script loaded successfully');
+  </script>
+</body>
+</html>

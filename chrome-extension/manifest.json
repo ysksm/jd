@@ -1,0 +1,55 @@
+{
+  "manifest_version": 3,
+  "name": "JIRA DB Sync",
+  "version": "1.0.0",
+  "description": "Sync JIRA data to local DuckDB for offline search and analysis",
+  "permissions": [
+    "storage",
+    "alarms",
+    "offscreen",
+    "sidePanel",
+    "scripting",
+    "clipboardWrite",
+    "tabs",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "https://*.atlassian.net/*",
+    "https://claude.ai/*",
+    "https://chatgpt.com/*"
+  ],
+  "background": {
+    "service_worker": "dist/background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "public/icons/icon16.png",
+      "48": "public/icons/icon48.png",
+      "128": "public/icons/icon128.png"
+    }
+  },
+  "options_page": "options.html",
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "icons": {
+    "16": "public/icons/icon16.png",
+    "48": "public/icons/icon48.png",
+    "128": "public/icons/icon128.png"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; worker-src 'self'"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "dist/*.wasm",
+        "dist/*.js",
+        "dist/duckdb-browser-eh.worker.js",
+        "dist/duckdb-browser-mvp.worker.js"
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

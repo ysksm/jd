@@ -1,0 +1,6 @@
+node_modules/
+dist/*.wasm
+dist/*.map
+dist/duckdb-browser-*.worker.js
+*.log
+.DS_Store
