@@ -436,25 +436,27 @@ function escapeSQL(value: string | null): string {
 }
 
 // Convert ISO timestamp string to DuckDB-compatible format
-// DuckDB needs 'YYYY-MM-DD HH:MM:SS' format without timezone suffix
+// DuckDB TIMESTAMP is timezone-naive and interprets strings as LOCAL time
+// So we must use local time components, not UTC
 function escapeTimestamp(isoString: string | null): string {
   if (!isoString) return 'NULL';
 
   try {
-    // Parse the ISO string and get UTC components
+    // Parse the ISO string (JS Date handles timezone correctly)
     const date = new Date(isoString);
     if (isNaN(date.getTime())) {
       console.warn(`[Offscreen] Invalid timestamp: ${isoString}`);
       return 'NULL';
     }
 
-    // Format as DuckDB-compatible timestamp string (in UTC)
-    const year = date.getUTCFullYear();
-    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
-    const day = String(date.getUTCDate()).padStart(2, '0');
-    const hours = String(date.getUTCHours()).padStart(2, '0');
-    const minutes = String(date.getUTCMinutes()).padStart(2, '0');
-    const seconds = String(date.getUTCSeconds()).padStart(2, '0');
+    // Format as DuckDB-compatible timestamp string (in LOCAL time)
+    // DuckDB will interpret this as local time, which matches what we want
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const seconds = String(date.getSeconds()).padStart(2, '0');
 
     const formatted = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
     return `'${formatted}'`;
