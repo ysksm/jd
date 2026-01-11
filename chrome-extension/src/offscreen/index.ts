@@ -436,8 +436,7 @@ function escapeSQL(value: string | null): string {
 }
 
 // Convert ISO timestamp string to DuckDB-compatible format
-// DuckDB TIMESTAMP is timezone-naive and interprets strings as LOCAL time
-// So we must use local time components, not UTC
+// DuckDB TIMESTAMP is timezone-naive; store UTC components consistently.
 function escapeTimestamp(isoString: string | null): string {
   if (!isoString) return 'NULL';
 
@@ -449,14 +448,14 @@ function escapeTimestamp(isoString: string | null): string {
       return 'NULL';
     }
 
-    // Format as DuckDB-compatible timestamp string (in LOCAL time)
-    // DuckDB will interpret this as local time, which matches what we want
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    const seconds = String(date.getSeconds()).padStart(2, '0');
+    // Format as DuckDB-compatible timestamp string (in UTC time)
+    // DuckDB will interpret this as local time, so we store UTC components.
+    const year = date.getUTCFullYear();
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(date.getUTCDate()).padStart(2, '0');
+    const hours = String(date.getUTCHours()).padStart(2, '0');
+    const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+    const seconds = String(date.getUTCSeconds()).padStart(2, '0');
 
     const formatted = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
     return `'${formatted}'`;
@@ -695,10 +694,13 @@ async function searchIssues(params: SearchParams): Promise<SearchResult> {
 function timestampToISOString(value: unknown): string {
   if (!value) return '';
 
-  // If it's already a string, return it
+  // If it's already a string, normalize to UTC ISO string
   if (typeof value === 'string') {
-    console.log(`[Offscreen] timestampToISOString: string "${value}"`);
-    return value;
+    const normalized = value.includes('T') ? value : value.replace(' ', 'T');
+    const hasTimezone = /[zZ]|[+-]\d{2}:?\d{2}$/.test(normalized);
+    const isoStr = new Date(hasTimezone ? normalized : `${normalized}Z`).toISOString();
+    console.log(`[Offscreen] timestampToISOString: string "${value}" -> "${isoStr}"`);
+    return isoStr;
   }
 
   // If it's a BigInt (microseconds since epoch), convert to milliseconds
