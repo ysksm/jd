@@ -327,8 +327,8 @@ async function getProjects(): Promise<DbProject[]> {
       key: String(r.key || ''),
       name: String(r.name || ''),
       project_type: String(r.project_type || ''),
-      created_at: String(r.created_at || ''),
-      updated_at: String(r.updated_at || ''),
+      created_at: timestampToISOString(r.created_at),
+      updated_at: timestampToISOString(r.updated_at),
     };
   });
 }
@@ -438,11 +438,11 @@ function rowToDbIssue(row: Record<string, unknown>): DbIssue {
     labels: row.labels ? String(row.labels) : null,
     components: row.components ? String(row.components) : null,
     fix_versions: row.fix_versions ? String(row.fix_versions) : null,
-    created_at: String(row.created_at || ''),
-    updated_at: String(row.updated_at || ''),
+    created_at: timestampToISOString(row.created_at),
+    updated_at: timestampToISOString(row.updated_at),
     raw_data: String(row.raw_data || '{}'),
     is_deleted: Boolean(row.is_deleted),
-    synced_at: String(row.synced_at || ''),
+    synced_at: timestampToISOString(row.synced_at),
   };
 }
 
@@ -498,6 +498,36 @@ async function searchIssues(params: SearchParams): Promise<SearchResult> {
   };
 }
 
+// Helper to convert DuckDB timestamp to ISO string
+function timestampToISOString(value: unknown): string {
+  if (!value) return '';
+
+  // If it's already a string, return it
+  if (typeof value === 'string') return value;
+
+  // If it's a BigInt (microseconds since epoch), convert to milliseconds
+  if (typeof value === 'bigint') {
+    return new Date(Number(value / 1000n)).toISOString();
+  }
+
+  // If it's a number (milliseconds or seconds)
+  if (typeof value === 'number') {
+    // If it's in seconds (< year 3000 in seconds), convert to milliseconds
+    if (value < 32503680000) {
+      return new Date(value * 1000).toISOString();
+    }
+    return new Date(value).toISOString();
+  }
+
+  // If it's a Date object
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  // Try to convert to string
+  return String(value);
+}
+
 async function getIssueHistory(issueKey: string, field?: string): Promise<DbChangeHistory[]> {
   if (!conn) throw new Error('Database not initialized');
 
@@ -525,19 +555,19 @@ async function getIssueHistory(issueKey: string, field?: string): Promise<DbChan
       from_string: r.from_string ? String(r.from_string) : null,
       to_value: r.to_value ? String(r.to_value) : null,
       to_string: r.to_string ? String(r.to_string) : null,
-      changed_at: String(r.changed_at || ''),
+      changed_at: timestampToISOString(r.changed_at),
     };
   });
 }
 
 async function getLatestUpdatedAt(projectKey: string): Promise<string | null> {
   if (!conn) throw new Error('Database not initialized');
-  const sql = `SELECT MAX(updated_at)::VARCHAR as max_updated FROM issues WHERE project_key = ${escapeSQL(projectKey)} AND is_deleted = FALSE`;
+  const sql = `SELECT MAX(updated_at) as max_updated FROM issues WHERE project_key = ${escapeSQL(projectKey)} AND is_deleted = FALSE`;
   const result = await conn.query(sql);
   const rows = result.toArray();
   if (rows.length === 0) return null;
   const row = rows[0] as Record<string, unknown>;
-  return row.max_updated ? String(row.max_updated) : null;
+  return row.max_updated ? timestampToISOString(row.max_updated) : null;
 }
 
 async function getIssueCount(projectKey: string): Promise<number> {

@@ -12634,8 +12634,8 @@ return true;`);
         key: String(r.key || ""),
         name: String(r.name || ""),
         project_type: String(r.project_type || ""),
-        created_at: String(r.created_at || ""),
-        updated_at: String(r.updated_at || "")
+        created_at: timestampToISOString(r.created_at),
+        updated_at: timestampToISOString(r.updated_at)
       };
     });
   }
@@ -12739,11 +12739,11 @@ return true;`);
       labels: row.labels ? String(row.labels) : null,
       components: row.components ? String(row.components) : null,
       fix_versions: row.fix_versions ? String(row.fix_versions) : null,
-      created_at: String(row.created_at || ""),
-      updated_at: String(row.updated_at || ""),
+      created_at: timestampToISOString(row.created_at),
+      updated_at: timestampToISOString(row.updated_at),
       raw_data: String(row.raw_data || "{}"),
       is_deleted: Boolean(row.is_deleted),
-      synced_at: String(row.synced_at || "")
+      synced_at: timestampToISOString(row.synced_at)
     };
   }
   async function getIssue(key) {
@@ -12788,6 +12788,25 @@ return true;`);
       total
     };
   }
+  function timestampToISOString(value) {
+    if (!value)
+      return "";
+    if (typeof value === "string")
+      return value;
+    if (typeof value === "bigint") {
+      return new Date(Number(value / 1000n)).toISOString();
+    }
+    if (typeof value === "number") {
+      if (value < 3250368e4) {
+        return new Date(value * 1e3).toISOString();
+      }
+      return new Date(value).toISOString();
+    }
+    if (value instanceof Date) {
+      return value.toISOString();
+    }
+    return String(value);
+  }
   async function getIssueHistory(issueKey, field) {
     if (!conn)
       throw new Error("Database not initialized");
@@ -12812,20 +12831,20 @@ return true;`);
         from_string: r.from_string ? String(r.from_string) : null,
         to_value: r.to_value ? String(r.to_value) : null,
         to_string: r.to_string ? String(r.to_string) : null,
-        changed_at: String(r.changed_at || "")
+        changed_at: timestampToISOString(r.changed_at)
       };
     });
   }
   async function getLatestUpdatedAt(projectKey) {
     if (!conn)
       throw new Error("Database not initialized");
-    const sql = `SELECT MAX(updated_at)::VARCHAR as max_updated FROM issues WHERE project_key = ${escapeSQL(projectKey)} AND is_deleted = FALSE`;
+    const sql = `SELECT MAX(updated_at) as max_updated FROM issues WHERE project_key = ${escapeSQL(projectKey)} AND is_deleted = FALSE`;
     const result = await conn.query(sql);
     const rows = result.toArray();
     if (rows.length === 0)
       return null;
     const row = rows[0];
-    return row.max_updated ? String(row.max_updated) : null;
+    return row.max_updated ? timestampToISOString(row.max_updated) : null;
   }
   async function getIssueCount(projectKey) {
     if (!conn)
