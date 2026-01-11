@@ -10,29 +10,55 @@ import type {
 
 export class JiraClient {
   private endpoint: string;
-  private authHeader: string;
+  private authHeader: string | null;
+  private useBrowserAuth: boolean;
 
   constructor(settings: JiraSettings) {
     this.endpoint = settings.endpoint.replace(/\/$/, '');
-    // Base64 encode for Basic Auth
-    const credentials = btoa(`${settings.username}:${settings.apiKey}`);
-    this.authHeader = `Basic ${credentials}`;
+    this.useBrowserAuth = settings.authMethod === 'browser';
+
+    if (this.useBrowserAuth) {
+      // Use browser session cookies - no auth header needed
+      this.authHeader = null;
+    } else {
+      // Base64 encode for Basic Auth
+      const credentials = btoa(`${settings.username}:${settings.apiKey}`);
+      this.authHeader = `Basic ${credentials}`;
+    }
   }
 
   private async request<T>(path: string, options: RequestInit = {}): Promise<T> {
     const url = `${this.endpoint}${path}`;
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    };
+
+    // Add auth header only for API token auth
+    if (this.authHeader) {
+      headers['Authorization'] = this.authHeader;
+    }
+
     const response = await fetch(url, {
       ...options,
+      // Include cookies for browser auth
+      credentials: this.useBrowserAuth ? 'include' : 'omit',
       headers: {
-        'Authorization': this.authHeader,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
+        ...headers,
         ...options.headers,
       },
     });
 
     if (!response.ok) {
       const errorText = await response.text();
+      if (response.status === 401) {
+        if (this.useBrowserAuth) {
+          throw new Error('Not logged in to JIRA. Please log in to JIRA in your browser first.');
+        } else {
+          throw new Error('Invalid API credentials. Please check your username and API token.');
+        }
+      }
       throw new Error(`JIRA API error: ${response.status} ${response.statusText} - ${errorText}`);
     }
 

@@ -1,5 +1,8 @@
 // src/options/options.ts
 var endpointEl = document.getElementById("endpoint");
+var authBrowserEl = document.getElementById("authBrowser");
+var authApiTokenEl = document.getElementById("authApiToken");
+var apiTokenFieldsEl = document.getElementById("apiTokenFields");
 var usernameEl = document.getElementById("username");
 var apiKeyEl = document.getElementById("apiKey");
 var testConnectionBtnEl = document.getElementById("testConnectionBtn");
@@ -29,11 +32,25 @@ function populateForm() {
   if (!settings)
     return;
   endpointEl.value = settings.jira.endpoint;
+  const authMethod = settings.jira.authMethod || "browser";
+  if (authMethod === "browser") {
+    authBrowserEl.checked = true;
+    apiTokenFieldsEl.style.display = "none";
+  } else {
+    authApiTokenEl.checked = true;
+    apiTokenFieldsEl.style.display = "block";
+  }
   usernameEl.value = settings.jira.username;
   apiKeyEl.value = settings.jira.apiKey;
   incrementalSyncEl.checked = settings.sync.incrementalSyncEnabled;
   marginMinutesEl.value = String(settings.sync.incrementalSyncMarginMinutes);
   batchSizeEl.value = String(settings.sync.batchSize);
+}
+function getSelectedAuthMethod() {
+  return authApiTokenEl.checked ? "api_token" : "browser";
+}
+function toggleApiTokenFields() {
+  apiTokenFieldsEl.style.display = authApiTokenEl.checked ? "block" : "none";
 }
 async function loadProjects() {
   const response = await sendMessage({
@@ -104,10 +121,12 @@ function showStatus(element, type, message) {
 async function testConnection() {
   testConnectionBtnEl.disabled = true;
   testConnectionBtnEl.innerHTML = '<span class="loading"><span class="spinner"></span>Testing...</span>';
+  const authMethod = getSelectedAuthMethod();
   const tempSettings = {
     ...settings,
     jira: {
       endpoint: endpointEl.value.trim(),
+      authMethod,
       username: usernameEl.value.trim(),
       apiKey: apiKeyEl.value.trim()
     }
@@ -126,8 +145,10 @@ async function testConnection() {
 async function saveConnection() {
   if (!settings)
     return;
+  const authMethod = getSelectedAuthMethod();
   settings.jira = {
     endpoint: endpointEl.value.trim(),
+    authMethod,
     username: usernameEl.value.trim(),
     apiKey: apiKeyEl.value.trim()
   };
@@ -189,4 +210,6 @@ saveSyncSettingsBtnEl.addEventListener("click", saveSyncSettings);
 fetchProjectsBtnEl.addEventListener("click", fetchProjects);
 exportDataBtnEl.addEventListener("click", exportData);
 clearDataBtnEl.addEventListener("click", clearData);
+authBrowserEl.addEventListener("change", toggleApiTokenFields);
+authApiTokenEl.addEventListener("change", toggleApiTokenFields);
 init();

@@ -1,8 +1,11 @@
 // Settings types
+export type AuthMethod = 'browser' | 'api_token';
+
 export interface JiraSettings {
   endpoint: string;
-  username: string;
-  apiKey: string;
+  authMethod: AuthMethod;
+  username: string;  // Only used for api_token auth
+  apiKey: string;    // Only used for api_token auth
 }
 
 export interface SyncSettings {

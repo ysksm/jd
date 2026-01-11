@@ -22,15 +22,30 @@
           <span class="hint">Your Atlassian Cloud or JIRA Server URL</span>
         </div>
         <div class="form-group">
-          <label for="username">Username / Email</label>
-          <input type="text" id="username" placeholder="user@example.com">
+          <label>Authentication Method</label>
+          <div class="radio-group">
+            <label class="radio-label">
+              <input type="radio" name="authMethod" value="browser" id="authBrowser" checked>
+              Use browser session (already logged in to JIRA)
+            </label>
+            <label class="radio-label">
+              <input type="radio" name="authMethod" value="api_token" id="authApiToken">
+              Use API Token
+            </label>
+          </div>
         </div>
-        <div class="form-group">
-          <label for="apiKey">API Token</label>
-          <input type="password" id="apiKey" placeholder="Your API token">
-          <span class="hint">
-            Generate at <a href="https://id.atlassian.com/manage-profile/security/api-tokens" target="_blank">Atlassian API Tokens</a>
-          </span>
+        <div id="apiTokenFields" style="display: none;">
+          <div class="form-group">
+            <label for="username">Username / Email</label>
+            <input type="text" id="username" placeholder="user@example.com">
+          </div>
+          <div class="form-group">
+            <label for="apiKey">API Token</label>
+            <input type="password" id="apiKey" placeholder="Your API token">
+            <span class="hint">
+              Generate at <a href="https://id.atlassian.com/manage-profile/security/api-tokens" target="_blank">Atlassian API Tokens</a>
+            </span>
+          </div>
         </div>
         <div class="form-actions">
           <button id="testConnectionBtn" class="btn btn-secondary">Test Connection</button>

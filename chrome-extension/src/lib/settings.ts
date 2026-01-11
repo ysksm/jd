@@ -5,6 +5,7 @@ const SETTINGS_KEY = 'jira_db_settings';
 const DEFAULT_SETTINGS: Settings = {
   jira: {
     endpoint: '',
+    authMethod: 'browser',  // Default to browser auth (no credentials needed)
     username: '',
     apiKey: '',
   },
@@ -143,9 +144,13 @@ export async function getEnabledProjects(): Promise<ProjectConfig[]> {
 // Check if JIRA is configured
 export async function isJiraConfigured(): Promise<boolean> {
   const settings = await loadSettings();
-  return !!(
-    settings.jira.endpoint &&
-    settings.jira.username &&
-    settings.jira.apiKey
-  );
+  if (!settings.jira.endpoint) return false;
+
+  // Browser auth only needs endpoint
+  if (settings.jira.authMethod === 'browser') {
+    return true;
+  }
+
+  // API token auth needs all credentials
+  return !!(settings.jira.username && settings.jira.apiKey);
 }

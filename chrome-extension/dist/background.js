@@ -13848,6 +13848,8 @@ return true;`);
   var DEFAULT_SETTINGS = {
     jira: {
       endpoint: "",
+      authMethod: "browser",
+      // Default to browser auth (no credentials needed)
       username: "",
       apiKey: ""
     },
@@ -13944,24 +13946,44 @@ return true;`);
   var JiraClient = class {
     endpoint;
     authHeader;
+    useBrowserAuth;
     constructor(settings) {
       this.endpoint = settings.endpoint.replace(/\/$/, "");
-      const credentials = btoa(`${settings.username}:${settings.apiKey}`);
-      this.authHeader = `Basic ${credentials}`;
+      this.useBrowserAuth = settings.authMethod === "browser";
+      if (this.useBrowserAuth) {
+        this.authHeader = null;
+      } else {
+        const credentials = btoa(`${settings.username}:${settings.apiKey}`);
+        this.authHeader = `Basic ${credentials}`;
+      }
     }
     async request(path, options = {}) {
       const url = `${this.endpoint}${path}`;
+      const headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      };
+      if (this.authHeader) {
+        headers["Authorization"] = this.authHeader;
+      }
       const response = await fetch(url, {
         ...options,
+        // Include cookies for browser auth
+        credentials: this.useBrowserAuth ? "include" : "omit",
         headers: {
-          "Authorization": this.authHeader,
-          "Content-Type": "application/json",
-          "Accept": "application/json",
+          ...headers,
           ...options.headers
         }
       });
       if (!response.ok) {
         const errorText = await response.text();
+        if (response.status === 401) {
+          if (this.useBrowserAuth) {
+            throw new Error("Not logged in to JIRA. Please log in to JIRA in your browser first.");
+          } else {
+            throw new Error("Invalid API credentials. Please check your username and API token.");
+          }
+        }
         throw new Error(`JIRA API error: ${response.status} ${response.statusText} - ${errorText}`);
       }
       return response.json();

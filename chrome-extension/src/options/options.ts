@@ -1,7 +1,10 @@
-import type { Settings, ProjectConfig } from '../lib/types';
+import type { Settings, ProjectConfig, AuthMethod } from '../lib/types';
 
 // DOM elements
 const endpointEl = document.getElementById('endpoint') as HTMLInputElement;
+const authBrowserEl = document.getElementById('authBrowser') as HTMLInputElement;
+const authApiTokenEl = document.getElementById('authApiToken') as HTMLInputElement;
+const apiTokenFieldsEl = document.getElementById('apiTokenFields')!;
 const usernameEl = document.getElementById('username') as HTMLInputElement;
 const apiKeyEl = document.getElementById('apiKey') as HTMLInputElement;
 const testConnectionBtnEl = document.getElementById('testConnectionBtn') as HTMLButtonElement;
@@ -41,6 +44,17 @@ function populateForm() {
 
   // JIRA connection
   endpointEl.value = settings.jira.endpoint;
+
+  // Auth method
+  const authMethod = settings.jira.authMethod || 'browser';
+  if (authMethod === 'browser') {
+    authBrowserEl.checked = true;
+    apiTokenFieldsEl.style.display = 'none';
+  } else {
+    authApiTokenEl.checked = true;
+    apiTokenFieldsEl.style.display = 'block';
+  }
+
   usernameEl.value = settings.jira.username;
   apiKeyEl.value = settings.jira.apiKey;
 
@@ -48,6 +62,14 @@ function populateForm() {
   incrementalSyncEl.checked = settings.sync.incrementalSyncEnabled;
   marginMinutesEl.value = String(settings.sync.incrementalSyncMarginMinutes);
   batchSizeEl.value = String(settings.sync.batchSize);
+}
+
+function getSelectedAuthMethod(): AuthMethod {
+  return authApiTokenEl.checked ? 'api_token' : 'browser';
+}
+
+function toggleApiTokenFields() {
+  apiTokenFieldsEl.style.display = authApiTokenEl.checked ? 'block' : 'none';
 }
 
 async function loadProjects() {
@@ -140,11 +162,14 @@ async function testConnection() {
   testConnectionBtnEl.disabled = true;
   testConnectionBtnEl.innerHTML = '<span class="loading"><span class="spinner"></span>Testing...</span>';
 
+  const authMethod = getSelectedAuthMethod();
+
   // Temporarily save settings for testing
   const tempSettings: Settings = {
     ...settings!,
     jira: {
       endpoint: endpointEl.value.trim(),
+      authMethod,
       username: usernameEl.value.trim(),
       apiKey: apiKeyEl.value.trim(),
     },
@@ -170,8 +195,11 @@ async function testConnection() {
 async function saveConnection() {
   if (!settings) return;
 
+  const authMethod = getSelectedAuthMethod();
+
   settings.jira = {
     endpoint: endpointEl.value.trim(),
+    authMethod,
     username: usernameEl.value.trim(),
     apiKey: apiKeyEl.value.trim(),
   };
@@ -256,6 +284,10 @@ saveSyncSettingsBtnEl.addEventListener('click', saveSyncSettings);
 fetchProjectsBtnEl.addEventListener('click', fetchProjects);
 exportDataBtnEl.addEventListener('click', exportData);
 clearDataBtnEl.addEventListener('click', clearData);
+
+// Auth method toggle
+authBrowserEl.addEventListener('change', toggleApiTokenFields);
+authApiTokenEl.addEventListener('change', toggleApiTokenFields);
 
 // Initialize on load
 init();
