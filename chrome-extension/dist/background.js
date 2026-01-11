@@ -34,25 +34,52 @@
     const existingContexts = await chrome.runtime.getContexts({
       contextTypes: [chrome.runtime.ContextType.OFFSCREEN_DOCUMENT]
     });
-    if (existingContexts.length > 0) {
+    if (existingContexts.length > 0 && offscreenReady) {
       return;
     }
     if (creatingOffscreen) {
-      while (creatingOffscreen) {
+      while (creatingOffscreen || !offscreenReady) {
         await new Promise((resolve) => setTimeout(resolve, 100));
       }
       return;
     }
-    creatingOffscreen = true;
-    try {
-      await chrome.offscreen.createDocument({
-        url: "offscreen.html",
-        reasons: [chrome.offscreen.Reason.WORKERS],
-        justification: "DuckDB WASM requires Web Workers which are not available in service workers"
-      });
-    } finally {
-      creatingOffscreen = false;
+    if (existingContexts.length === 0) {
+      creatingOffscreen = true;
+      try {
+        await chrome.offscreen.createDocument({
+          url: "offscreen.html",
+          reasons: [chrome.offscreen.Reason.WORKERS],
+          justification: "DuckDB WASM requires Web Workers which are not available in service workers"
+        });
+      } finally {
+        creatingOffscreen = false;
+      }
     }
+    let retries = 50;
+    while (retries > 0) {
+      try {
+        const response = await new Promise((resolve) => {
+          chrome.runtime.sendMessage(
+            { target: "offscreen", action: "PING" },
+            (resp) => {
+              if (chrome.runtime.lastError) {
+                resolve({ success: false });
+              } else {
+                resolve(resp || { success: false });
+              }
+            }
+          );
+        });
+        if (response.success && response.data === "PONG") {
+          offscreenReady = true;
+          return;
+        }
+      } catch {
+      }
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      retries--;
+    }
+    throw new Error("Offscreen document failed to initialize");
   }
   async function sendToOffscreen(action, payload) {
     await ensureOffscreenDocument();
@@ -125,11 +152,12 @@
   }
   async function closeDatabase() {
   }
-  var creatingOffscreen;
+  var creatingOffscreen, offscreenReady;
   var init_database = __esm({
     "src/lib/database.ts"() {
       "use strict";
       creatingOffscreen = false;
+      offscreenReady = false;
     }
   });
 
@@ -583,6 +611,9 @@
   init_database();
   chrome.runtime.onMessage.addListener(
     (message, _sender, sendResponse) => {
+      if (message.target === "offscreen") {
+        return false;
+      }
       handleMessage(message).then((response) => sendResponse(response)).catch((error) => {
         console.error("Message handler error:", error);
         sendResponse({

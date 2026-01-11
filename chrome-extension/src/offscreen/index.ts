@@ -538,6 +538,10 @@ chrome.runtime.onMessage.addListener(
 
 async function handleAction(action: string, payload: unknown): Promise<unknown> {
   switch (action) {
+    case 'PING':
+      // Simple ping to check if offscreen document is ready
+      return 'PONG';
+
     case 'INIT_DATABASE':
       await initDatabase();
       return null;

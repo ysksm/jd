@@ -12829,6 +12829,8 @@ chrome.runtime.onMessage.addListener(
 );
 async function handleAction(action, payload) {
   switch (action) {
+    case "PING":
+      return "PONG";
     case "INIT_DATABASE":
       await initDatabase();
       return null;

@@ -18,37 +18,70 @@ import type {
 
 // Track offscreen document state
 let creatingOffscreen = false;
+let offscreenReady = false;
 
-// Ensure offscreen document exists
+// Ensure offscreen document exists and is ready
 async function ensureOffscreenDocument(): Promise<void> {
-  // Check if offscreen document already exists
+  // Check if offscreen document already exists and is ready
   const existingContexts = await chrome.runtime.getContexts({
     contextTypes: [chrome.runtime.ContextType.OFFSCREEN_DOCUMENT],
   });
 
-  if (existingContexts.length > 0) {
+  if (existingContexts.length > 0 && offscreenReady) {
     return;
   }
 
   // Prevent creating multiple offscreen documents
   if (creatingOffscreen) {
     // Wait for the existing creation to complete
-    while (creatingOffscreen) {
+    while (creatingOffscreen || !offscreenReady) {
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
     return;
   }
 
-  creatingOffscreen = true;
-  try {
-    await chrome.offscreen.createDocument({
-      url: 'offscreen.html',
-      reasons: [chrome.offscreen.Reason.WORKERS],
-      justification: 'DuckDB WASM requires Web Workers which are not available in service workers',
-    });
-  } finally {
-    creatingOffscreen = false;
+  if (existingContexts.length === 0) {
+    creatingOffscreen = true;
+    try {
+      await chrome.offscreen.createDocument({
+        url: 'offscreen.html',
+        reasons: [chrome.offscreen.Reason.WORKERS],
+        justification: 'DuckDB WASM requires Web Workers which are not available in service workers',
+      });
+    } finally {
+      creatingOffscreen = false;
+    }
   }
+
+  // Wait for the offscreen document to signal it's ready
+  // by sending a ping and waiting for a pong
+  let retries = 50; // 5 seconds max
+  while (retries > 0) {
+    try {
+      const response = await new Promise<{ success: boolean; data?: string }>((resolve) => {
+        chrome.runtime.sendMessage(
+          { target: 'offscreen', action: 'PING' },
+          (resp) => {
+            if (chrome.runtime.lastError) {
+              resolve({ success: false });
+            } else {
+              resolve(resp || { success: false });
+            }
+          }
+        );
+      });
+      if (response.success && response.data === 'PONG') {
+        offscreenReady = true;
+        return;
+      }
+    } catch {
+      // Ignore errors, keep retrying
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    retries--;
+  }
+
+  throw new Error('Offscreen document failed to initialize');
 }
 
 // Send message to offscreen document

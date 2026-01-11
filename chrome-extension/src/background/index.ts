@@ -26,10 +26,15 @@ import {
 // Listen for messages from popup/options
 chrome.runtime.onMessage.addListener(
   (
-    message: Message,
+    message: Message & { target?: string },
     _sender: chrome.runtime.MessageSender,
     sendResponse: (response: MessageResponse) => void
   ) => {
+    // Ignore messages intended for offscreen document
+    if (message.target === 'offscreen') {
+      return false;
+    }
+
     handleMessage(message)
       .then((response) => sendResponse(response))
       .catch((error) => {
