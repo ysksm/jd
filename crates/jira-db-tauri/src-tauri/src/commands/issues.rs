@@ -137,6 +137,14 @@ pub async fn issues_search(
         .map(convert_issue)
         .collect();
 
+    log::info!(
+        "[issues_search] Returning {} issues (total: {}, offset: {}, limit: {})",
+        issues.len(),
+        total,
+        offset,
+        limit
+    );
+
     Ok(IssueSearchResponse { issues, total })
 }
 
