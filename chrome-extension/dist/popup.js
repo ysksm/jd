@@ -33,7 +33,9 @@ async function init() {
   const response = await sendMessage({ type: "GET_SETTINGS" });
   if (response.success && response.data) {
     settings = response.data;
-    if (!settings.jira.endpoint || !settings.jira.username || !settings.jira.apiKey) {
+    const isBrowserAuth = settings.jira.authMethod === "browser";
+    const isConfigured = settings.jira.endpoint && (isBrowserAuth || settings.jira.username && settings.jira.apiKey);
+    if (!isConfigured) {
       showNotConfigured();
       return;
     }

@@ -49,7 +49,14 @@ async function init() {
     settings = response.data;
 
     // Check if configured
-    if (!settings.jira.endpoint || !settings.jira.username || !settings.jira.apiKey) {
+    // For browser auth, only endpoint is needed
+    // For API token auth, endpoint, username, and apiKey are all needed
+    const isBrowserAuth = settings.jira.authMethod === 'browser';
+    const isConfigured = settings.jira.endpoint && (
+      isBrowserAuth || (settings.jira.username && settings.jira.apiKey)
+    );
+
+    if (!isConfigured) {
       showNotConfigured();
       return;
     }
