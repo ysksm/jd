@@ -254,7 +254,7 @@ function renderIssueDetail(issue, history) {
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
             </svg>
-            Claude
+            Claude Code
           </button>
           <button id="sendToChatGptBtn" class="btn btn-ai btn-chatgpt">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -342,8 +342,8 @@ function renderIssueDetail(issue, history) {
     const sendToClaudeBtn = document.getElementById("sendToClaudeBtn");
     if (sendToClaudeBtn) {
       sendToClaudeBtn.addEventListener("click", async () => {
-        console.log("[SidePanel] Send to Claude clicked");
-        await sendToAi("SEND_TO_CLAUDE", sendToClaudeBtn, aiInstructions, issue.key, "Claude");
+        console.log("[SidePanel] Send to Claude Code clicked");
+        await sendToAi("SEND_TO_CLAUDE", sendToClaudeBtn, aiInstructions, issue.key, "Claude Code");
       });
     }
     const sendToChatGptBtn = document.getElementById("sendToChatGptBtn");
@@ -484,7 +484,7 @@ chrome.runtime.onMessage.addListener((message) => {
     hideSyncStatus();
     alert(`Sync failed: ${message.payload}`);
   } else if (message.type === "AI_CLIPBOARD_FALLBACK") {
-    const service = message.payload?.service === "chatgpt" ? "ChatGPT" : "Claude";
+    const service = message.payload?.service === "chatgpt" ? "ChatGPT Codex" : "Claude Code";
     alert(`${service}\u306E\u5165\u529B\u6B04\u304C\u898B\u3064\u304B\u3089\u306A\u304B\u3063\u305F\u305F\u3081\u3001\u30AF\u30EA\u30C3\u30D7\u30DC\u30FC\u30C9\u306B\u30B3\u30D4\u30FC\u3057\u307E\u3057\u305F\u3002
 Ctrl+V (Cmd+V) \u3067\u8CBC\u308A\u4ED8\u3051\u3066\u304F\u3060\u3055\u3044\u3002`);
   }

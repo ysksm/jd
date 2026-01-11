@@ -822,8 +822,8 @@
   }
   var AI_CONFIGS = {
     claude: {
-      name: "Claude",
-      url: "https://claude.ai/new",
+      name: "Claude Code",
+      url: "https://claude.ai/code",
       urlPattern: "https://claude.ai/*",
       selectors: [
         '[data-placeholder="How can Claude help you today?"]',

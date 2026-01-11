@@ -299,7 +299,7 @@ function renderIssueDetail(issue: DbIssue, history: DbChangeHistory[]) {
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
             </svg>
-            Claude
+            Claude Code
           </button>
           <button id="sendToChatGptBtn" class="btn btn-ai btn-chatgpt">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -390,8 +390,8 @@ function renderIssueDetail(issue: DbIssue, history: DbChangeHistory[]) {
     const sendToClaudeBtn = document.getElementById('sendToClaudeBtn');
     if (sendToClaudeBtn) {
       sendToClaudeBtn.addEventListener('click', async () => {
-        console.log('[SidePanel] Send to Claude clicked');
-        await sendToAi('SEND_TO_CLAUDE', sendToClaudeBtn as HTMLButtonElement, aiInstructions, issue.key, 'Claude');
+        console.log('[SidePanel] Send to Claude Code clicked');
+        await sendToAi('SEND_TO_CLAUDE', sendToClaudeBtn as HTMLButtonElement, aiInstructions, issue.key, 'Claude Code');
       });
     }
 
@@ -571,7 +571,7 @@ chrome.runtime.onMessage.addListener((message) => {
     alert(`Sync failed: ${message.payload}`);
   } else if (message.type === 'AI_CLIPBOARD_FALLBACK') {
     // Show notification that text was copied to clipboard
-    const service = message.payload?.service === 'chatgpt' ? 'ChatGPT' : 'Claude';
+    const service = message.payload?.service === 'chatgpt' ? 'ChatGPT Codex' : 'Claude Code';
     alert(`${service}の入力欄が見つからなかったため、クリップボードにコピーしました。\nCtrl+V (Cmd+V) で貼り付けてください。`);
   }
 });
