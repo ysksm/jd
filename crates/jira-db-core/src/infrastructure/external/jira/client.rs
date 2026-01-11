@@ -374,10 +374,13 @@ impl JiraService for JiraApiClient {
     ) -> DomainResult<FetchProgress> {
         // Build JQL: order by updated ASC (oldest first) for resumable sync
         let jql = if let Some(after) = after_updated_at {
-            let formatted_date = after.format("%Y-%m-%d %H:%M").to_string();
+            // Convert UTC to local timezone for JQL query
+            // JIRA interprets dates in the user's configured timezone
+            let local_time = after.with_timezone(&chrono::Local);
+            let formatted_date = local_time.format("%Y-%m-%d %H:%M").to_string();
             info!(
-                "[JIRA API] Incremental sync: after_updated_at={:?}, formatted={}",
-                after, formatted_date
+                "[JIRA API] Incremental sync: after_updated_at={:?} (UTC), local_time={}, formatted={}",
+                after, local_time, formatted_date
             );
             format!(
                 "project = {} AND updated >= \"{}\" ORDER BY updated ASC, key ASC",
