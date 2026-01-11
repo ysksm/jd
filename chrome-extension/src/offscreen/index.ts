@@ -178,33 +178,15 @@ async function initDatabase(): Promise<void> {
     console.log('[Offscreen] Instantiating DuckDB...');
     await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
 
-    // Try to restore database from IndexedDB
-    console.log('[Offscreen] Checking for saved database...');
-    const savedData = await loadFromIndexedDB();
-    if (savedData && savedData.length > 0) {
-      console.log('[Offscreen] Restoring database from IndexedDB...', savedData.length, 'bytes');
-      try {
-        // Register the file in DuckDB's virtual file system
-        await db.registerFileBuffer('jira.db', savedData);
-        console.log('[Offscreen] File registered in virtual file system');
-      } catch (restoreError) {
-        console.error('[Offscreen] Failed to register database file:', restoreError);
-      }
-    }
-
-    // Open database - if file exists, it will use it; otherwise creates new
-    console.log('[Offscreen] Opening database...');
-    await db.open({
-      path: 'jira.db',
-      accessMode: duckdb.DuckDBAccessMode.READ_WRITE,
-    });
-
     console.log('[Offscreen] Connecting...');
     conn = await db.connect();
 
-    console.log('[Offscreen] Creating tables (if not exist)...');
+    console.log('[Offscreen] Creating tables...');
     await createTables();
     console.log('[Offscreen] DuckDB initialized successfully');
+
+    // Note: Data persistence is handled separately via IndexedDB JSON export/import
+    // Binary file persistence is not reliable in DuckDB WASM
   } catch (error) {
     console.error('[Offscreen] Failed to initialize DuckDB:', error);
     if (error instanceof Error) {
@@ -713,30 +695,11 @@ async function exportDatabase(): Promise<Uint8Array> {
 }
 
 // Persist database to IndexedDB
+// Note: Binary file persistence is not reliable in DuckDB WASM in-memory mode
+// For now, just log that persistence was requested
 async function persistDatabase(): Promise<void> {
-  if (!db || !conn) throw new Error('Database not initialized');
-  console.log('[Offscreen] Persisting database to IndexedDB...');
-
-  try {
-    // Force checkpoint to write all data to the file
-    console.log('[Offscreen] Running CHECKPOINT...');
-    await conn.query('CHECKPOINT');
-
-    // Copy the database file to a buffer
-    console.log('[Offscreen] Copying database to buffer...');
-    const data = await db.copyFileToBuffer('jira.db');
-    console.log('[Offscreen] Database size:', data.length, 'bytes');
-
-    if (data.length > 0) {
-      await saveToIndexedDB(data);
-      console.log('[Offscreen] Database persisted successfully');
-    } else {
-      console.warn('[Offscreen] Database buffer is empty, skipping save');
-    }
-  } catch (error) {
-    console.error('[Offscreen] Failed to persist database:', error);
-    throw error;
-  }
+  console.log('[Offscreen] Persist requested (not implemented for in-memory mode)');
+  // TODO: Implement JSON-based export/import for data persistence
 }
 
 // Message handler

@@ -12389,60 +12389,6 @@ return true;`);
   }
   var db = null;
   var conn = null;
-  var IDB_NAME = "jira-db-storage";
-  var IDB_STORE = "database";
-  var IDB_KEY = "duckdb-data";
-  function openIndexedDB() {
-    return new Promise((resolve, reject) => {
-      const request = indexedDB.open(IDB_NAME, 1);
-      request.onerror = () => reject(request.error);
-      request.onsuccess = () => resolve(request.result);
-      request.onupgradeneeded = (event) => {
-        const db2 = event.target.result;
-        if (!db2.objectStoreNames.contains(IDB_STORE)) {
-          db2.createObjectStore(IDB_STORE);
-        }
-      };
-    });
-  }
-  async function saveToIndexedDB(data) {
-    console.log("[Offscreen] Saving database to IndexedDB...", data.length, "bytes");
-    const idb = await openIndexedDB();
-    return new Promise((resolve, reject) => {
-      const tx = idb.transaction(IDB_STORE, "readwrite");
-      const store = tx.objectStore(IDB_STORE);
-      const request = store.put(data, IDB_KEY);
-      request.onerror = () => reject(request.error);
-      request.onsuccess = () => {
-        console.log("[Offscreen] Database saved to IndexedDB");
-        resolve();
-      };
-    });
-  }
-  async function loadFromIndexedDB() {
-    try {
-      const idb = await openIndexedDB();
-      return new Promise((resolve, reject) => {
-        const tx = idb.transaction(IDB_STORE, "readonly");
-        const store = tx.objectStore(IDB_STORE);
-        const request = store.get(IDB_KEY);
-        request.onerror = () => reject(request.error);
-        request.onsuccess = () => {
-          const data = request.result;
-          if (data instanceof Uint8Array) {
-            console.log("[Offscreen] Loaded database from IndexedDB:", data.length, "bytes");
-            resolve(data);
-          } else {
-            console.log("[Offscreen] No saved database found in IndexedDB");
-            resolve(null);
-          }
-        };
-      });
-    } catch (error) {
-      console.error("[Offscreen] Failed to load from IndexedDB:", error);
-      return null;
-    }
-  }
   function getLocalBundles() {
     const baseUrl = chrome.runtime.getURL("dist/");
     return {
@@ -12504,25 +12450,9 @@ return true;`);
       db = new f(logger, worker);
       console.log("[Offscreen] Instantiating DuckDB...");
       await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
-      console.log("[Offscreen] Checking for saved database...");
-      const savedData = await loadFromIndexedDB();
-      if (savedData && savedData.length > 0) {
-        console.log("[Offscreen] Restoring database from IndexedDB...", savedData.length, "bytes");
-        try {
-          await db.registerFileBuffer("jira.db", savedData);
-          console.log("[Offscreen] File registered in virtual file system");
-        } catch (restoreError) {
-          console.error("[Offscreen] Failed to register database file:", restoreError);
-        }
-      }
-      console.log("[Offscreen] Opening database...");
-      await db.open({
-        path: "jira.db",
-        accessMode: ee.READ_WRITE
-      });
       console.log("[Offscreen] Connecting...");
       conn = await db.connect();
-      console.log("[Offscreen] Creating tables (if not exist)...");
+      console.log("[Offscreen] Creating tables...");
       await createTables();
       console.log("[Offscreen] DuckDB initialized successfully");
     } catch (error) {
@@ -12969,25 +12899,7 @@ return true;`);
     return await db.copyFileToBuffer("jira.db");
   }
   async function persistDatabase() {
-    if (!db || !conn)
-      throw new Error("Database not initialized");
-    console.log("[Offscreen] Persisting database to IndexedDB...");
-    try {
-      console.log("[Offscreen] Running CHECKPOINT...");
-      await conn.query("CHECKPOINT");
-      console.log("[Offscreen] Copying database to buffer...");
-      const data = await db.copyFileToBuffer("jira.db");
-      console.log("[Offscreen] Database size:", data.length, "bytes");
-      if (data.length > 0) {
-        await saveToIndexedDB(data);
-        console.log("[Offscreen] Database persisted successfully");
-      } else {
-        console.warn("[Offscreen] Database buffer is empty, skipping save");
-      }
-    } catch (error) {
-      console.error("[Offscreen] Failed to persist database:", error);
-      throw error;
-    }
+    console.log("[Offscreen] Persist requested (not implemented for in-memory mode)");
   }
   chrome.runtime.onMessage.addListener(
     (message, _sender, sendResponse) => {
