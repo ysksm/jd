@@ -6,7 +6,8 @@
   "permissions": [
     "storage",
     "alarms",
-    "offscreen"
+    "offscreen",
+    "sidePanel"
   ],
   "host_permissions": [
     "https://*.atlassian.net/*"
@@ -23,6 +24,9 @@
     }
   },
   "options_page": "options.html",
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
   "icons": {
     "16": "public/icons/icon16.png",
     "48": "public/icons/icon48.png",

@@ -48,11 +48,12 @@ const backgroundBuildOptions = {
   }
 };
 
-// Popup and options - use esm format
+// Popup, options, and sidepanel - use esm format
 const pagesBuildOptions = {
   entryPoints: [
     { in: 'src/popup/popup.ts', out: 'popup' },
     { in: 'src/options/options.ts', out: 'options' },
+    { in: 'src/sidepanel/sidepanel.ts', out: 'sidepanel' },
   ],
   bundle: true,
   outdir: 'dist',
