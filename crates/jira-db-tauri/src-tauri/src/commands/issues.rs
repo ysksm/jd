@@ -61,14 +61,14 @@ pub async fn issues_search(
             .collect()
     };
 
-    log::debug!(
+    tracing::debug!(
         "[issues_search] Searching {} projects: {:?}",
         projects_to_search.len(),
         projects_to_search
     );
 
     if projects_to_search.is_empty() {
-        log::debug!("[issues_search] No projects to search, returning empty");
+        tracing::debug!("[issues_search] No projects to search, returning empty");
         return Ok(IssueSearchResponse {
             issues: vec![],
             total: 0,
@@ -97,7 +97,7 @@ pub async fn issues_search(
 
                 match use_case.execute(params) {
                     Ok(issues) => {
-                        log::debug!(
+                        tracing::debug!(
                             "[issues_search] Found {} issues for project {}",
                             issues.len(),
                             project_key
@@ -105,7 +105,7 @@ pub async fn issues_search(
                         all_issues.extend(issues);
                     }
                     Err(e) => {
-                        log::warn!(
+                        tracing::warn!(
                             "[issues_search] Failed to search issues for project {}: {}",
                             project_key,
                             e
@@ -114,7 +114,7 @@ pub async fn issues_search(
                 }
             }
             None => {
-                log::warn!(
+                tracing::warn!(
                     "[issues_search] No database connection for project {}",
                     project_key
                 );
@@ -137,7 +137,7 @@ pub async fn issues_search(
         .map(convert_issue)
         .collect();
 
-    log::info!(
+    tracing::info!(
         "[issues_search] Returning {} issues (total: {}, offset: {}, limit: {})",
         issues.len(),
         total,
