@@ -1,6 +1,9 @@
 import * as esbuild from 'esbuild';
-import { mkdirSync, existsSync } from 'fs';
+import { mkdirSync, existsSync, copyFileSync } from 'fs';
+import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
 
+const __dirname = dirname(fileURLToPath(import.meta.url));
 const isWatch = process.argv.includes('--watch');
 
 // Ensure dist directory exists
@@ -8,8 +11,28 @@ if (!existsSync('dist')) {
   mkdirSync('dist', { recursive: true });
 }
 
-// Note: DuckDB WASM files are loaded from jsDelivr CDN at runtime
-// No need to copy them locally
+// Copy DuckDB WASM files locally (required for Manifest V3 CSP compliance)
+const duckdbDistPath = join(__dirname, 'node_modules/@duckdb/duckdb-wasm/dist');
+const filesToCopy = [
+  // WASM files
+  'duckdb-eh.wasm',
+  'duckdb-mvp.wasm',
+  // Worker scripts
+  'duckdb-browser-eh.worker.js',
+  'duckdb-browser-mvp.worker.js',
+];
+
+console.log('Copying DuckDB WASM files...');
+for (const file of filesToCopy) {
+  const src = join(duckdbDistPath, file);
+  const dest = join(__dirname, 'dist', file);
+  if (existsSync(src)) {
+    copyFileSync(src, dest);
+    console.log(`  Copied ${file}`);
+  } else {
+    console.warn(`  Warning: ${file} not found`);
+  }
+}
 
 // Background service worker - use iife format
 const backgroundBuildOptions = {

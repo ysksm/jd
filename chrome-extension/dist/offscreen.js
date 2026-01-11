@@ -12360,10 +12360,6 @@ return true;`);
   var qe = I[1];
   var Ye = I[2];
   var x = () => typeof navigator > "u";
-  function Je() {
-    let s = "https://cdn.jsdelivr.net/npm/".concat(M, "@").concat(G, "/dist/");
-    return { mvp: { mainModule: "".concat(s, "duckdb-mvp.wasm"), mainWorker: "".concat(s, "duckdb-browser-mvp.worker.js") }, eh: { mainModule: "".concat(s, "duckdb-eh.wasm"), mainWorker: "".concat(s, "duckdb-browser-eh.worker.js") } };
-  }
   var k = null;
   var y = null;
   var g = null;
@@ -12385,8 +12381,27 @@ return true;`);
   var Y = Z(q());
 
   // src/offscreen/index.ts
+  console.log("[Offscreen] Script starting...");
+  try {
+    console.log("[Offscreen] About to import DuckDB WASM...");
+  } catch (e) {
+    console.error("[Offscreen] Early initialization error:", e);
+  }
   var db = null;
   var conn = null;
+  function getLocalBundles() {
+    const baseUrl = chrome.runtime.getURL("dist/");
+    return {
+      mvp: {
+        mainModule: baseUrl + "duckdb-mvp.wasm",
+        mainWorker: baseUrl + "duckdb-browser-mvp.worker.js"
+      },
+      eh: {
+        mainModule: baseUrl + "duckdb-eh.wasm",
+        mainWorker: baseUrl + "duckdb-browser-eh.worker.js"
+      }
+    };
+  }
   async function initDatabase() {
     if (db && conn) {
       console.log("[Offscreen] Database already initialized, skipping");
@@ -12394,22 +12409,21 @@ return true;`);
     }
     console.log("[Offscreen] Initializing DuckDB WASM...");
     try {
-      const JSDELIVR_BUNDLES = Je();
-      console.log("[Offscreen] Got bundles, selecting...");
-      const bundle = await Xe(JSDELIVR_BUNDLES);
+      const bundles = getLocalBundles();
+      console.log("[Offscreen] Got local bundles, selecting...");
+      const bundle = await Xe(bundles);
       console.log("[Offscreen] Bundle selected:", bundle.mainModule);
-      const worker_url = URL.createObjectURL(
-        new Blob([`importScripts("${bundle.mainWorker}");`], {
-          type: "text/javascript"
-        })
-      );
+      console.log("[Offscreen] Fetching worker script...");
+      const workerResponse = await fetch(bundle.mainWorker);
+      const workerBlob = await workerResponse.blob();
+      const workerUrl = URL.createObjectURL(workerBlob);
       console.log("[Offscreen] Creating worker...");
-      const worker = new Worker(worker_url);
+      const worker = new Worker(workerUrl);
       const logger = new A();
       db = new f(logger, worker);
       console.log("[Offscreen] Instantiating DuckDB...");
       await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
-      URL.revokeObjectURL(worker_url);
+      URL.revokeObjectURL(workerUrl);
       console.log("[Offscreen] Connecting...");
       conn = await db.connect();
       console.log("[Offscreen] Creating tables...");
@@ -12916,5 +12930,12 @@ return true;`);
         throw new Error(`Unknown action: ${action}`);
     }
   }
+  window.onerror = (message, source, lineno, colno, error) => {
+    console.error("[Offscreen] Global error:", { message, source, lineno, colno, error });
+    return true;
+  };
+  window.addEventListener("unhandledrejection", (event) => {
+    console.error("[Offscreen] Unhandled promise rejection:", event.reason);
+  });
   console.log("[Offscreen] Document loaded and ready");
 })();

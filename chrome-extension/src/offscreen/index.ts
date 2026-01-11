@@ -5,6 +5,16 @@
  * allowing DuckDB WASM to function properly.
  */
 
+// Early logging to verify script is running
+console.log('[Offscreen] Script starting...');
+
+// Wrap everything in try-catch to catch initialization errors
+try {
+  console.log('[Offscreen] About to import DuckDB WASM...');
+} catch (e) {
+  console.error('[Offscreen] Early initialization error:', e);
+}
+
 import * as duckdb from '@duckdb/duckdb-wasm';
 import type {
   DbIssue,
@@ -28,6 +38,23 @@ interface OffscreenMessage {
   requestId: string;
 }
 
+// Get local bundle paths for DuckDB WASM files
+function getLocalBundles(): duckdb.DuckDBBundles {
+  // Use chrome.runtime.getURL to get the correct extension URLs
+  const baseUrl = chrome.runtime.getURL('dist/');
+
+  return {
+    mvp: {
+      mainModule: baseUrl + 'duckdb-mvp.wasm',
+      mainWorker: baseUrl + 'duckdb-browser-mvp.worker.js',
+    },
+    eh: {
+      mainModule: baseUrl + 'duckdb-eh.wasm',
+      mainWorker: baseUrl + 'duckdb-browser-eh.worker.js',
+    },
+  };
+}
+
 // Initialize DuckDB
 async function initDatabase(): Promise<void> {
   if (db && conn) {
@@ -38,25 +65,26 @@ async function initDatabase(): Promise<void> {
   console.log('[Offscreen] Initializing DuckDB WASM...');
 
   try {
-    const JSDELIVR_BUNDLES = duckdb.getJsDelivrBundles();
-    console.log('[Offscreen] Got bundles, selecting...');
-    const bundle = await duckdb.selectBundle(JSDELIVR_BUNDLES);
+    // Use local bundles instead of CDN (required for Manifest V3 CSP)
+    const bundles = getLocalBundles();
+    console.log('[Offscreen] Got local bundles, selecting...');
+    const bundle = await duckdb.selectBundle(bundles);
     console.log('[Offscreen] Bundle selected:', bundle.mainModule);
 
-    const worker_url = URL.createObjectURL(
-      new Blob([`importScripts("${bundle.mainWorker}");`], {
-        type: 'text/javascript',
-      })
-    );
+    // For local files, we need to fetch the worker script and create a blob
+    console.log('[Offscreen] Fetching worker script...');
+    const workerResponse = await fetch(bundle.mainWorker!);
+    const workerBlob = await workerResponse.blob();
+    const workerUrl = URL.createObjectURL(workerBlob);
 
     console.log('[Offscreen] Creating worker...');
-    const worker = new Worker(worker_url);
+    const worker = new Worker(workerUrl);
     const logger = new duckdb.ConsoleLogger();
     db = new duckdb.AsyncDuckDB(logger, worker);
 
     console.log('[Offscreen] Instantiating DuckDB...');
     await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
-    URL.revokeObjectURL(worker_url);
+    URL.revokeObjectURL(workerUrl);
 
     console.log('[Offscreen] Connecting...');
     conn = await db.connect();
@@ -648,5 +676,15 @@ async function handleAction(action: string, payload: unknown): Promise<unknown> 
       throw new Error(`Unknown action: ${action}`);
   }
 }
+
+// Set up global error handler to catch any uncaught errors
+window.onerror = (message, source, lineno, colno, error) => {
+  console.error('[Offscreen] Global error:', { message, source, lineno, colno, error });
+  return true;
+};
+
+window.addEventListener('unhandledrejection', (event) => {
+  console.error('[Offscreen] Unhandled promise rejection:', event.reason);
+});
 
 console.log('[Offscreen] Document loaded and ready');

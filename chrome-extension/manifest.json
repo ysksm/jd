@@ -29,11 +29,16 @@
     "128": "public/icons/icon128.png"
   },
   "content_security_policy": {
-    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval' blob:; object-src 'self' blob:; worker-src 'self' blob:"
   },
   "web_accessible_resources": [
     {
-      "resources": ["dist/*.wasm", "dist/*.js"],
+      "resources": [
+        "dist/*.wasm",
+        "dist/*.js",
+        "dist/duckdb-browser-eh.worker.js",
+        "dist/duckdb-browser-mvp.worker.js"
+      ],
       "matches": ["<all_urls>"]
     }
   ]
