@@ -12479,8 +12479,8 @@ return true;`);
       key VARCHAR UNIQUE NOT NULL,
       name VARCHAR NOT NULL,
       project_type VARCHAR,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMP DEFAULT current_timestamp,
+      updated_at TIMESTAMP DEFAULT current_timestamp
     )
   `);
     await runSql(`
@@ -12506,7 +12506,7 @@ return true;`);
       updated_at TIMESTAMP NOT NULL,
       raw_data VARCHAR NOT NULL,
       is_deleted BOOLEAN DEFAULT FALSE,
-      synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      synced_at TIMESTAMP DEFAULT current_timestamp
     )
   `);
     await runSql(`CREATE SEQUENCE IF NOT EXISTS seq_change_history_id START 1`);
@@ -12547,8 +12547,8 @@ return true;`);
       name VARCHAR NOT NULL,
       description VARCHAR,
       category VARCHAR,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      created_at TIMESTAMP DEFAULT current_timestamp,
+      updated_at TIMESTAMP DEFAULT current_timestamp,
       PRIMARY KEY (project_id, name)
     )
   `);
@@ -12558,8 +12558,8 @@ return true;`);
       name VARCHAR UNIQUE NOT NULL,
       description VARCHAR,
       icon_url VARCHAR,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMP DEFAULT current_timestamp,
+      updated_at TIMESTAMP DEFAULT current_timestamp
     )
   `);
     await runSql(`
@@ -12570,8 +12570,8 @@ return true;`);
       description VARCHAR,
       icon_url VARCHAR,
       subtask BOOLEAN DEFAULT FALSE,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      created_at TIMESTAMP DEFAULT current_timestamp,
+      updated_at TIMESTAMP DEFAULT current_timestamp,
       PRIMARY KEY (project_id, name)
     )
   `);
@@ -12614,12 +12614,12 @@ return true;`);
   async function upsertProject(project) {
     const sql = `
     INSERT INTO projects (id, key, name, project_type, updated_at)
-    VALUES (${escapeSQL(project.id)}, ${escapeSQL(project.key)}, ${escapeSQL(project.name)}, ${escapeSQL(project.projectTypeKey)}, CURRENT_TIMESTAMP)
+    VALUES (${escapeSQL(project.id)}, ${escapeSQL(project.key)}, ${escapeSQL(project.name)}, ${escapeSQL(project.projectTypeKey)}, current_timestamp)
     ON CONFLICT (id) DO UPDATE SET
       key = excluded.key,
       name = excluded.name,
       project_type = excluded.project_type,
-      updated_at = CURRENT_TIMESTAMP
+      updated_at = current_timestamp
   `;
     await runSql(sql);
   }
@@ -12662,7 +12662,7 @@ return true;`);
       ${escapeSQL(fields.reporter?.accountId || null)}, ${escapeSQL(fields.reporter?.displayName || null)},
       ${escapeSQL(labels)}, ${escapeSQL(components)}, ${escapeSQL(fixVersions)},
       ${escapeSQL(fields.created)}, ${escapeSQL(fields.updated)}, ${escapeSQL(rawData)},
-      FALSE, CURRENT_TIMESTAMP
+      FALSE, current_timestamp
     )
     ON CONFLICT (id) DO UPDATE SET
       key = excluded.key,
@@ -12685,7 +12685,7 @@ return true;`);
       updated_at = excluded.updated_at,
       raw_data = excluded.raw_data,
       is_deleted = FALSE,
-      synced_at = CURRENT_TIMESTAMP
+      synced_at = current_timestamp
   `;
     await runSql(sql);
     if (issue.changelog?.histories) {
@@ -12840,7 +12840,7 @@ return true;`);
       throw new Error("Database not initialized");
     const sql = `
     INSERT INTO sync_history (project_key, started_at, status, issues_synced)
-    VALUES (${escapeSQL(projectKey)}, CURRENT_TIMESTAMP, 'running', 0)
+    VALUES (${escapeSQL(projectKey)}, current_timestamp, 'running', 0)
     RETURNING id
   `;
     const result = await conn.query(sql);
@@ -12855,7 +12855,7 @@ return true;`);
     const status = success ? "completed" : "failed";
     const sql = `
     UPDATE sync_history SET
-      completed_at = CURRENT_TIMESTAMP,
+      completed_at = current_timestamp,
       status = ${escapeSQL(status)},
       issues_synced = ${issuesSynced},
       error_message = ${escapeSQL(errorMessage || null)}
