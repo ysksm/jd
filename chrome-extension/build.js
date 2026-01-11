@@ -42,17 +42,35 @@ const pagesBuildOptions = {
   }
 };
 
+// Offscreen document - use esm format (for DuckDB WASM)
+const offscreenBuildOptions = {
+  entryPoints: [
+    { in: 'src/offscreen/index.ts', out: 'offscreen' },
+  ],
+  bundle: true,
+  outdir: 'dist',
+  format: 'esm',
+  platform: 'browser',
+  target: 'chrome100',
+  sourcemap: false,
+  define: {
+    'process.env.NODE_ENV': '"production"'
+  }
+};
+
 async function build() {
   try {
     if (isWatch) {
       const ctx1 = await esbuild.context(backgroundBuildOptions);
       const ctx2 = await esbuild.context(pagesBuildOptions);
-      await Promise.all([ctx1.watch(), ctx2.watch()]);
+      const ctx3 = await esbuild.context(offscreenBuildOptions);
+      await Promise.all([ctx1.watch(), ctx2.watch(), ctx3.watch()]);
       console.log('Watching for changes...');
     } else {
       await Promise.all([
         esbuild.build(backgroundBuildOptions),
-        esbuild.build(pagesBuildOptions)
+        esbuild.build(pagesBuildOptions),
+        esbuild.build(offscreenBuildOptions)
       ]);
       console.log('Build completed successfully!');
     }

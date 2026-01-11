@@ -149,7 +149,7 @@ async function handleMessage(message: Message): Promise<MessageResponse> {
   }
 }
 
-// Initialize database on extension load
-initDatabase().catch(console.error);
+// Database is initialized on-demand via offscreen document
+// No need to initialize here
 
 console.log('JIRA DB Sync background service started');
