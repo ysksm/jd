@@ -28,7 +28,14 @@ export class JiraClient {
   }
 
   private async request<T>(path: string, options: RequestInit = {}): Promise<T> {
-    const url = `${this.endpoint}${path}`;
+    // Ensure endpoint has protocol
+    let endpoint = this.endpoint;
+    if (!endpoint.startsWith('http://') && !endpoint.startsWith('https://')) {
+      endpoint = `https://${endpoint}`;
+    }
+
+    const url = `${endpoint}${path}`;
+    console.log(`[JIRA Client] Requesting: ${url}`);
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -40,15 +47,29 @@ export class JiraClient {
       headers['Authorization'] = this.authHeader;
     }
 
-    const response = await fetch(url, {
-      ...options,
-      // Include cookies for browser auth
-      credentials: this.useBrowserAuth ? 'include' : 'omit',
-      headers: {
-        ...headers,
-        ...options.headers,
-      },
-    });
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        ...options,
+        // Include cookies for browser auth
+        credentials: this.useBrowserAuth ? 'include' : 'omit',
+        headers: {
+          ...headers,
+          ...options.headers,
+        },
+      });
+    } catch (error) {
+      console.error('[JIRA Client] Fetch error:', error);
+      if (error instanceof TypeError && error.message === 'Failed to fetch') {
+        throw new Error(
+          `Could not connect to ${endpoint}. Please check:\n` +
+          `1. The endpoint URL is correct\n` +
+          `2. You have network connectivity\n` +
+          `3. If using a custom domain (not *.atlassian.net), add it to the extension's permissions`
+        );
+      }
+      throw error;
+    }
 
     if (!response.ok) {
       const errorText = await response.text();

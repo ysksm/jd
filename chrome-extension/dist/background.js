@@ -282,7 +282,12 @@
       }
     }
     async request(path, options = {}) {
-      const url = `${this.endpoint}${path}`;
+      let endpoint = this.endpoint;
+      if (!endpoint.startsWith("http://") && !endpoint.startsWith("https://")) {
+        endpoint = `https://${endpoint}`;
+      }
+      const url = `${endpoint}${path}`;
+      console.log(`[JIRA Client] Requesting: ${url}`);
       const headers = {
         "Content-Type": "application/json",
         "Accept": "application/json"
@@ -290,15 +295,29 @@
       if (this.authHeader) {
         headers["Authorization"] = this.authHeader;
       }
-      const response = await fetch(url, {
-        ...options,
-        // Include cookies for browser auth
-        credentials: this.useBrowserAuth ? "include" : "omit",
-        headers: {
-          ...headers,
-          ...options.headers
+      let response;
+      try {
+        response = await fetch(url, {
+          ...options,
+          // Include cookies for browser auth
+          credentials: this.useBrowserAuth ? "include" : "omit",
+          headers: {
+            ...headers,
+            ...options.headers
+          }
+        });
+      } catch (error) {
+        console.error("[JIRA Client] Fetch error:", error);
+        if (error instanceof TypeError && error.message === "Failed to fetch") {
+          throw new Error(
+            `Could not connect to ${endpoint}. Please check:
+1. The endpoint URL is correct
+2. You have network connectivity
+3. If using a custom domain (not *.atlassian.net), add it to the extension's permissions`
+          );
         }
-      });
+        throw error;
+      }
       if (!response.ok) {
         const errorText = await response.text();
         if (response.status === 401) {
