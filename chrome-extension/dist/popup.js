@@ -391,4 +391,3 @@ issueModalEl.addEventListener("click", (e) => {
   }
 });
 init();
-//# sourceMappingURL=popup.js.map

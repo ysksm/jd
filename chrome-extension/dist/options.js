@@ -190,4 +190,3 @@ fetchProjectsBtnEl.addEventListener("click", fetchProjects);
 exportDataBtnEl.addEventListener("click", exportData);
 clearDataBtnEl.addEventListener("click", clearData);
 init();
-//# sourceMappingURL=options.js.map
