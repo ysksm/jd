@@ -12692,12 +12692,12 @@ return true;`);
         console.warn(`[Offscreen] Invalid timestamp: ${isoString}`);
         return "NULL";
       }
-      const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, "0");
-      const day = String(date.getDate()).padStart(2, "0");
-      const hours = String(date.getHours()).padStart(2, "0");
-      const minutes = String(date.getMinutes()).padStart(2, "0");
-      const seconds = String(date.getSeconds()).padStart(2, "0");
+      const year = date.getUTCFullYear();
+      const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+      const day = String(date.getUTCDate()).padStart(2, "0");
+      const hours = String(date.getUTCHours()).padStart(2, "0");
+      const minutes = String(date.getUTCMinutes()).padStart(2, "0");
+      const seconds = String(date.getUTCSeconds()).padStart(2, "0");
       const formatted = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
       return `'${formatted}'`;
     } catch (e) {
@@ -12908,8 +12908,11 @@ return true;`);
     if (!value)
       return "";
     if (typeof value === "string") {
-      console.log(`[Offscreen] timestampToISOString: string "${value}"`);
-      return value;
+      const normalized = value.includes("T") ? value : value.replace(" ", "T");
+      const hasTimezone = /[zZ]|[+-]\d{2}:?\d{2}$/.test(normalized);
+      const isoStr = new Date(hasTimezone ? normalized : `${normalized}Z`).toISOString();
+      console.log(`[Offscreen] timestampToISOString: string "${value}" -> "${isoStr}"`);
+      return isoStr;
     }
     if (typeof value === "bigint") {
       const ms = Number(value / 1000n);
