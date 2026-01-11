@@ -30,6 +30,66 @@ import type {
 let db: duckdb.AsyncDuckDB | null = null;
 let conn: duckdb.AsyncDuckDBConnection | null = null;
 
+// IndexedDB constants for persistence
+const IDB_NAME = 'jira-db-storage';
+const IDB_STORE = 'database';
+const IDB_KEY = 'duckdb-data';
+
+// IndexedDB helpers for persistence
+function openIndexedDB(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(IDB_NAME, 1);
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result);
+    request.onupgradeneeded = (event) => {
+      const db = (event.target as IDBOpenDBRequest).result;
+      if (!db.objectStoreNames.contains(IDB_STORE)) {
+        db.createObjectStore(IDB_STORE);
+      }
+    };
+  });
+}
+
+async function saveToIndexedDB(data: Uint8Array): Promise<void> {
+  console.log('[Offscreen] Saving database to IndexedDB...', data.length, 'bytes');
+  const idb = await openIndexedDB();
+  return new Promise((resolve, reject) => {
+    const tx = idb.transaction(IDB_STORE, 'readwrite');
+    const store = tx.objectStore(IDB_STORE);
+    const request = store.put(data, IDB_KEY);
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      console.log('[Offscreen] Database saved to IndexedDB');
+      resolve();
+    };
+  });
+}
+
+async function loadFromIndexedDB(): Promise<Uint8Array | null> {
+  try {
+    const idb = await openIndexedDB();
+    return new Promise((resolve, reject) => {
+      const tx = idb.transaction(IDB_STORE, 'readonly');
+      const store = tx.objectStore(IDB_STORE);
+      const request = store.get(IDB_KEY);
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        const data = request.result;
+        if (data instanceof Uint8Array) {
+          console.log('[Offscreen] Loaded database from IndexedDB:', data.length, 'bytes');
+          resolve(data);
+        } else {
+          console.log('[Offscreen] No saved database found in IndexedDB');
+          resolve(null);
+        }
+      };
+    });
+  } catch (error) {
+    console.error('[Offscreen] Failed to load from IndexedDB:', error);
+    return null;
+  }
+}
+
 // Message types for offscreen communication
 interface OffscreenMessage {
   target: 'offscreen';
@@ -118,10 +178,24 @@ async function initDatabase(): Promise<void> {
     console.log('[Offscreen] Instantiating DuckDB...');
     await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
 
+    // Try to restore database from IndexedDB
+    console.log('[Offscreen] Checking for saved database...');
+    const savedData = await loadFromIndexedDB();
+    if (savedData && savedData.length > 0) {
+      console.log('[Offscreen] Restoring database from IndexedDB...');
+      try {
+        await db.registerFileBuffer('jira.db', savedData);
+        await db.open({ path: 'jira.db' });
+        console.log('[Offscreen] Database restored from IndexedDB');
+      } catch (restoreError) {
+        console.error('[Offscreen] Failed to restore database, starting fresh:', restoreError);
+      }
+    }
+
     console.log('[Offscreen] Connecting...');
     conn = await db.connect();
 
-    console.log('[Offscreen] Creating tables...');
+    console.log('[Offscreen] Creating tables (if not exist)...');
     await createTables();
     console.log('[Offscreen] DuckDB initialized successfully');
   } catch (error) {
@@ -631,6 +705,15 @@ async function exportDatabase(): Promise<Uint8Array> {
   return await db.copyFileToBuffer('jira.db');
 }
 
+// Persist database to IndexedDB
+async function persistDatabase(): Promise<void> {
+  if (!db) throw new Error('Database not initialized');
+  console.log('[Offscreen] Persisting database to IndexedDB...');
+  const data = await db.copyFileToBuffer('jira.db');
+  await saveToIndexedDB(data);
+  console.log('[Offscreen] Database persisted successfully');
+}
+
 // Message handler
 chrome.runtime.onMessage.addListener(
   (
@@ -747,6 +830,11 @@ async function handleAction(action: string, payload: unknown): Promise<unknown> 
     case 'EXPORT_DATABASE':
       await initDatabase();
       return await exportDatabase();
+
+    case 'PERSIST_DATABASE':
+      await initDatabase();
+      await persistDatabase();
+      return null;
 
     default:
       throw new Error(`Unknown action: ${action}`);

@@ -24,6 +24,7 @@
     getProjectStatuses: () => getProjectStatuses,
     getProjects: () => getProjects,
     initDatabase: () => initDatabase,
+    persistDatabase: () => persistDatabase,
     searchIssues: () => searchIssues,
     startSyncHistory: () => startSyncHistory,
     updateSyncHistoryProgress: () => updateSyncHistoryProgress,
@@ -163,6 +164,9 @@
   }
   async function exportDatabase() {
     return await sendToOffscreen("EXPORT_DATABASE");
+  }
+  async function persistDatabase() {
+    await sendToOffscreen("PERSIST_DATABASE");
   }
   async function closeDatabase() {
   }
@@ -583,6 +587,13 @@
       }
       await clearSyncCheckpoint(projectKey);
       await completeSyncHistory(syncHistoryId, true, issuesSynced);
+      console.log(`[SyncService] Persisting database...`);
+      try {
+        await persistDatabase();
+        console.log(`[SyncService] Database persisted successfully`);
+      } catch (persistError) {
+        console.error(`[SyncService] Failed to persist database:`, persistError);
+      }
       return {
         projectKey,
         issuesSynced,

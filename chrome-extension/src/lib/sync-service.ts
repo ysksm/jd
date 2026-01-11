@@ -7,6 +7,7 @@ import {
   startSyncHistory,
   completeSyncHistory,
   updateSyncHistoryProgress,
+  persistDatabase,
 } from './database';
 import {
   loadSettings,
@@ -178,6 +179,16 @@ export async function syncProject(
     // Sync completed successfully - clear checkpoint
     await clearSyncCheckpoint(projectKey);
     await completeSyncHistory(syncHistoryId, true, issuesSynced);
+
+    // Persist database to IndexedDB for next session
+    console.log(`[SyncService] Persisting database...`);
+    try {
+      await persistDatabase();
+      console.log(`[SyncService] Database persisted successfully`);
+    } catch (persistError) {
+      console.error(`[SyncService] Failed to persist database:`, persistError);
+      // Don't fail the sync if persistence fails
+    }
 
     return {
       projectKey,

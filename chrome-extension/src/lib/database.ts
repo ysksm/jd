@@ -199,6 +199,11 @@ export async function exportDatabase(): Promise<Uint8Array> {
   return await sendToOffscreen<Uint8Array>('EXPORT_DATABASE');
 }
 
+// Persist database to IndexedDB for next session
+export async function persistDatabase(): Promise<void> {
+  await sendToOffscreen('PERSIST_DATABASE');
+}
+
 // Close database connection (no-op in proxy mode)
 export async function closeDatabase(): Promise<void> {
   // Offscreen document manages its own lifecycle
