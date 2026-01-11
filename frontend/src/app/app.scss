@@ -10,8 +10,13 @@
   color: #eee;
   padding: 1rem;
   flex-shrink: 0;
+  transition: width 0.2s ease, padding 0.2s ease;
+  overflow: hidden;
 
   .sidebar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     padding: 1rem;
     border-bottom: 1px solid #333;
     margin-bottom: 1rem;
@@ -20,6 +25,25 @@
       margin: 0;
       font-size: 1.5rem;
       font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+
+    .collapse-btn {
+      background: none;
+      border: none;
+      color: #bbb;
+      cursor: pointer;
+      padding: 0.25rem 0.5rem;
+      font-size: 1rem;
+      border-radius: 4px;
+      transition: background-color 0.2s, color 0.2s;
+      flex-shrink: 0;
+
+      &:hover {
+        background-color: #2a2a4e;
+        color: #fff;
+      }
     }
   }
 
@@ -32,12 +56,25 @@
       margin-bottom: 0.5rem;
 
       a {
-        display: block;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
         padding: 0.75rem 1rem;
         color: #bbb;
         text-decoration: none;
         border-radius: 4px;
         transition: background-color 0.2s, color 0.2s;
+        white-space: nowrap;
+
+        .nav-icon {
+          flex-shrink: 0;
+          font-size: 1.125rem;
+        }
+
+        .nav-text {
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
 
         &:hover {
           background-color: #2a2a4e;
@@ -60,4 +97,39 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  position: relative;
+
+  .expand-btn {
+    display: none;
+    position: absolute;
+    top: 1rem;
+    left: 1rem;
+    background: #1a1a2e;
+    border: none;
+    color: #fff;
+    cursor: pointer;
+    padding: 0.5rem 0.75rem;
+    font-size: 1.25rem;
+    border-radius: 4px;
+    z-index: 10;
+    transition: background-color 0.2s;
+
+    &:hover {
+      background-color: #2a2a4e;
+    }
+  }
+}
+
+// Collapsed state
+.app-container.sidebar-collapsed {
+  .sidebar {
+    width: 0;
+    padding: 0;
+  }
+
+  .main-content {
+    .expand-btn {
+      display: block;
+    }
+  }
 }

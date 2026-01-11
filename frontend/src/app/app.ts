@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, signal, OnInit } from '@angular/core';
 import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
 
 @Component({
@@ -7,6 +7,21 @@ import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
   templateUrl: './app.html',
   styleUrl: './app.scss'
 })
-export class App {
+export class App implements OnInit {
   readonly title = 'JiraDb';
+  sidebarCollapsed = signal(false);
+
+  ngOnInit(): void {
+    // Restore sidebar state from localStorage
+    const saved = localStorage.getItem('sidebarCollapsed');
+    if (saved !== null) {
+      this.sidebarCollapsed.set(saved === 'true');
+    }
+  }
+
+  toggleSidebar(): void {
+    const newState = !this.sidebarCollapsed();
+    this.sidebarCollapsed.set(newState);
+    localStorage.setItem('sidebarCollapsed', String(newState));
+  }
 }
