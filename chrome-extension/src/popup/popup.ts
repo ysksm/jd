@@ -43,14 +43,18 @@ const cancelSyncBtnEl = document.getElementById('cancelSyncBtn') as HTMLButtonEl
 const copyTemplateBtnEl = document.getElementById('copyTemplateBtn') as HTMLButtonElement;
 
 // AI instruction template
-const AI_TEMPLATE = `\`\`\`ai
+const AI_TEMPLATE = `
+\`\`\`ai
+作成するブランチ名にチケット名を含めて作業をしてください。
+
 ここにAIへの指示を記述してください。
 
 例:
 - このチケットの内容を分析して、実装に必要なタスクを洗い出してください
 - このバグの原因を調査し、修正方法を提案してください
 - このチケットに基づいてテストケースを作成してください
-\`\`\``;
+\`\`\`
+`;
 
 // Initialize
 async function init() {
