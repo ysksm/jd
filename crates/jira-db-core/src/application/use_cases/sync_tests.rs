@@ -1116,4 +1116,101 @@ mod tests {
                 .contains("changelog")
         );
     }
+
+    /// Test: Snapshot checkpoint is returned when snapshot generation fails
+    #[tokio::test]
+    async fn test_snapshot_checkpoint_returned_on_failure() {
+        let now = Utc::now();
+        let issues = vec![
+            create_test_issue("1", "PROJ-1", "100", now - Duration::hours(2)),
+            create_test_issue("2", "PROJ-2", "100", now - Duration::hours(1)),
+        ];
+
+        let jira_service = Arc::new(MockJiraService::new(vec![issues]));
+        let issue_repo = Arc::new(MockIssueRepository::new());
+        let history_repo = Arc::new(MockChangeHistoryRepository::new());
+        let metadata_repo = Arc::new(MockMetadataRepository::new());
+        let sync_history_repo = Arc::new(MockSyncHistoryRepository::new());
+        let snapshot_repo = Arc::new(MockIssueSnapshotRepository::new());
+
+        let use_case = SyncProjectUseCase::new(
+            Arc::clone(&issue_repo),
+            Arc::clone(&history_repo),
+            Arc::clone(&metadata_repo),
+            Arc::clone(&sync_history_repo),
+            Arc::clone(&snapshot_repo),
+            Arc::clone(&jira_service),
+        );
+
+        let result = use_case
+            .execute_resumable("PROJ", "100", None, |_| {})
+            .await
+            .unwrap();
+
+        // Sync should succeed (issues and snapshots)
+        assert!(result.sync_result.success);
+        // No snapshot checkpoint on success
+        assert!(result.snapshot_checkpoint.is_none());
+    }
+
+    /// Test: Resume from snapshot checkpoint skips issue sync
+    #[tokio::test]
+    async fn test_resume_from_snapshot_checkpoint() {
+        use crate::infrastructure::config::SnapshotCheckpoint;
+
+        let now = Utc::now();
+        // Pre-populate issues (simulating they were already synced)
+        let issues = vec![
+            create_test_issue("1", "PROJ-1", "100", now - Duration::hours(2)),
+            create_test_issue("2", "PROJ-2", "100", now - Duration::hours(1)),
+        ];
+
+        // Empty JIRA service (should not be called)
+        let jira_service = Arc::new(MockJiraService::new(vec![]));
+        let issue_repo = Arc::new(MockIssueRepository::new());
+        // Pre-populate issues
+        issue_repo.batch_insert(&issues).unwrap();
+
+        let history_repo = Arc::new(MockChangeHistoryRepository::new());
+        let metadata_repo = Arc::new(MockMetadataRepository::new());
+        let sync_history_repo = Arc::new(MockSyncHistoryRepository::new());
+        let snapshot_repo = Arc::new(MockIssueSnapshotRepository::new());
+
+        let use_case = SyncProjectUseCase::new(
+            Arc::clone(&issue_repo),
+            Arc::clone(&history_repo),
+            Arc::clone(&metadata_repo),
+            Arc::clone(&sync_history_repo),
+            Arc::clone(&snapshot_repo),
+            Arc::clone(&jira_service),
+        );
+
+        // Resume from snapshot checkpoint (skipping issue sync)
+        let snapshot_checkpoint = SnapshotCheckpoint {
+            last_issue_id: "1".to_string(),
+            last_issue_key: "PROJ-1".to_string(),
+            issues_processed: 1,
+            total_issues: 2,
+            snapshots_generated: 1,
+        };
+
+        let result = use_case
+            .execute_resumable_with_snapshot_checkpoint(
+                "PROJ",
+                "100",
+                None, // No issue checkpoint
+                Some(snapshot_checkpoint),
+                |_| {},
+            )
+            .await
+            .unwrap();
+
+        assert!(result.sync_result.success);
+        // Issue sync was skipped, JIRA service should not have been called for issues
+        let fetch_calls = jira_service.get_fetch_calls();
+        assert!(
+            fetch_calls.is_empty(),
+            "JIRA service should not be called when resuming from snapshot checkpoint"
+        );
+    }
 }
