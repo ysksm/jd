@@ -54,54 +54,92 @@ export class QueryComponent implements OnInit, OnChanges {
   // Computed
   hasResults = computed(() => this.columns().length > 0);
 
-  // バーンダウンチャート用SQLテンプレート（バグの件数）
-  burndownSqlTemplate = `-- バグ件数のバーンダウンチャート用SQL
--- issue_snapshots_expanded_readable テーブルを使用
--- 日付ごとの残バグ件数を計算
+  // バーンダウンチャート用SQLテンプレート（全チケット対象）
+  burndownSqlTemplate = `-- チケット残件数推移（バーンダウンチャート）
+-- issue_snapshotsテーブルを直接使用
+-- resolution が NULL/空 = 未解決、それ以外 = 解決済み
 
-WITH daily_snapshots AS (
-  SELECT
-    DATE_TRUNC('day', valid_from) AS date,
-    issue_key,
-    status,
-    issue_type,
-    -- 各日付で最新のスナップショットを取得
-    ROW_NUMBER() OVER (
-      PARTITION BY issue_key, DATE_TRUNC('day', valid_from)
-      ORDER BY valid_from DESC
-    ) AS rn
-  FROM issue_snapshots_expanded_readable
+WITH date_range AS (
+  -- 日付の範囲を取得
+  SELECT DISTINCT DATE_TRUNC('day', valid_from)::DATE AS date
+  FROM issue_snapshots
   WHERE valid_from IS NOT NULL
-    AND issue_type = 'Bug'  -- バグのみを対象
 ),
-daily_status AS (
+daily_state AS (
+  -- 各日付における各チケットの最新状態を取得
   SELECT
-    date,
-    COUNT(*) AS total_bugs,
-    SUM(CASE
-      WHEN status IN ('Done', 'Closed', '完了', 'Resolved')
-      THEN 1 ELSE 0
-    END) AS closed_bugs
-  FROM daily_snapshots
-  WHERE rn = 1
-  GROUP BY date
-),
-burndown AS (
-  SELECT
-    date,
-    total_bugs,
-    closed_bugs,
-    SUM(closed_bugs) OVER (ORDER BY date) AS cumulative_closed,
-    total_bugs - SUM(closed_bugs) OVER (ORDER BY date) AS remaining_bugs
-  FROM daily_status
+    d.date,
+    s.issue_key,
+    s.resolution,
+    s.status
+  FROM date_range d
+  JOIN issue_snapshots s ON
+    s.valid_from <= d.date + INTERVAL '1 day'
+    AND (s.valid_to IS NULL OR s.valid_to > d.date)
+  QUALIFY ROW_NUMBER() OVER (
+    PARTITION BY d.date, s.issue_key
+    ORDER BY s.valid_from DESC
+  ) = 1
 )
 SELECT
   date AS "日付",
-  total_bugs AS "総バグ数",
-  cumulative_closed AS "累計クローズ数",
-  remaining_bugs AS "残バグ数"
-FROM burndown
+  COUNT(*) AS "総件数",
+  SUM(CASE WHEN resolution IS NULL OR resolution = '' THEN 1 ELSE 0 END) AS "残件数",
+  SUM(CASE WHEN resolution IS NOT NULL AND resolution != '' THEN 1 ELSE 0 END) AS "解決済み"
+FROM daily_state
+GROUP BY date
 ORDER BY date`;
+
+  // ベロシティチャート用SQLテンプレート（日別解決件数）
+  velocitySqlTemplate = `-- 対応ペース（日別解決件数）
+-- 各日に解決されたチケット数をカウント
+
+WITH first_resolution AS (
+  -- 各チケットが最初に解決された日を特定
+  SELECT
+    issue_key,
+    MIN(valid_from) AS resolved_at
+  FROM issue_snapshots
+  WHERE resolution IS NOT NULL AND resolution != ''
+  GROUP BY issue_key
+)
+SELECT
+  DATE_TRUNC('day', resolved_at)::DATE AS "日付",
+  COUNT(*) AS "解決件数"
+FROM first_resolution
+GROUP BY DATE_TRUNC('day', resolved_at)
+ORDER BY "日付"`;
+
+  // 累積フロー図用SQLテンプレート（ステータス別件数推移）
+  cfdSqlTemplate = `-- 累積フロー図（ステータス別件数推移）
+-- 日付ごとに各ステータスの件数をカウント
+
+WITH date_range AS (
+  SELECT DISTINCT DATE_TRUNC('day', valid_from)::DATE AS date
+  FROM issue_snapshots
+  WHERE valid_from IS NOT NULL
+),
+daily_state AS (
+  SELECT
+    d.date,
+    s.issue_key,
+    s.status
+  FROM date_range d
+  JOIN issue_snapshots s ON
+    s.valid_from <= d.date + INTERVAL '1 day'
+    AND (s.valid_to IS NULL OR s.valid_to > d.date)
+  QUALIFY ROW_NUMBER() OVER (
+    PARTITION BY d.date, s.issue_key
+    ORDER BY s.valid_from DESC
+  ) = 1
+)
+SELECT
+  date AS "日付",
+  status AS "ステータス",
+  COUNT(*) AS "件数"
+FROM daily_state
+GROUP BY date, status
+ORDER BY date, status`;
 
   ngOnInit(): void {
     this.initializeComponent();
@@ -329,6 +367,22 @@ ORDER BY date`;
   // バーンダウンチャート用SQLをエディタに挿入
   insertBurndownSql(): void {
     this.queryText.set(this.burndownSqlTemplate);
+    this.editingQueryId.set(null);
+    this.queryName.set('');
+    this.queryDescription.set('');
+  }
+
+  // ベロシティチャート用SQLをエディタに挿入
+  insertVelocitySql(): void {
+    this.queryText.set(this.velocitySqlTemplate);
+    this.editingQueryId.set(null);
+    this.queryName.set('');
+    this.queryDescription.set('');
+  }
+
+  // 累積フロー図用SQLをエディタに挿入
+  insertCfdSql(): void {
+    this.queryText.set(this.cfdSqlTemplate);
     this.editingQueryId.set(null);
     this.queryName.set('');
     this.queryDescription.set('');

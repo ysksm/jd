@@ -26,9 +26,37 @@
     <!-- Configuration Panel (Left) -->
     @if (showConfigPanel()) {
       <div class="config-panel">
+        <!-- Chart Presets -->
+        <div class="panel-section">
+          <h3>Chart Presets</h3>
+          <p class="section-hint">Select a preset to visualize common metrics</p>
+          <div class="preset-grid">
+            @for (preset of chartPresets; track preset.id) {
+              <button
+                class="preset-card"
+                [class.active]="selectedPreset()?.id === preset.id"
+                (click)="selectPreset(preset)"
+                [title]="preset.description"
+              >
+                <span class="preset-icon">
+                  @switch (preset.id) {
+                    @case ('burndown') { <span class="icon">📉</span> }
+                    @case ('velocity') { <span class="icon">📊</span> }
+                    @case ('weekly-velocity') { <span class="icon">📆</span> }
+                    @case ('cfd') { <span class="icon">📈</span> }
+                    @case ('issue-type-breakdown') { <span class="icon">🏷️</span> }
+                    @default { <span class="icon">📊</span> }
+                  }
+                </span>
+                <span class="preset-name">{{ preset.name }}</span>
+              </button>
+            }
+          </div>
+        </div>
+
         <!-- Query Selection -->
         <div class="panel-section">
-          <h3>Select Query</h3>
+          <h3>Saved Queries</h3>
           @if (savedQueries().length === 0) {
             <p class="empty-text">No saved queries. Create queries in SQL Query page.</p>
           } @else {
@@ -36,7 +64,7 @@
               @for (query of savedQueries(); track query.id) {
                 <li
                   class="query-item"
-                  [class.active]="selectedQuery()?.id === query.id"
+                  [class.active]="selectedQuery()?.id === query.id && !selectedPreset()"
                   (click)="selectQuery(query)"
                 >
                   <span class="query-name">{{ query.name }}</span>

@@ -51,9 +51,20 @@ impl ExecuteSqlUseCase {
 
     /// Execute a read-only SQL query
     pub fn execute(&self, query: &str, limit: Option<usize>) -> DomainResult<SqlResult> {
-        // Security checks - only allow SELECT queries
-        let query_upper = query.trim().to_uppercase();
-        if !query_upper.starts_with("SELECT") {
+        // Security checks - only allow SELECT queries (including WITH...SELECT CTEs)
+        // Skip comment lines (-- ...) to find the actual SQL statement
+        let query_upper = query
+            .lines()
+            .map(|line| line.trim())
+            .filter(|line| !line.starts_with("--") && !line.is_empty())
+            .collect::<Vec<_>>()
+            .join(" ")
+            .to_uppercase();
+
+        let is_select = query_upper.starts_with("SELECT");
+        let is_with_select = query_upper.starts_with("WITH") && query_upper.contains("SELECT");
+
+        if !is_select && !is_with_select {
             return Err(DomainError::Validation(
                 "Only SELECT queries are allowed for read-only access".to_string(),
             ));
@@ -283,6 +294,54 @@ mod tests {
             }
             _ => panic!("Expected validation error"),
         }
+    }
+
+    #[test]
+    fn test_allow_with_cte_query() {
+        let db = create_test_db();
+        let use_case = ExecuteSqlUseCase::new(db);
+
+        // WITH...SELECT (CTE) should be allowed
+        let result = use_case
+            .execute(
+                "WITH cte AS (SELECT * FROM test_table) SELECT * FROM cte",
+                None,
+            )
+            .expect("CTE query should succeed");
+
+        assert_eq!(result.row_count, 3);
+    }
+
+    #[test]
+    fn test_allow_query_with_comments() {
+        let db = create_test_db();
+        let use_case = ExecuteSqlUseCase::new(db);
+
+        // Query with SQL comments should be allowed
+        let result = use_case
+            .execute(
+                "-- This is a comment\n-- Another comment\nSELECT * FROM test_table",
+                None,
+            )
+            .expect("Query with comments should succeed");
+
+        assert_eq!(result.row_count, 3);
+    }
+
+    #[test]
+    fn test_allow_cte_with_comments() {
+        let db = create_test_db();
+        let use_case = ExecuteSqlUseCase::new(db);
+
+        // CTE with comments should be allowed
+        let result = use_case
+            .execute(
+                "-- Comment line\nWITH cte AS (SELECT * FROM test_table) SELECT * FROM cte",
+                None,
+            )
+            .expect("CTE with comments should succeed");
+
+        assert_eq!(result.row_count, 3);
     }
 
     #[test]
