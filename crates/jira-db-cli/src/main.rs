@@ -445,12 +445,22 @@ async fn handle_sync(
 
         let project_id = project.id.clone();
         let last_synced = project.last_synced;
+        let snapshot_checkpoint = project.snapshot_checkpoint.clone();
+
+        // Check if we have a snapshot checkpoint - if so, skip issue sync
+        // and go directly to snapshot generation
+        if snapshot_checkpoint.is_some() {
+            println!("Resuming snapshot generation for {} from checkpoint", key);
+        }
 
         // Determine the checkpoint to use:
         // 1. If there's an existing sync_checkpoint (interrupted sync), use it
         // 2. If incremental sync is enabled and we have last_synced, create an incremental checkpoint
         // 3. Otherwise, do a full sync (no checkpoint)
-        let checkpoint = if let Some(cp) = project.sync_checkpoint.clone() {
+        let checkpoint = if snapshot_checkpoint.is_some() {
+            // If we have a snapshot checkpoint, we don't need issue sync checkpoint
+            None
+        } else if let Some(cp) = project.sync_checkpoint.clone() {
             // Resuming from interrupted sync
             Some(cp)
         } else if sync_settings.incremental_sync_enabled {
@@ -523,25 +533,42 @@ async fn handle_sync(
         pb.set_message(format!("Syncing project {}...", key));
 
         let settings_path_clone = settings_path.clone();
+        let settings_path_clone2 = settings_path.clone();
         let key_clone = key.clone();
+        let key_clone2 = key.clone();
 
         // Use resumable sync with checkpoint saving callback
         let result = use_case
-            .execute_resumable(&key, &project_id, checkpoint, move |new_checkpoint| {
-                // Update progress bar with checkpoint info
-                pb.set_message(format!(
-                    "Syncing project {}... ({}/{} issues)",
-                    key_clone, new_checkpoint.items_processed, new_checkpoint.total_items
-                ));
+            .execute_resumable_with_snapshot_checkpoint(
+                &key,
+                &project_id,
+                checkpoint,
+                snapshot_checkpoint,
+                move |new_checkpoint| {
+                    // Update progress bar with checkpoint info
+                    pb.set_message(format!(
+                        "Syncing project {}... ({}/{} issues)",
+                        key_clone, new_checkpoint.items_processed, new_checkpoint.total_items
+                    ));
 
-                // Save checkpoint to settings
-                if let Ok(mut s) = Settings::load(&settings_path_clone) {
-                    if let Some(p) = s.find_project_mut(&key_clone) {
-                        p.sync_checkpoint = Some(new_checkpoint.clone());
+                    // Save checkpoint to settings
+                    if let Ok(mut s) = Settings::load(&settings_path_clone) {
+                        if let Some(p) = s.find_project_mut(&key_clone) {
+                            p.sync_checkpoint = Some(new_checkpoint.clone());
+                        }
+                        let _ = s.save(&settings_path_clone);
                     }
-                    let _ = s.save(&settings_path_clone);
-                }
-            })
+                },
+                move |snapshot_cp| {
+                    // Save snapshot checkpoint continuously for resume support
+                    if let Ok(mut s) = Settings::load(&settings_path_clone2) {
+                        if let Some(p) = s.find_project_mut(&key_clone2) {
+                            p.snapshot_checkpoint = Some(snapshot_cp.clone());
+                        }
+                        let _ = s.save(&settings_path_clone2);
+                    }
+                },
+            )
             .await?;
 
         if result.sync_result.success {
@@ -550,7 +577,7 @@ async fn handle_sync(
                 result.sync_result.issues_synced, result.sync_result.history_items_synced, key
             );
 
-            // Clear checkpoint on success and update last_synced with last issue's updated date
+            // Clear all checkpoints on success and update last_synced
             let mut settings = Settings::load(&settings_path)?;
             if let Some(p) = settings.find_project_mut(&key) {
                 // Use the last issue's updated_at for reliable incremental sync
@@ -560,8 +587,9 @@ async fn handle_sync(
                     // First sync with no issues: set to current time
                     p.last_synced = Some(Utc::now());
                 }
-                // Otherwise, keep the existing last_synced
+                // Clear both checkpoints on success
                 p.sync_checkpoint = None;
+                p.snapshot_checkpoint = None;
             }
             settings.save(&settings_path)?;
         } else {
@@ -571,10 +599,17 @@ async fn handle_sync(
                 result.sync_result.error_message.unwrap_or_default()
             );
 
-            // Save checkpoint for resume
+            // Save checkpoints for resume
             let mut settings = Settings::load(&settings_path)?;
             if let Some(p) = settings.find_project_mut(&key) {
                 p.sync_checkpoint = result.checkpoint;
+                // Save snapshot checkpoint if available (for snapshot-only resume)
+                if result.snapshot_checkpoint.is_some() {
+                    p.snapshot_checkpoint = result.snapshot_checkpoint;
+                    println!(
+                        "Snapshot checkpoint saved. Next sync will resume snapshot generation."
+                    );
+                }
             }
             settings.save(&settings_path)?;
         }
@@ -588,6 +623,7 @@ async fn handle_sync(
                     p.key.clone(),
                     p.id.clone(),
                     p.sync_checkpoint.clone(),
+                    p.snapshot_checkpoint.clone(),
                     p.last_synced,
                 )
             })
@@ -600,9 +636,17 @@ async fn handle_sync(
 
         info!("Syncing {} projects", enabled_projects.len());
 
-        for (key, id, existing_checkpoint, last_synced) in enabled_projects {
+        for (key, id, existing_checkpoint, snapshot_checkpoint, last_synced) in enabled_projects {
+            // Check if we have a snapshot checkpoint - if so, skip issue sync
+            if snapshot_checkpoint.is_some() {
+                println!("Resuming snapshot generation for {} from checkpoint", key);
+            }
+
             // Determine the checkpoint to use (same logic as single project)
-            let checkpoint = if let Some(cp) = existing_checkpoint.clone() {
+            let checkpoint = if snapshot_checkpoint.is_some() {
+                // If we have a snapshot checkpoint, we don't need issue sync checkpoint
+                None
+            } else if let Some(cp) = existing_checkpoint.clone() {
                 // Resuming from interrupted sync
                 Some(cp)
             } else if sync_settings.incremental_sync_enabled {
@@ -664,18 +708,35 @@ async fn handle_sync(
             }
 
             let settings_path_clone = settings_path.clone();
+            let settings_path_clone2 = settings_path.clone();
             let key_clone = key.clone();
+            let key_clone2 = key.clone();
 
             match use_case
-                .execute_resumable(&key, &id, checkpoint, move |new_checkpoint| {
-                    // Save checkpoint to settings
-                    if let Ok(mut s) = Settings::load(&settings_path_clone) {
-                        if let Some(p) = s.find_project_mut(&key_clone) {
-                            p.sync_checkpoint = Some(new_checkpoint.clone());
+                .execute_resumable_with_snapshot_checkpoint(
+                    &key,
+                    &id,
+                    checkpoint,
+                    snapshot_checkpoint,
+                    move |new_checkpoint| {
+                        // Save checkpoint to settings
+                        if let Ok(mut s) = Settings::load(&settings_path_clone) {
+                            if let Some(p) = s.find_project_mut(&key_clone) {
+                                p.sync_checkpoint = Some(new_checkpoint.clone());
+                            }
+                            let _ = s.save(&settings_path_clone);
                         }
-                        let _ = s.save(&settings_path_clone);
-                    }
-                })
+                    },
+                    move |snapshot_cp| {
+                        // Save snapshot checkpoint continuously for resume support
+                        if let Ok(mut s) = Settings::load(&settings_path_clone2) {
+                            if let Some(p) = s.find_project_mut(&key_clone2) {
+                                p.snapshot_checkpoint = Some(snapshot_cp.clone());
+                            }
+                            let _ = s.save(&settings_path_clone2);
+                        }
+                    },
+                )
                 .await
             {
                 Ok(result) => {
@@ -693,8 +754,9 @@ async fn handle_sync(
                                 // First sync with no issues: set to current time
                                 p.last_synced = Some(Utc::now());
                             }
-                            // Otherwise, keep the existing last_synced
+                            // Clear both checkpoints on success
                             p.sync_checkpoint = None;
+                            p.snapshot_checkpoint = None;
                         }
                         settings.save(&settings_path)?;
                     } else {
@@ -706,6 +768,10 @@ async fn handle_sync(
                         let mut settings = Settings::load(&settings_path)?;
                         if let Some(p) = settings.find_project_mut(&key) {
                             p.sync_checkpoint = result.checkpoint;
+                            // Save snapshot checkpoint if available
+                            if result.snapshot_checkpoint.is_some() {
+                                p.snapshot_checkpoint = result.snapshot_checkpoint;
+                            }
                         }
                         settings.save(&settings_path)?;
                     }

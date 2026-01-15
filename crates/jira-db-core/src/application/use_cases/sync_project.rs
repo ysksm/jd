@@ -1,6 +1,7 @@
 use crate::application::dto::SyncResult;
 use crate::application::services::JiraService;
 use crate::application::use_cases::GenerateSnapshotsUseCase;
+use crate::application::use_cases::generate_snapshots::create_snapshot_checkpoint;
 use crate::application::use_cases::sync_logger::{SyncLogger, SyncSummaryReport};
 use crate::domain::entities::{ChangeHistoryItem, Issue};
 use crate::domain::error::DomainResult;
@@ -8,7 +9,7 @@ use crate::domain::repositories::{
     ChangeHistoryRepository, IssueRepository, IssueSnapshotRepository, MetadataRepository,
     SyncHistoryRepository,
 };
-use crate::infrastructure::config::SyncCheckpoint;
+use crate::infrastructure::config::{SnapshotCheckpoint, SyncCheckpoint};
 use crate::infrastructure::database::SharedRawDataRepository;
 use chrono::{DateTime, Utc};
 use log::warn;
@@ -18,8 +19,10 @@ use std::sync::Arc;
 #[derive(Debug)]
 pub struct ResumableSyncResult {
     pub sync_result: SyncResult,
-    /// Checkpoint to save (Some if sync failed and can be resumed, None if completed)
+    /// Checkpoint for issue sync (Some if issue sync failed and can be resumed, None if completed)
     pub checkpoint: Option<SyncCheckpoint>,
+    /// Checkpoint for snapshot generation (Some if snapshot generation failed and can be resumed)
+    pub snapshot_checkpoint: Option<SnapshotCheckpoint>,
 }
 
 pub struct SyncProjectUseCase<I, C, M, S, N, J>
@@ -114,7 +117,7 @@ where
     /// # Arguments
     /// * `project_key` - The JIRA project key
     /// * `project_id` - The JIRA project ID
-    /// * `checkpoint` - Optional checkpoint to resume from
+    /// * `checkpoint` - Optional checkpoint to resume issue sync from
     /// * `on_progress` - Callback called after each batch with the new checkpoint
     ///
     /// # Returns
@@ -124,12 +127,62 @@ where
         project_key: &str,
         project_id: &str,
         checkpoint: Option<SyncCheckpoint>,
-        mut on_progress: F,
+        on_progress: F,
     ) -> DomainResult<ResumableSyncResult>
     where
         F: FnMut(&SyncCheckpoint) + Send,
     {
+        self.execute_resumable_with_snapshot_checkpoint(
+            project_key,
+            project_id,
+            checkpoint,
+            None, // No snapshot checkpoint
+            on_progress,
+            |_| {}, // No-op for snapshot progress
+        )
+        .await
+    }
+
+    /// Execute resumable sync with both issue and snapshot checkpoint support
+    ///
+    /// # Arguments
+    /// * `project_key` - The JIRA project key
+    /// * `project_id` - The JIRA project ID
+    /// * `checkpoint` - Optional checkpoint to resume issue sync from
+    /// * `snapshot_checkpoint` - Optional checkpoint to resume snapshot generation from
+    ///   (if provided, issue sync is skipped and only snapshot generation is performed)
+    /// * `on_progress` - Callback called after each issue batch with the new checkpoint
+    /// * `on_snapshot_progress` - Callback called after each snapshot batch with the checkpoint
+    ///
+    /// # Returns
+    /// ResumableSyncResult containing the sync result and checkpoints (if sync failed)
+    pub async fn execute_resumable_with_snapshot_checkpoint<F, G>(
+        &self,
+        project_key: &str,
+        project_id: &str,
+        checkpoint: Option<SyncCheckpoint>,
+        snapshot_checkpoint: Option<SnapshotCheckpoint>,
+        mut on_progress: F,
+        mut on_snapshot_progress: G,
+    ) -> DomainResult<ResumableSyncResult>
+    where
+        F: FnMut(&SyncCheckpoint) + Send,
+        G: FnMut(&SnapshotCheckpoint) + Send,
+    {
         let started_at = Utc::now();
+
+        // If we have a snapshot checkpoint, skip issue sync and go directly to snapshot generation
+        if snapshot_checkpoint.is_some() {
+            return self
+                .execute_snapshot_only(
+                    project_key,
+                    project_id,
+                    snapshot_checkpoint,
+                    on_snapshot_progress,
+                )
+                .await;
+        }
+
         let sync_type = if checkpoint.is_some() {
             "resumable"
         } else {
@@ -140,10 +193,16 @@ where
             .insert(project_id, sync_type, started_at)?;
 
         match self
-            .sync_internal_resumable(project_key, project_id, checkpoint, &mut on_progress)
+            .sync_internal_resumable(
+                project_key,
+                project_id,
+                checkpoint,
+                &mut on_progress,
+                &mut on_snapshot_progress,
+            )
             .await
         {
-            Ok((issues_count, history_count, last_issue_updated_at)) => {
+            Ok((issues_count, history_count, last_issue_updated_at, snapshot_cp)) => {
                 let completed_at = Utc::now();
                 self.sync_history_repository.update_completed(
                     history_id,
@@ -158,10 +217,11 @@ where
                         history_count,
                         last_issue_updated_at,
                     ),
-                    checkpoint: None, // Clear checkpoint on success
+                    checkpoint: None,                 // Clear checkpoint on success
+                    snapshot_checkpoint: snapshot_cp, // May have snapshot checkpoint if snapshot generation failed
                 })
             }
-            Err((e, last_checkpoint)) => {
+            Err((e, last_checkpoint, snapshot_cp)) => {
                 let completed_at = Utc::now();
                 self.sync_history_repository.update_failed(
                     history_id,
@@ -171,26 +231,131 @@ where
                 Ok(ResumableSyncResult {
                     sync_result: SyncResult::failure(project_key.to_string(), e.to_string()),
                     checkpoint: last_checkpoint, // Keep checkpoint for resume
+                    snapshot_checkpoint: snapshot_cp, // May have snapshot checkpoint
+                })
+            }
+        }
+    }
+
+    /// Execute only snapshot generation with checkpoint support
+    /// This is used when resuming from a snapshot checkpoint
+    async fn execute_snapshot_only<G>(
+        &self,
+        project_key: &str,
+        project_id: &str,
+        snapshot_checkpoint: Option<SnapshotCheckpoint>,
+        mut on_snapshot_progress: G,
+    ) -> DomainResult<ResumableSyncResult>
+    where
+        G: FnMut(&SnapshotCheckpoint) + Send,
+    {
+        let mut logger = SyncLogger::new(project_key, 2);
+        logger.start();
+
+        // Step 1: Sync metadata (always re-fetch)
+        let step1 = logger.step("Syncing project metadata");
+        if let Err(e) = self.sync_metadata(project_key, project_id, &step1).await {
+            warn!("Failed to sync metadata: {}", e);
+            step1.detail(&format!("Warning: {}", e));
+        }
+        step1.finish();
+
+        // Step 2: Generate issue snapshots
+        let step2 = logger.step("Generating issue snapshots (resuming)");
+        let snapshot_use_case = GenerateSnapshotsUseCase::new(
+            Arc::clone(&self.issue_repository),
+            Arc::clone(&self.change_history_repository),
+            Arc::clone(&self.snapshot_repository),
+        );
+
+        let step2_ref = &step2;
+        let mut last_snapshot_cp: Option<SnapshotCheckpoint> = None;
+        let snapshot_result = snapshot_use_case.execute_with_progress(
+            project_key,
+            project_id,
+            snapshot_checkpoint.clone(),
+            |progress| {
+                step2_ref.detail(&format!(
+                    "Processing: {}/{} issues ({} snapshots)",
+                    progress.issues_processed, progress.total_issues, progress.snapshots_generated
+                ));
+                // Save checkpoint after each batch for continuous progress tracking
+                if progress.issues_processed > 0 {
+                    let cp = create_snapshot_checkpoint(
+                        &progress.last_issue_id,
+                        &progress.last_issue_key,
+                        progress.issues_processed,
+                        progress.total_issues,
+                        progress.snapshots_generated,
+                    );
+                    on_snapshot_progress(&cp);
+                    last_snapshot_cp = Some(cp);
+                }
+            },
+        );
+
+        match snapshot_result {
+            Ok(result) => {
+                step2.detail(&format!(
+                    "Generated {} snapshots for {} issues",
+                    result.snapshots_generated, result.issues_processed
+                ));
+                step2.finish();
+
+                // Get issue count for the result
+                let issues_count = self.issue_repository.count_by_project(project_id)?;
+
+                Ok(ResumableSyncResult {
+                    sync_result: SyncResult::success(
+                        project_key.to_string(),
+                        issues_count,
+                        0,
+                        None,
+                    ),
+                    checkpoint: None,
+                    snapshot_checkpoint: None, // Clear on success
+                })
+            }
+            Err(e) => {
+                step2.detail(&format!("Failed: {}", e));
+                step2.finish();
+
+                // Return with checkpoint for resume
+                Ok(ResumableSyncResult {
+                    sync_result: SyncResult::failure(project_key.to_string(), e.to_string()),
+                    checkpoint: None,
+                    snapshot_checkpoint, // Keep checkpoint for resume
                 })
             }
         }
     }
 
     /// Internal sync with resumable support
-    /// Returns Ok((issues_count, history_count, last_issue_updated_at)) on success
-    /// Returns Err((error, last_checkpoint)) on failure with the last successful checkpoint
-    async fn sync_internal_resumable<F>(
+    /// Returns Ok((issues_count, history_count, last_issue_updated_at, snapshot_checkpoint)) on success
+    /// Returns Err((error, last_checkpoint, snapshot_checkpoint)) on failure with the last successful checkpoint
+    async fn sync_internal_resumable<F, G>(
         &self,
         project_key: &str,
         project_id: &str,
         checkpoint: Option<SyncCheckpoint>,
         on_progress: &mut F,
+        on_snapshot_progress: &mut G,
     ) -> Result<
-        (usize, usize, Option<DateTime<Utc>>),
-        (crate::domain::error::DomainError, Option<SyncCheckpoint>),
+        (
+            usize,
+            usize,
+            Option<DateTime<Utc>>,
+            Option<SnapshotCheckpoint>,
+        ),
+        (
+            crate::domain::error::DomainError,
+            Option<SyncCheckpoint>,
+            Option<SnapshotCheckpoint>,
+        ),
     >
     where
         F: FnMut(&SyncCheckpoint) + Send,
+        G: FnMut(&SnapshotCheckpoint) + Send,
     {
         // Create logger with 4 main steps
         let mut logger = SyncLogger::new(project_key, 4);
@@ -244,7 +409,7 @@ where
                     max_results,
                 )
                 .await
-                .map_err(|e| (e, last_checkpoint.clone()))?;
+                .map_err(|e| (e, last_checkpoint.clone(), None))?;
 
             step1.detail(&format!(
                 "  -> Fetched {} issues, has_more={}",
@@ -289,7 +454,7 @@ where
                 // Save issues to database
                 self.issue_repository
                     .batch_insert(&issues_to_process)
-                    .map_err(|e| (e, last_checkpoint.clone()))?;
+                    .map_err(|e| (e, last_checkpoint.clone(), None))?;
 
                 // Save raw data to separate database if configured
                 if let Some(ref raw_repo) = self.raw_repository {
@@ -310,7 +475,7 @@ where
                     if !raw_data_items.is_empty() {
                         raw_repo
                             .batch_upsert_issue_raw_data(&raw_data_items)
-                            .map_err(|e| (e, last_checkpoint.clone()))?;
+                            .map_err(|e| (e, last_checkpoint.clone(), None))?;
                     }
                 }
 
@@ -319,7 +484,7 @@ where
                     if let Some(raw_json) = &issue.raw_json {
                         self.change_history_repository
                             .delete_by_issue_id(&issue.id)
-                            .map_err(|e| (e, last_checkpoint.clone()))?;
+                            .map_err(|e| (e, last_checkpoint.clone(), None))?;
 
                         let history_items = ChangeHistoryItem::extract_from_raw_json(
                             &issue.id, &issue.key, raw_json,
@@ -328,7 +493,7 @@ where
                         if !history_items.is_empty() {
                             self.change_history_repository
                                 .batch_insert(&history_items)
-                                .map_err(|e| (e, last_checkpoint.clone()))?;
+                                .map_err(|e| (e, last_checkpoint.clone(), None))?;
                         }
                     }
                 }
@@ -386,7 +551,7 @@ where
             deleted_count = self
                 .issue_repository
                 .mark_deleted_not_in_keys(project_id, &all_issue_keys)
-                .map_err(|e| (e, last_checkpoint.clone()))?;
+                .map_err(|e| (e, last_checkpoint.clone(), None))?;
         }
 
         // Count total history items
@@ -411,7 +576,7 @@ where
         let step2 = logger.step("Syncing project metadata");
         self.sync_metadata(project_key, project_id, &step2)
             .await
-            .map_err(|e| (e, last_checkpoint.clone()))?;
+            .map_err(|e| (e, last_checkpoint.clone(), None))?;
         step2.finish();
 
         // Step 3: Generate issue snapshots (with batch processing for large datasets)
@@ -422,17 +587,32 @@ where
             Arc::clone(&self.snapshot_repository),
         );
 
-        // Use progress callback to show batch progress
+        // Track snapshot checkpoint for resume support
+        let mut last_snapshot_checkpoint: Option<SnapshotCheckpoint> = None;
+
+        // Use progress callback to show batch progress and save checkpoint continuously
         let step3_ref = &step3;
-        let snapshot_count = match snapshot_use_case.execute_with_progress(
+        let (snapshot_count, snapshot_failed) = match snapshot_use_case.execute_with_progress(
             project_key,
             project_id,
-            None, // No checkpoint for now (fresh generation)
+            None, // Fresh generation (no checkpoint yet)
             |progress| {
                 step3_ref.detail(&format!(
                     "Processing: {}/{} issues ({} snapshots)",
                     progress.issues_processed, progress.total_issues, progress.snapshots_generated
                 ));
+                // Save checkpoint after each batch for continuous progress tracking
+                if progress.issues_processed > 0 {
+                    let cp = create_snapshot_checkpoint(
+                        &progress.last_issue_id,
+                        &progress.last_issue_key,
+                        progress.issues_processed,
+                        progress.total_issues,
+                        progress.snapshots_generated,
+                    );
+                    on_snapshot_progress(&cp);
+                    last_snapshot_checkpoint = Some(cp);
+                }
             },
         ) {
             Ok(result) => {
@@ -440,12 +620,14 @@ where
                     "Generated {} snapshots for {} issues",
                     result.snapshots_generated, result.issues_processed
                 ));
-                result.snapshots_generated
+                last_snapshot_checkpoint = None; // Clear on success
+                (result.snapshots_generated, false)
             }
             Err(e) => {
                 warn!("Failed to generate snapshots: {}", e);
-                step3.detail(&format!("Warning: {}", e));
-                0
+                step3.detail(&format!("Error: {} (can be resumed)", e));
+                // Keep last_snapshot_checkpoint for resume
+                (0, true)
             }
         };
         step3.finish();
@@ -494,7 +676,18 @@ where
         // Output summary
         logger.summary(&summary);
 
-        Ok((count, total_history_items, last_issue_updated_at))
+        // Return result with snapshot checkpoint if snapshot generation failed
+        // (so it can be resumed without re-fetching issues)
+        Ok((
+            count,
+            total_history_items,
+            last_issue_updated_at,
+            if snapshot_failed {
+                last_snapshot_checkpoint
+            } else {
+                None
+            },
+        ))
     }
 
     async fn sync_metadata(

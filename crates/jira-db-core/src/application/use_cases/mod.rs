@@ -11,6 +11,8 @@ mod sync_fields;
 mod sync_logger;
 mod sync_project;
 mod sync_project_list;
+#[cfg(test)]
+mod sync_tests;
 mod transition_issue;
 
 pub use create_test_ticket::CreateTestTicketUseCase;

@@ -52,6 +52,27 @@ pub struct SnapshotProgress {
     pub total_issues: usize,
     pub snapshots_generated: usize,
     pub current_issue_key: String,
+    /// ID of the last successfully processed issue (for checkpoint)
+    pub last_issue_id: String,
+    /// Key of the last successfully processed issue (for checkpoint)
+    pub last_issue_key: String,
+}
+
+/// Create a snapshot checkpoint from progress data
+pub fn create_snapshot_checkpoint(
+    last_issue_id: &str,
+    last_issue_key: &str,
+    issues_processed: usize,
+    total_issues: usize,
+    snapshots_generated: usize,
+) -> SnapshotCheckpoint {
+    SnapshotCheckpoint {
+        last_issue_id: last_issue_id.to_string(),
+        last_issue_key: last_issue_key.to_string(),
+        issues_processed,
+        total_issues,
+        snapshots_generated,
+    }
 }
 
 pub struct GenerateSnapshotsUseCase<I, C, S>
@@ -254,12 +275,20 @@ where
                 last_issue_id = Some(last_issue.id.clone());
             }
 
-            // Report progress
+            // Report progress with last issue info for checkpoint
+            let last_id = last_issue_id.clone().unwrap_or_default();
+            let last_key = page
+                .issues
+                .last()
+                .map(|i| i.key.clone())
+                .unwrap_or_default();
             let progress = SnapshotProgress {
                 issues_processed: *issues_processed,
                 total_issues,
                 snapshots_generated: *total_snapshots,
                 current_issue_key,
+                last_issue_id: last_id,
+                last_issue_key: last_key,
             };
             on_progress(&progress);
 
@@ -564,22 +593,5 @@ where
     /// Parse raw_json string to JsonValue
     fn parse_raw_json(raw_json: &Option<String>) -> Option<JsonValue> {
         raw_json.as_ref().and_then(|s| serde_json::from_str(s).ok())
-    }
-}
-
-/// Create a checkpoint from the current state
-pub fn create_snapshot_checkpoint(
-    last_issue_id: &str,
-    last_issue_key: &str,
-    issues_processed: usize,
-    total_issues: usize,
-    snapshots_generated: usize,
-) -> SnapshotCheckpoint {
-    SnapshotCheckpoint {
-        last_issue_id: last_issue_id.to_string(),
-        last_issue_key: last_issue_key.to_string(),
-        issues_processed,
-        total_issues,
-        snapshots_generated,
     }
 }
