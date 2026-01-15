@@ -108,13 +108,29 @@
             }
           </span>
           <div class="editor-actions-right">
-            <button
-              class="btn btn-secondary btn-sm"
-              (click)="insertBurndownSql()"
-              title="バグ件数のバーンダウンチャート用SQLを挿入"
-            >
-              バーンダウンSQL
-            </button>
+            <div class="sql-presets">
+              <button
+                class="btn btn-secondary btn-sm"
+                (click)="insertBurndownSql()"
+                title="残件数推移のSQLを挿入"
+              >
+                残件数推移
+              </button>
+              <button
+                class="btn btn-secondary btn-sm"
+                (click)="insertVelocitySql()"
+                title="対応ペース（日別解決件数）のSQLを挿入"
+              >
+                対応ペース
+              </button>
+              <button
+                class="btn btn-secondary btn-sm"
+                (click)="insertCfdSql()"
+                title="累積フロー図のSQLを挿入"
+              >
+                累積フロー
+              </button>
+            </div>
             <span class="editor-hint">Ctrl+Enter to execute</span>
           </div>
         </div>

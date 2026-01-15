@@ -16,6 +16,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { SavedQuery } from '../../generated/models';
 import { API_SERVICE, IApiService } from '../../api.provider';
+import { CHART_PRESETS, ChartPreset } from '../../services/chart-presets.service';
 import uPlot from 'uplot';
 import * as echarts from 'echarts';
 
@@ -58,6 +59,10 @@ export class VisualizationComponent implements OnInit, OnDestroy, AfterViewInit,
   // Query state
   savedQueries = signal<SavedQuery[]>([]);
   selectedQuery = signal<SavedQuery | null>(null);
+
+  // Chart presets
+  chartPresets = CHART_PRESETS;
+  selectedPreset = signal<ChartPreset | null>(null);
 
   // Data state
   columns = signal<string[]>([]);
@@ -194,7 +199,52 @@ export class VisualizationComponent implements OnInit, OnDestroy, AfterViewInit,
 
   selectQuery(query: SavedQuery): void {
     this.selectedQuery.set(query);
+    this.selectedPreset.set(null); // Clear preset selection
     this.executeQuery(query.query);
+  }
+
+  selectPreset(preset: ChartPreset): void {
+    this.selectedPreset.set(preset);
+    this.selectedQuery.set(null); // Clear query selection
+    this.executeQuery(preset.sqlTemplate);
+
+    // Auto-configure chart based on preset after data loads
+    setTimeout(() => {
+      if (this.hasData()) {
+        this.configureChartFromPreset(preset);
+      }
+    }, 100);
+  }
+
+  private configureChartFromPreset(preset: ChartPreset): void {
+    const chartType = this.mapPresetChartType(preset.chartType);
+
+    this.chartConfig.set({
+      ...this.chartConfig(),
+      chartType,
+      xColumn: preset.xColumn,
+      yColumn: preset.yColumns[0] || '',
+      groupByColumn: preset.groupByColumn || null,
+      aggregation: preset.groupByColumn ? 'sum' : 'none',
+      title: preset.name,
+    });
+
+    this.renderChart();
+  }
+
+  private mapPresetChartType(presetType: string): ChartType {
+    switch (presetType) {
+      case 'line':
+        return 'line';
+      case 'bar':
+        return 'bar';
+      case 'area':
+        return 'area';
+      case 'stacked-area':
+        return 'area'; // Use area for stacked-area (handled by groupByColumn)
+      default:
+        return 'line';
+    }
   }
 
   executeQuery(query: string): void {

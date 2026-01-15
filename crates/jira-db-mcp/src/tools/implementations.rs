@@ -453,9 +453,21 @@ impl ToolHandler for ExecuteSqlTool {
             }
         };
 
-        // Security checks
-        let query_upper = params.query.trim().to_uppercase();
-        if !query_upper.starts_with("SELECT") {
+        // Security checks - allow SELECT and WITH...SELECT (CTEs)
+        // Skip comment lines (-- ...) to find the actual SQL statement
+        let query_upper = params
+            .query
+            .lines()
+            .map(|line| line.trim())
+            .filter(|line| !line.starts_with("--") && !line.is_empty())
+            .collect::<Vec<_>>()
+            .join(" ")
+            .to_uppercase();
+
+        let is_select = query_upper.starts_with("SELECT");
+        let is_with_select = query_upper.starts_with("WITH") && query_upper.contains("SELECT");
+
+        if !is_select && !is_with_select {
             return Ok(CallToolResult::error(
                 "Only SELECT queries are allowed for read-only access",
             ));
