@@ -533,7 +533,9 @@ async fn handle_sync(
         pb.set_message(format!("Syncing project {}...", key));
 
         let settings_path_clone = settings_path.clone();
+        let settings_path_clone2 = settings_path.clone();
         let key_clone = key.clone();
+        let key_clone2 = key.clone();
 
         // Use resumable sync with checkpoint saving callback
         let result = use_case
@@ -555,6 +557,15 @@ async fn handle_sync(
                             p.sync_checkpoint = Some(new_checkpoint.clone());
                         }
                         let _ = s.save(&settings_path_clone);
+                    }
+                },
+                move |snapshot_cp| {
+                    // Save snapshot checkpoint continuously for resume support
+                    if let Ok(mut s) = Settings::load(&settings_path_clone2) {
+                        if let Some(p) = s.find_project_mut(&key_clone2) {
+                            p.snapshot_checkpoint = Some(snapshot_cp.clone());
+                        }
+                        let _ = s.save(&settings_path_clone2);
                     }
                 },
             )
@@ -697,7 +708,9 @@ async fn handle_sync(
             }
 
             let settings_path_clone = settings_path.clone();
+            let settings_path_clone2 = settings_path.clone();
             let key_clone = key.clone();
+            let key_clone2 = key.clone();
 
             match use_case
                 .execute_resumable_with_snapshot_checkpoint(
@@ -712,6 +725,15 @@ async fn handle_sync(
                                 p.sync_checkpoint = Some(new_checkpoint.clone());
                             }
                             let _ = s.save(&settings_path_clone);
+                        }
+                    },
+                    move |snapshot_cp| {
+                        // Save snapshot checkpoint continuously for resume support
+                        if let Ok(mut s) = Settings::load(&settings_path_clone2) {
+                            if let Some(p) = s.find_project_mut(&key_clone2) {
+                                p.snapshot_checkpoint = Some(snapshot_cp.clone());
+                            }
+                            let _ = s.save(&settings_path_clone2);
                         }
                     },
                 )

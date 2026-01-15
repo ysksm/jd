@@ -138,6 +138,7 @@ where
             checkpoint,
             None, // No snapshot checkpoint
             on_progress,
+            |_| {}, // No-op for snapshot progress
         )
         .await
     }
@@ -150,27 +151,35 @@ where
     /// * `checkpoint` - Optional checkpoint to resume issue sync from
     /// * `snapshot_checkpoint` - Optional checkpoint to resume snapshot generation from
     ///   (if provided, issue sync is skipped and only snapshot generation is performed)
-    /// * `on_progress` - Callback called after each batch with the new checkpoint
+    /// * `on_progress` - Callback called after each issue batch with the new checkpoint
+    /// * `on_snapshot_progress` - Callback called after each snapshot batch with the checkpoint
     ///
     /// # Returns
     /// ResumableSyncResult containing the sync result and checkpoints (if sync failed)
-    pub async fn execute_resumable_with_snapshot_checkpoint<F>(
+    pub async fn execute_resumable_with_snapshot_checkpoint<F, G>(
         &self,
         project_key: &str,
         project_id: &str,
         checkpoint: Option<SyncCheckpoint>,
         snapshot_checkpoint: Option<SnapshotCheckpoint>,
         mut on_progress: F,
+        mut on_snapshot_progress: G,
     ) -> DomainResult<ResumableSyncResult>
     where
         F: FnMut(&SyncCheckpoint) + Send,
+        G: FnMut(&SnapshotCheckpoint) + Send,
     {
         let started_at = Utc::now();
 
         // If we have a snapshot checkpoint, skip issue sync and go directly to snapshot generation
         if snapshot_checkpoint.is_some() {
             return self
-                .execute_snapshot_only(project_key, project_id, snapshot_checkpoint)
+                .execute_snapshot_only(
+                    project_key,
+                    project_id,
+                    snapshot_checkpoint,
+                    on_snapshot_progress,
+                )
                 .await;
         }
 
@@ -184,7 +193,13 @@ where
             .insert(project_id, sync_type, started_at)?;
 
         match self
-            .sync_internal_resumable(project_key, project_id, checkpoint, &mut on_progress)
+            .sync_internal_resumable(
+                project_key,
+                project_id,
+                checkpoint,
+                &mut on_progress,
+                &mut on_snapshot_progress,
+            )
             .await
         {
             Ok((issues_count, history_count, last_issue_updated_at, snapshot_cp)) => {
@@ -224,12 +239,16 @@ where
 
     /// Execute only snapshot generation with checkpoint support
     /// This is used when resuming from a snapshot checkpoint
-    async fn execute_snapshot_only(
+    async fn execute_snapshot_only<G>(
         &self,
         project_key: &str,
         project_id: &str,
         snapshot_checkpoint: Option<SnapshotCheckpoint>,
-    ) -> DomainResult<ResumableSyncResult> {
+        mut on_snapshot_progress: G,
+    ) -> DomainResult<ResumableSyncResult>
+    where
+        G: FnMut(&SnapshotCheckpoint) + Send,
+    {
         let mut logger = SyncLogger::new(project_key, 2);
         logger.start();
 
@@ -250,6 +269,7 @@ where
         );
 
         let step2_ref = &step2;
+        let mut last_snapshot_cp: Option<SnapshotCheckpoint> = None;
         let snapshot_result = snapshot_use_case.execute_with_progress(
             project_key,
             project_id,
@@ -259,6 +279,18 @@ where
                     "Processing: {}/{} issues ({} snapshots)",
                     progress.issues_processed, progress.total_issues, progress.snapshots_generated
                 ));
+                // Save checkpoint after each batch for continuous progress tracking
+                if progress.issues_processed > 0 {
+                    let cp = create_snapshot_checkpoint(
+                        &progress.last_issue_id,
+                        &progress.last_issue_key,
+                        progress.issues_processed,
+                        progress.total_issues,
+                        progress.snapshots_generated,
+                    );
+                    on_snapshot_progress(&cp);
+                    last_snapshot_cp = Some(cp);
+                }
             },
         );
 
@@ -301,12 +333,13 @@ where
     /// Internal sync with resumable support
     /// Returns Ok((issues_count, history_count, last_issue_updated_at, snapshot_checkpoint)) on success
     /// Returns Err((error, last_checkpoint, snapshot_checkpoint)) on failure with the last successful checkpoint
-    async fn sync_internal_resumable<F>(
+    async fn sync_internal_resumable<F, G>(
         &self,
         project_key: &str,
         project_id: &str,
         checkpoint: Option<SyncCheckpoint>,
         on_progress: &mut F,
+        on_snapshot_progress: &mut G,
     ) -> Result<
         (
             usize,
@@ -322,6 +355,7 @@ where
     >
     where
         F: FnMut(&SyncCheckpoint) + Send,
+        G: FnMut(&SnapshotCheckpoint) + Send,
     {
         // Create logger with 4 main steps
         let mut logger = SyncLogger::new(project_key, 4);
@@ -556,7 +590,7 @@ where
         // Track snapshot checkpoint for resume support
         let mut last_snapshot_checkpoint: Option<SnapshotCheckpoint> = None;
 
-        // Use progress callback to show batch progress and track checkpoint
+        // Use progress callback to show batch progress and save checkpoint continuously
         let step3_ref = &step3;
         let (snapshot_count, snapshot_failed) = match snapshot_use_case.execute_with_progress(
             project_key,
@@ -567,15 +601,17 @@ where
                     "Processing: {}/{} issues ({} snapshots)",
                     progress.issues_processed, progress.total_issues, progress.snapshots_generated
                 ));
-                // Save checkpoint for potential resume
+                // Save checkpoint after each batch for continuous progress tracking
                 if progress.issues_processed > 0 {
-                    last_snapshot_checkpoint = Some(create_snapshot_checkpoint(
+                    let cp = create_snapshot_checkpoint(
                         &progress.last_issue_id,
                         &progress.last_issue_key,
                         progress.issues_processed,
                         progress.total_issues,
                         progress.snapshots_generated,
-                    ));
+                    );
+                    on_snapshot_progress(&cp);
+                    last_snapshot_checkpoint = Some(cp);
                 }
             },
         ) {

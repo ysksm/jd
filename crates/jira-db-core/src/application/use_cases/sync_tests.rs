@@ -1200,7 +1200,8 @@ mod tests {
                 "100",
                 None, // No issue checkpoint
                 Some(snapshot_checkpoint),
-                |_| {},
+                |_| {}, // on_progress callback
+                |_| {}, // on_snapshot_progress callback
             )
             .await
             .unwrap();
