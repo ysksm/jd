@@ -732,8 +732,14 @@ impl DuckDbIssuesExpandedRepository {
             ("s.fix_versions", "fix_versions"),
             ("s.sprint", "sprint"),
             ("s.parent_key", "parent_key"),
-            ("COALESCE(s.resolved_date, TRY_CAST(s.raw_data->'fields'->>'resolutiondate' AS TIMESTAMP))", "resolved_date"),
-            ("COALESCE(s.due_date, TRY_CAST(s.raw_data->'fields'->>'duedate' AS TIMESTAMP))", "due_date"),
+            (
+                "COALESCE(s.resolved_date, TRY_CAST(s.raw_data->'fields'->>'resolutiondate' AS TIMESTAMP))",
+                "resolved_date",
+            ),
+            (
+                "COALESCE(s.due_date, TRY_CAST(s.raw_data->'fields'->>'duedate' AS TIMESTAMP))",
+                "due_date",
+            ),
             ("s.created_at", "created_at"),
         ];
 

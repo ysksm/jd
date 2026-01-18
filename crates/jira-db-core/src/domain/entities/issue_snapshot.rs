@@ -30,6 +30,8 @@ pub struct IssueSnapshot {
     pub parent_key: Option<String>,
     /// Raw JIRA API response (only available for current snapshot)
     pub raw_data: Option<JsonValue>,
+    /// The date when the issue was last updated in JIRA (from the original issue)
+    pub updated_date: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
 }
 
@@ -57,6 +59,7 @@ impl IssueSnapshot {
         sprint: Option<String>,
         parent_key: Option<String>,
         raw_data: Option<JsonValue>,
+        updated_date: Option<DateTime<Utc>>,
     ) -> Self {
         Self {
             issue_id,
@@ -79,6 +82,7 @@ impl IssueSnapshot {
             sprint,
             parent_key,
             raw_data,
+            updated_date,
             created_at: Utc::now(),
         }
     }
