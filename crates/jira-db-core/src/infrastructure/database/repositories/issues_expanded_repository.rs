@@ -606,7 +606,6 @@ impl DuckDbIssuesExpandedRepository {
             ("parent_key", "parent"),
             ("resolved_date", "resolutiondate"),
             ("due_date", "duedate"),
-            ("updated_date", "updated"),
         ]
         .into_iter()
         .collect();
@@ -647,7 +646,6 @@ impl DuckDbIssuesExpandedRepository {
             "parent_key",
             "resolved_date",
             "due_date",
-            "updated_date",
             "created_at",
         ];
 
@@ -713,7 +711,7 @@ impl DuckDbIssuesExpandedRepository {
         fields: &[JiraField],
     ) -> DomainResult<()> {
         // Base snapshot columns
-        // For resolved_date, due_date, and updated_date, fallback to raw_data extraction if column is NULL
+        // For resolved_date and due_date, fallback to raw_data extraction if column is NULL
         let base_columns = vec![
             ("s.issue_id", "issue_id"),
             ("s.issue_key", "issue_key"),
@@ -741,10 +739,6 @@ impl DuckDbIssuesExpandedRepository {
             (
                 "COALESCE(s.due_date, TRY_CAST(s.raw_data->'fields'->>'duedate' AS TIMESTAMP))",
                 "due_date",
-            ),
-            (
-                "COALESCE(s.updated_date, TRY_CAST(s.raw_data->'fields'->>'updated' AS TIMESTAMP))",
-                "updated_date",
             ),
             ("s.created_at", "created_at"),
         ];
@@ -847,7 +841,6 @@ impl DuckDbIssuesExpandedRepository {
             ("parent_key", "parent"),
             ("resolved_date", "resolutiondate"),
             ("due_date", "duedate"),
-            ("updated_date", "updated"),
         ]
         .into_iter()
         .collect();
@@ -888,7 +881,6 @@ impl DuckDbIssuesExpandedRepository {
             "parent_key",
             "resolved_date",
             "due_date",
-            "updated_date",
             "created_at",
         ];
 
