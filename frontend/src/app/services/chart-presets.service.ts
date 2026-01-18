@@ -24,10 +24,21 @@ export interface ChartPreset {
 const burndownSql = `-- チケット残件数推移（バーンダウンチャート）
 -- resolution が NULL/空 = 未解決、それ以外 = 解決済み
 
-WITH date_range AS (
-  SELECT DISTINCT DATE_TRUNC('day', valid_from)::DATE AS date
+WITH date_bounds AS (
+  -- 最初の課題作成日と最後の更新日を取得
+  SELECT
+    MIN(valid_from)::DATE AS start_date,
+    GREATEST(MAX(valid_from), MAX(valid_to), CURRENT_DATE)::DATE AS end_date
   FROM issue_snapshots
   WHERE valid_from IS NOT NULL
+),
+date_range AS (
+  -- 連続した日付範囲を生成
+  SELECT UNNEST(generate_series(
+    (SELECT start_date FROM date_bounds),
+    (SELECT end_date FROM date_bounds),
+    INTERVAL '1 day'
+  ))::DATE AS date
 ),
 daily_state AS (
   SELECT
@@ -76,10 +87,19 @@ ORDER BY "日付"`;
 const cfdSql = `-- 累積フロー図（ステータス別件数推移）
 -- 日付ごとに各ステータスの件数をカウント
 
-WITH date_range AS (
-  SELECT DISTINCT DATE_TRUNC('day', valid_from)::DATE AS date
+WITH date_bounds AS (
+  SELECT
+    MIN(valid_from)::DATE AS start_date,
+    GREATEST(MAX(valid_from), MAX(valid_to), CURRENT_DATE)::DATE AS end_date
   FROM issue_snapshots
   WHERE valid_from IS NOT NULL
+),
+date_range AS (
+  SELECT UNNEST(generate_series(
+    (SELECT start_date FROM date_bounds),
+    (SELECT end_date FROM date_bounds),
+    INTERVAL '1 day'
+  ))::DATE AS date
 ),
 daily_state AS (
   SELECT
@@ -126,10 +146,19 @@ ORDER BY "週"`;
 const issueTypeBreakdownSql = `-- 課題タイプ別残件数推移
 -- 日付ごとに各課題タイプの未解決件数をカウント
 
-WITH date_range AS (
-  SELECT DISTINCT DATE_TRUNC('day', valid_from)::DATE AS date
+WITH date_bounds AS (
+  SELECT
+    MIN(valid_from)::DATE AS start_date,
+    GREATEST(MAX(valid_from), MAX(valid_to), CURRENT_DATE)::DATE AS end_date
   FROM issue_snapshots
   WHERE valid_from IS NOT NULL
+),
+date_range AS (
+  SELECT UNNEST(generate_series(
+    (SELECT start_date FROM date_bounds),
+    (SELECT end_date FROM date_bounds),
+    INTERVAL '1 day'
+  ))::DATE AS date
 ),
 daily_state AS (
   SELECT

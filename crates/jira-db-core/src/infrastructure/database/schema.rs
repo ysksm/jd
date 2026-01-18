@@ -89,6 +89,22 @@ impl Schema {
         Self::add_column_if_not_exists(conn, "issues", "due_date", "TIMESTAMPTZ")?;
         // Migration: issuesテーブルにteamカラムを追加（チーム）
         Self::add_column_if_not_exists(conn, "issues", "team", "VARCHAR")?;
+        // Migration: issues_expandedテーブルにresolved_dateカラムを追加（解決日）
+        Self::add_column_if_not_exists(conn, "issues_expanded", "resolved_date", "TIMESTAMPTZ")?;
+        // Migration: issues_expandedテーブルにdue_dateカラムを追加（期限日）
+        Self::add_column_if_not_exists(conn, "issues_expanded", "due_date", "TIMESTAMPTZ")?;
+        // Migration: issue_snapshotsテーブルにresolved_dateカラムを追加（解決日）
+        Self::add_column_if_not_exists(conn, "issue_snapshots", "resolved_date", "TIMESTAMPTZ")?;
+        // Migration: issue_snapshotsテーブルにdue_dateカラムを追加（期限日）
+        Self::add_column_if_not_exists(conn, "issue_snapshots", "due_date", "TIMESTAMPTZ")?;
+        // Migration: issues_expandedテーブルにenvironmentカラムを追加（環境）
+        Self::add_column_if_not_exists(conn, "issues_expanded", "environment", "TEXT")?;
+        // Migration: issues_expandedテーブルにcreatorカラムを追加（作成者）
+        Self::add_column_if_not_exists(conn, "issues_expanded", "creator", "VARCHAR")?;
+        // Migration: issues_expandedテーブルにaffected_versionsカラムを追加（影響バージョン）
+        Self::add_column_if_not_exists(conn, "issues_expanded", "affected_versions", "JSON")?;
+        // Migration: issues_expandedテーブルにsecurity_levelカラムを追加（セキュリティレベル）
+        Self::add_column_if_not_exists(conn, "issues_expanded", "security_level", "VARCHAR")?;
         Ok(())
     }
 
