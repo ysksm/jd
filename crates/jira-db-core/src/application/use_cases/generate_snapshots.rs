@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
 use log::{debug, info, warn};
-use serde_json::Value as JsonValue;
+use serde_json::{Value as JsonValue, json};
 
 use crate::domain::entities::{ChangeHistoryItem, Issue, IssueSnapshot};
 use crate::domain::error::DomainResult;
@@ -11,6 +11,245 @@ use crate::domain::repositories::{
     ChangeHistoryRepository, IssueRepository, IssueSnapshotRepository,
 };
 use crate::infrastructure::config::SnapshotCheckpoint;
+
+/// Mapping from changelog field names to raw_data field paths and their structure type
+#[derive(Debug, Clone, Copy)]
+enum FieldType {
+    /// Direct string value (e.g., summary, description)
+    DirectString,
+    /// Object with "name" property (e.g., status, priority, issuetype, resolution)
+    ObjectWithName,
+    /// Object with "displayName" property (e.g., assignee, reporter)
+    ObjectWithDisplayName,
+    /// Object with "value" property (e.g., some custom fields)
+    ObjectWithValue,
+    /// Array of strings (e.g., labels)
+    ArrayOfStrings,
+    /// Array of objects with "name" property (e.g., components, fixVersions)
+    ArrayOfObjectsWithName,
+    /// Unknown structure - try multiple approaches
+    Unknown,
+}
+
+/// Get the field type for a given changelog field name
+fn get_field_type(field_name: &str) -> FieldType {
+    match field_name.to_lowercase().as_str() {
+        "summary" | "description" | "environment" => FieldType::DirectString,
+        "status" | "priority" | "issuetype" | "resolution" | "security" => {
+            FieldType::ObjectWithName
+        }
+        "assignee" | "reporter" | "creator" => FieldType::ObjectWithDisplayName,
+        "labels" => FieldType::ArrayOfStrings,
+        "components" | "fixversions" | "versions" | "affectedversions" => {
+            FieldType::ArrayOfObjectsWithName
+        }
+        "sprint" => FieldType::ObjectWithName, // Sprint is typically object with name
+        "parent" => FieldType::ObjectWithName, // Parent issue
+        _ if field_name.starts_with("customfield_") => FieldType::Unknown,
+        _ => FieldType::Unknown,
+    }
+}
+
+/// Get the raw_data field path for a changelog field name
+fn get_raw_data_field_name(changelog_field: &str) -> &str {
+    match changelog_field.to_lowercase().as_str() {
+        "issuetype" => "issuetype",
+        "fixversions" => "fixVersions",
+        "affectedversions" => "versions",
+        _ => changelog_field,
+    }
+}
+
+/// Apply a change in reverse to raw_data (revert to previous state)
+fn apply_change_reverse_to_raw_data(raw_data: &mut JsonValue, change: &ChangeHistoryItem) {
+    let field_name = get_raw_data_field_name(&change.field);
+    let field_type = get_field_type(&change.field);
+
+    let fields = match raw_data.get_mut("fields") {
+        Some(f) => f,
+        None => return,
+    };
+
+    // Get the "from" value to restore
+    let from_string = change.from_string.as_deref();
+    let from_value = change.from_value.as_deref();
+
+    match field_type {
+        FieldType::DirectString => {
+            // Direct string replacement
+            if let Some(from_str) = from_string.or(from_value) {
+                fields[field_name] = json!(from_str);
+            } else {
+                // Field was empty before
+                fields[field_name] = JsonValue::Null;
+            }
+        }
+        FieldType::ObjectWithName => {
+            if let Some(from_str) = from_string {
+                // Preserve existing object structure if possible, just update name
+                if let Some(obj) = fields.get_mut(field_name) {
+                    if obj.is_object() {
+                        obj["name"] = json!(from_str);
+                        if let Some(id) = from_value {
+                            obj["id"] = json!(id);
+                        }
+                    } else {
+                        fields[field_name] = json!({"name": from_str, "id": from_value});
+                    }
+                } else {
+                    fields[field_name] = json!({"name": from_str, "id": from_value});
+                }
+            } else {
+                // Field was null before
+                fields[field_name] = JsonValue::Null;
+            }
+        }
+        FieldType::ObjectWithDisplayName => {
+            if let Some(from_str) = from_string {
+                if let Some(obj) = fields.get_mut(field_name) {
+                    if obj.is_object() {
+                        obj["displayName"] = json!(from_str);
+                        if let Some(id) = from_value {
+                            obj["accountId"] = json!(id);
+                        }
+                    } else {
+                        fields[field_name] =
+                            json!({"displayName": from_str, "accountId": from_value});
+                    }
+                } else {
+                    fields[field_name] = json!({"displayName": from_str, "accountId": from_value});
+                }
+            } else {
+                fields[field_name] = JsonValue::Null;
+            }
+        }
+        FieldType::ObjectWithValue => {
+            if let Some(from_str) = from_string.or(from_value) {
+                if let Some(obj) = fields.get_mut(field_name) {
+                    if obj.is_object() {
+                        obj["value"] = json!(from_str);
+                    } else {
+                        fields[field_name] = json!({"value": from_str});
+                    }
+                } else {
+                    fields[field_name] = json!({"value": from_str});
+                }
+            } else {
+                fields[field_name] = JsonValue::Null;
+            }
+        }
+        FieldType::ArrayOfStrings => {
+            // For labels, parse the comma-separated from_string
+            if let Some(from_str) = from_string {
+                if from_str.is_empty() {
+                    fields[field_name] = json!([]);
+                } else {
+                    let items: Vec<&str> = from_str.split_whitespace().collect();
+                    fields[field_name] = json!(items);
+                }
+            } else {
+                fields[field_name] = json!([]);
+            }
+        }
+        FieldType::ArrayOfObjectsWithName => {
+            // For components/versions, the from_string might be comma-separated names
+            if let Some(from_str) = from_string {
+                if from_str.is_empty() {
+                    fields[field_name] = json!([]);
+                } else {
+                    // Split by comma and create objects
+                    let items: Vec<JsonValue> = from_str
+                        .split(',')
+                        .map(|s| json!({"name": s.trim()}))
+                        .collect();
+                    fields[field_name] = json!(items);
+                }
+            } else {
+                fields[field_name] = json!([]);
+            }
+        }
+        FieldType::Unknown => {
+            // Try to intelligently handle unknown fields
+            // First check if there's an existing value to understand the structure
+            if let Some(existing) = fields.get(field_name) {
+                if existing.is_object() {
+                    // Try to determine what property to update
+                    if existing.get("name").is_some() {
+                        if let Some(from_str) = from_string {
+                            let mut obj = existing.clone();
+                            obj["name"] = json!(from_str);
+                            if let Some(id) = from_value {
+                                obj["id"] = json!(id);
+                            }
+                            fields[field_name] = obj;
+                        } else {
+                            fields[field_name] = JsonValue::Null;
+                        }
+                    } else if existing.get("value").is_some() {
+                        if let Some(from_str) = from_string.or(from_value) {
+                            let mut obj = existing.clone();
+                            obj["value"] = json!(from_str);
+                            fields[field_name] = obj;
+                        } else {
+                            fields[field_name] = JsonValue::Null;
+                        }
+                    } else if existing.get("displayName").is_some() {
+                        if let Some(from_str) = from_string {
+                            let mut obj = existing.clone();
+                            obj["displayName"] = json!(from_str);
+                            fields[field_name] = obj;
+                        } else {
+                            fields[field_name] = JsonValue::Null;
+                        }
+                    } else {
+                        // Unknown object structure, try name first
+                        if let Some(from_str) = from_string.or(from_value) {
+                            fields[field_name] = json!({"name": from_str});
+                        } else {
+                            fields[field_name] = JsonValue::Null;
+                        }
+                    }
+                } else if existing.is_array() {
+                    // Array field - try to reconstruct
+                    if let Some(from_str) = from_string {
+                        if from_str.is_empty() {
+                            fields[field_name] = json!([]);
+                        } else {
+                            let items: Vec<JsonValue> = from_str
+                                .split(',')
+                                .map(|s| json!({"name": s.trim()}))
+                                .collect();
+                            fields[field_name] = json!(items);
+                        }
+                    } else {
+                        fields[field_name] = json!([]);
+                    }
+                } else {
+                    // Simple value
+                    if let Some(from_str) = from_string.or(from_value) {
+                        fields[field_name] = json!(from_str);
+                    } else {
+                        fields[field_name] = JsonValue::Null;
+                    }
+                }
+            } else {
+                // No existing value, create based on from_string/from_value
+                if let Some(from_str) = from_string.or(from_value) {
+                    fields[field_name] = json!(from_str);
+                } else {
+                    fields[field_name] = JsonValue::Null;
+                }
+            }
+        }
+    }
+}
+
+/// Apply multiple changes in reverse order to raw_data
+fn apply_changes_reverse_to_raw_data(raw_data: &mut JsonValue, changes: &[&ChangeHistoryItem]) {
+    for change in changes {
+        apply_change_reverse_to_raw_data(raw_data, change);
+    }
+}
 
 /// Default batch size for processing issues
 const DEFAULT_BATCH_SIZE: usize = 500;
@@ -321,13 +560,14 @@ where
         let mut snapshots = Vec::new();
 
         // Parse raw_json once for the current snapshot
-        let raw_data = Self::parse_raw_json(&issue.raw_json);
+        let current_raw_data = Self::parse_raw_json(&issue.raw_json);
 
         // If no history, create a single snapshot from current state
         if timestamps.is_empty() {
             let created_at = issue.created_date.unwrap_or_else(Utc::now);
             // This is the only (and current) snapshot, so include raw_data
-            let snapshot = self.create_snapshot_from_issue(issue, 1, created_at, None, raw_data);
+            let snapshot =
+                self.create_snapshot_from_issue(issue, 1, created_at, None, current_raw_data);
             snapshots.push(snapshot);
             return Ok(snapshots);
         }
@@ -336,8 +576,18 @@ where
         let mut current_state = self.build_initial_state(issue, &grouped_changes, &timestamps);
         let issue_created = issue.created_date.unwrap_or_else(Utc::now);
 
+        // Build initial raw_data by applying ALL changes in reverse to current raw_data
+        let mut snapshot_raw_data = current_raw_data.clone();
+        if let Some(ref mut raw_data) = snapshot_raw_data {
+            // Apply all changes in reverse order (newest to oldest)
+            for timestamp in timestamps.iter().rev() {
+                if let Some(changes) = grouped_changes.get(timestamp) {
+                    apply_changes_reverse_to_raw_data(raw_data, changes);
+                }
+            }
+        }
+
         // Version 1: Initial state (from creation to first change)
-        // Historical snapshot - no raw_data
         let first_change_time = timestamps[0];
         let snapshot = IssueSnapshot::new(
             issue.id.clone(),
@@ -378,9 +628,11 @@ where
                 .get("resolution")
                 .cloned()
                 .or_else(|| issue.resolution.clone()),
-            issue.labels.clone(),
-            issue.components.clone(),
-            issue.fix_versions.clone(),
+            Self::extract_labels_from_raw_data(&snapshot_raw_data).or_else(|| issue.labels.clone()),
+            Self::extract_components_from_raw_data(&snapshot_raw_data)
+                .or_else(|| issue.components.clone()),
+            Self::extract_fix_versions_from_raw_data(&snapshot_raw_data)
+                .or_else(|| issue.fix_versions.clone()),
             current_state
                 .get("sprint")
                 .cloned()
@@ -389,7 +641,7 @@ where
                 .get("parent")
                 .cloned()
                 .or_else(|| issue.parent_key.clone()),
-            None, // Historical snapshot - no raw_data
+            snapshot_raw_data.clone(),
         );
         snapshots.push(snapshot);
 
@@ -400,7 +652,7 @@ where
                 continue;
             };
 
-            // Apply changes to current state
+            // Apply changes to current state (for basic fields)
             for change in changes {
                 let field_name = change.field.to_lowercase();
                 if let Some(to_value) = &change.to_string {
@@ -412,16 +664,14 @@ where
                 }
             }
 
+            // Apply changes forward to raw_data
+            if let Some(ref mut raw_data) = snapshot_raw_data {
+                Self::apply_changes_forward_to_raw_data(raw_data, changes);
+            }
+
             // Determine valid_to (next change time or None if this is the last)
             let valid_to = if i + 1 < timestamps.len() {
                 Some(timestamps[i + 1])
-            } else {
-                None
-            };
-
-            // Only include raw_data for the current (last) snapshot
-            let snapshot_raw_data = if valid_to.is_none() {
-                raw_data.clone()
             } else {
                 None
             };
@@ -466,9 +716,12 @@ where
                     .get("resolution")
                     .cloned()
                     .or_else(|| issue.resolution.clone()),
-                issue.labels.clone(),
-                issue.components.clone(),
-                issue.fix_versions.clone(),
+                Self::extract_labels_from_raw_data(&snapshot_raw_data)
+                    .or_else(|| issue.labels.clone()),
+                Self::extract_components_from_raw_data(&snapshot_raw_data)
+                    .or_else(|| issue.components.clone()),
+                Self::extract_fix_versions_from_raw_data(&snapshot_raw_data)
+                    .or_else(|| issue.fix_versions.clone()),
                 current_state
                     .get("sprint")
                     .cloned()
@@ -477,7 +730,7 @@ where
                     .get("parent")
                     .cloned()
                     .or_else(|| issue.parent_key.clone()),
-                snapshot_raw_data,
+                snapshot_raw_data.clone(),
             );
             snapshots.push(snapshot);
         }
@@ -593,5 +846,227 @@ where
     /// Parse raw_json string to JsonValue
     fn parse_raw_json(raw_json: &Option<String>) -> Option<JsonValue> {
         raw_json.as_ref().and_then(|s| serde_json::from_str(s).ok())
+    }
+
+    /// Apply changes forward to raw_data (opposite of reverse - use to_value/to_string)
+    fn apply_changes_forward_to_raw_data(raw_data: &mut JsonValue, changes: &[&ChangeHistoryItem]) {
+        for change in changes {
+            Self::apply_change_forward_to_raw_data(raw_data, change);
+        }
+    }
+
+    /// Apply a single change forward to raw_data
+    fn apply_change_forward_to_raw_data(raw_data: &mut JsonValue, change: &ChangeHistoryItem) {
+        let field_name = get_raw_data_field_name(&change.field);
+        let field_type = get_field_type(&change.field);
+
+        let fields = match raw_data.get_mut("fields") {
+            Some(f) => f,
+            None => return,
+        };
+
+        // Get the "to" value to apply
+        let to_string = change.to_string.as_deref();
+        let to_value = change.to_value.as_deref();
+
+        match field_type {
+            FieldType::DirectString => {
+                if let Some(to_str) = to_string.or(to_value) {
+                    fields[field_name] = json!(to_str);
+                } else {
+                    fields[field_name] = JsonValue::Null;
+                }
+            }
+            FieldType::ObjectWithName => {
+                if let Some(to_str) = to_string {
+                    if let Some(obj) = fields.get_mut(field_name) {
+                        if obj.is_object() {
+                            obj["name"] = json!(to_str);
+                            if let Some(id) = to_value {
+                                obj["id"] = json!(id);
+                            }
+                        } else {
+                            fields[field_name] = json!({"name": to_str, "id": to_value});
+                        }
+                    } else {
+                        fields[field_name] = json!({"name": to_str, "id": to_value});
+                    }
+                } else {
+                    fields[field_name] = JsonValue::Null;
+                }
+            }
+            FieldType::ObjectWithDisplayName => {
+                if let Some(to_str) = to_string {
+                    if let Some(obj) = fields.get_mut(field_name) {
+                        if obj.is_object() {
+                            obj["displayName"] = json!(to_str);
+                            if let Some(id) = to_value {
+                                obj["accountId"] = json!(id);
+                            }
+                        } else {
+                            fields[field_name] =
+                                json!({"displayName": to_str, "accountId": to_value});
+                        }
+                    } else {
+                        fields[field_name] = json!({"displayName": to_str, "accountId": to_value});
+                    }
+                } else {
+                    fields[field_name] = JsonValue::Null;
+                }
+            }
+            FieldType::ObjectWithValue => {
+                if let Some(to_str) = to_string.or(to_value) {
+                    if let Some(obj) = fields.get_mut(field_name) {
+                        if obj.is_object() {
+                            obj["value"] = json!(to_str);
+                        } else {
+                            fields[field_name] = json!({"value": to_str});
+                        }
+                    } else {
+                        fields[field_name] = json!({"value": to_str});
+                    }
+                } else {
+                    fields[field_name] = JsonValue::Null;
+                }
+            }
+            FieldType::ArrayOfStrings => {
+                if let Some(to_str) = to_string {
+                    if to_str.is_empty() {
+                        fields[field_name] = json!([]);
+                    } else {
+                        let items: Vec<&str> = to_str.split_whitespace().collect();
+                        fields[field_name] = json!(items);
+                    }
+                } else {
+                    fields[field_name] = json!([]);
+                }
+            }
+            FieldType::ArrayOfObjectsWithName => {
+                if let Some(to_str) = to_string {
+                    if to_str.is_empty() {
+                        fields[field_name] = json!([]);
+                    } else {
+                        let items: Vec<JsonValue> = to_str
+                            .split(',')
+                            .map(|s| json!({"name": s.trim()}))
+                            .collect();
+                        fields[field_name] = json!(items);
+                    }
+                } else {
+                    fields[field_name] = json!([]);
+                }
+            }
+            FieldType::Unknown => {
+                // Try to intelligently handle unknown fields
+                if let Some(existing) = fields.get(field_name).cloned() {
+                    if existing.is_object() {
+                        if existing.get("name").is_some() {
+                            if let Some(to_str) = to_string {
+                                let mut obj = existing;
+                                obj["name"] = json!(to_str);
+                                if let Some(id) = to_value {
+                                    obj["id"] = json!(id);
+                                }
+                                fields[field_name] = obj;
+                            } else {
+                                fields[field_name] = JsonValue::Null;
+                            }
+                        } else if existing.get("value").is_some() {
+                            if let Some(to_str) = to_string.or(to_value) {
+                                let mut obj = existing;
+                                obj["value"] = json!(to_str);
+                                fields[field_name] = obj;
+                            } else {
+                                fields[field_name] = JsonValue::Null;
+                            }
+                        } else if existing.get("displayName").is_some() {
+                            if let Some(to_str) = to_string {
+                                let mut obj = existing;
+                                obj["displayName"] = json!(to_str);
+                                fields[field_name] = obj;
+                            } else {
+                                fields[field_name] = JsonValue::Null;
+                            }
+                        } else if let Some(to_str) = to_string.or(to_value) {
+                            fields[field_name] = json!({"name": to_str});
+                        } else {
+                            fields[field_name] = JsonValue::Null;
+                        }
+                    } else if existing.is_array() {
+                        if let Some(to_str) = to_string {
+                            if to_str.is_empty() {
+                                fields[field_name] = json!([]);
+                            } else {
+                                let items: Vec<JsonValue> = to_str
+                                    .split(',')
+                                    .map(|s| json!({"name": s.trim()}))
+                                    .collect();
+                                fields[field_name] = json!(items);
+                            }
+                        } else {
+                            fields[field_name] = json!([]);
+                        }
+                    } else if let Some(to_str) = to_string.or(to_value) {
+                        fields[field_name] = json!(to_str);
+                    } else {
+                        fields[field_name] = JsonValue::Null;
+                    }
+                } else if let Some(to_str) = to_string.or(to_value) {
+                    fields[field_name] = json!(to_str);
+                } else {
+                    fields[field_name] = JsonValue::Null;
+                }
+            }
+        }
+    }
+
+    /// Extract labels from raw_data as Vec<String>
+    fn extract_labels_from_raw_data(raw_data: &Option<JsonValue>) -> Option<Vec<String>> {
+        raw_data.as_ref().and_then(|data| {
+            data.get("fields")
+                .and_then(|f| f.get("labels"))
+                .and_then(|v| v.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|item| item.as_str().map(|s| s.to_string()))
+                        .collect()
+                })
+        })
+    }
+
+    /// Extract components from raw_data as Vec<String>
+    fn extract_components_from_raw_data(raw_data: &Option<JsonValue>) -> Option<Vec<String>> {
+        raw_data.as_ref().and_then(|data| {
+            data.get("fields")
+                .and_then(|f| f.get("components"))
+                .and_then(|v| v.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|item| {
+                            item.get("name")
+                                .and_then(|n| n.as_str())
+                                .map(|s| s.to_string())
+                        })
+                        .collect()
+                })
+        })
+    }
+
+    /// Extract fix_versions from raw_data as Vec<String>
+    fn extract_fix_versions_from_raw_data(raw_data: &Option<JsonValue>) -> Option<Vec<String>> {
+        raw_data.as_ref().and_then(|data| {
+            data.get("fields")
+                .and_then(|f| f.get("fixVersions"))
+                .and_then(|v| v.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|item| {
+                            item.get("name")
+                                .and_then(|n| n.as_str())
+                                .map(|s| s.to_string())
+                        })
+                        .collect()
+                })
+        })
     }
 }
