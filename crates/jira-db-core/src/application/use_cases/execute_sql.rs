@@ -7,6 +7,22 @@ use serde::{Deserialize, Serialize};
 
 use crate::domain::error::{DomainError, DomainResult};
 
+/// Normalize smart/curly quotes to standard ASCII quotes
+/// This handles cases where OS or browser auto-converts quotes
+fn normalize_quotes(query: &str) -> String {
+    query
+        // Single quotes: ' (U+2018), ' (U+2019), ‚ (U+201A), ‛ (U+201B) → '
+        .replace('\u{2018}', "'")
+        .replace('\u{2019}', "'")
+        .replace('\u{201A}', "'")
+        .replace('\u{201B}', "'")
+        // Double quotes: " (U+201C), " (U+201D), „ (U+201E), ‟ (U+201F) → "
+        .replace('\u{201C}', "\"")
+        .replace('\u{201D}', "\"")
+        .replace('\u{201E}', "\"")
+        .replace('\u{201F}', "\"")
+}
+
 /// Check if a keyword appears as a whole word in the text
 /// Returns true if the keyword is found and not part of a larger word
 fn is_whole_word(text: &str, keyword: &str) -> bool {
@@ -51,6 +67,9 @@ impl ExecuteSqlUseCase {
 
     /// Execute a read-only SQL query
     pub fn execute(&self, query: &str, limit: Option<usize>) -> DomainResult<SqlResult> {
+        // Normalize smart/curly quotes to standard ASCII quotes
+        let query = normalize_quotes(query);
+
         // Security checks - only allow SELECT queries (including WITH...SELECT CTEs)
         // Skip comment lines (-- ...) to find the actual SQL statement
         let query_upper = query
@@ -404,5 +423,55 @@ mod tests {
             result.is_ok(),
             "Query with 'updated_at' column should be allowed"
         );
+    }
+
+    #[test]
+    fn test_normalize_quotes() {
+        // Smart single quotes → standard single quote
+        // Using Unicode escape sequences: U+2018 ('), U+2019 (')
+        assert_eq!(normalize_quotes("\u{2018}test\u{2019}"), "'test'");
+        assert_eq!(normalize_quotes("\u{201A}test\u{201B}"), "'test'");
+
+        // Smart double quotes → standard double quote
+        // Using Unicode escape sequences: U+201C ("), U+201D (")
+        assert_eq!(normalize_quotes("\u{201C}test\u{201D}"), "\"test\"");
+        assert_eq!(normalize_quotes("\u{201E}test\u{201F}"), "\"test\"");
+
+        // Mixed quotes in SQL - smart single quotes around 'foo'
+        assert_eq!(
+            normalize_quotes("SELECT * FROM t WHERE name = \u{2018}foo\u{2019}"),
+            "SELECT * FROM t WHERE name = 'foo'"
+        );
+
+        // strftime example (the actual reported issue)
+        assert_eq!(
+            normalize_quotes("strftime(\u{2018}%Y\u{2019}, date)"),
+            "strftime('%Y', date)"
+        );
+
+        // Regular quotes should be unchanged
+        assert_eq!(normalize_quotes("'test'"), "'test'");
+        assert_eq!(normalize_quotes("\"test\""), "\"test\"");
+    }
+
+    #[test]
+    fn test_execute_with_smart_quotes() {
+        let db = create_test_db();
+        let use_case = ExecuteSqlUseCase::new(db);
+
+        // Query with smart quotes should work after normalization
+        // Using U+2018 and U+2019 for smart single quotes
+        let result = use_case.execute(
+            "SELECT * FROM test_table WHERE name = \u{2018}Alice\u{2019}",
+            None,
+        );
+        assert!(
+            result.is_ok(),
+            "Query with smart quotes should be normalized and work"
+        );
+
+        if let Ok(res) = result {
+            assert_eq!(res.row_count, 1);
+        }
     }
 }
