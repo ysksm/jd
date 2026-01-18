@@ -1,8 +1,47 @@
-import { Component, OnInit, OnChanges, SimpleChanges, Input, signal, computed, inject } from '@angular/core';
+import { Component, OnInit, OnChanges, SimpleChanges, Input, signal, computed, inject, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { SavedQuery, SqlTable, SqlColumn } from '../../generated/models';
 import { API_SERVICE, IApiService } from '../../api.provider';
+
+// Interface for a query tab
+interface QueryTab {
+  id: string;
+  name: string;
+  queryText: string;
+  queryName: string;
+  queryDescription: string;
+  editingQueryId: string | null;
+  columns: string[];
+  rows: Record<string, unknown>[];
+  rowCount: number;
+  executionTimeMs: number;
+  loading: boolean;
+  error: string | null;
+  resultsTab: 'results' | 'schema';
+}
+
+// Counter for generating unique tab IDs
+let tabIdCounter = 0;
+
+function createNewTab(name?: string): QueryTab {
+  tabIdCounter++;
+  return {
+    id: `tab-${tabIdCounter}`,
+    name: name || `Query ${tabIdCounter}`,
+    queryText: 'SELECT * FROM issues LIMIT 10',
+    queryName: '',
+    queryDescription: '',
+    editingQueryId: null,
+    columns: [],
+    rows: [],
+    rowCount: 0,
+    executionTimeMs: 0,
+    loading: false,
+    error: null,
+    resultsTab: 'results'
+  };
+}
 
 @Component({
   selector: 'app-query',
@@ -20,19 +59,34 @@ export class QueryComponent implements OnInit, OnChanges {
   // All projects mode (query across all synced projects)
   allProjects = signal(false);
 
-  // Query editor state
-  queryText = signal('SELECT * FROM issues LIMIT 10');
-  queryName = signal('');
-  queryDescription = signal('');
-  editingQueryId = signal<string | null>(null);
+  // Multi-tab state
+  tabs = signal<QueryTab[]>([createNewTab()]);
+  activeTabId = signal<string>('tab-1');
 
-  // Results state
-  columns = signal<string[]>([]);
-  rows = signal<Record<string, unknown>[]>([]);
-  rowCount = signal(0);
-  executionTimeMs = signal(0);
+  // Current tab computed property
+  currentTab = computed(() => {
+    const tab = this.tabs().find(t => t.id === this.activeTabId());
+    return tab || this.tabs()[0];
+  });
 
-  // Schema state
+  // Query editor state (delegated to current tab)
+  queryText = computed(() => this.currentTab().queryText);
+  queryName = computed(() => this.currentTab().queryName);
+  queryDescription = computed(() => this.currentTab().queryDescription);
+  editingQueryId = computed(() => this.currentTab().editingQueryId);
+
+  // Results state (delegated to current tab)
+  columns = computed(() => this.currentTab().columns);
+  rows = computed(() => this.currentTab().rows);
+  rowCount = computed(() => this.currentTab().rowCount);
+  executionTimeMs = computed(() => this.currentTab().executionTimeMs);
+
+  // Loading and error state (delegated to current tab)
+  loading = computed(() => this.currentTab().loading);
+  error = computed(() => this.currentTab().error);
+  activeResultsTab = computed(() => this.currentTab().resultsTab);
+
+  // Schema state (shared across all tabs)
   tables = signal<SqlTable[]>([]);
   selectedTable = signal<SqlTable | null>(null);
   tableColumns = signal<SqlColumn[]>([]);
@@ -41,12 +95,9 @@ export class QueryComponent implements OnInit, OnChanges {
   savedQueries = signal<SavedQuery[]>([]);
 
   // UI state
-  loading = signal(false);
   schemaLoading = signal(false);
-  error = signal<string | null>(null);
   successMessage = signal<string | null>(null);
   showSaveModal = signal(false);
-  activeTab = signal<'results' | 'schema'>('results');
 
   // Schema panel visibility
   showSchemaPanel = signal(true);
@@ -156,6 +207,68 @@ ORDER BY date, status`;
     this.loadSavedQueries();
   }
 
+  // Tab management methods
+  addTab(): void {
+    const newTab = createNewTab();
+    this.tabs.update(tabs => [...tabs, newTab]);
+    this.activeTabId.set(newTab.id);
+  }
+
+  closeTab(tabId: string, event: Event): void {
+    event.stopPropagation();
+    const currentTabs = this.tabs();
+    if (currentTabs.length <= 1) {
+      // Don't close the last tab, just reset it
+      this.newQuery();
+      return;
+    }
+
+    const tabIndex = currentTabs.findIndex(t => t.id === tabId);
+    const newTabs = currentTabs.filter(t => t.id !== tabId);
+    this.tabs.set(newTabs);
+
+    // If we closed the active tab, switch to another one
+    if (this.activeTabId() === tabId) {
+      // Try to switch to the next tab, or the previous one if closing the last
+      const newIndex = Math.min(tabIndex, newTabs.length - 1);
+      this.activeTabId.set(newTabs[newIndex].id);
+    }
+  }
+
+  switchTab(tabId: string): void {
+    this.activeTabId.set(tabId);
+  }
+
+  private updateCurrentTab(updates: Partial<QueryTab>): void {
+    this.tabs.update(tabs =>
+      tabs.map(tab =>
+        tab.id === this.activeTabId()
+          ? { ...tab, ...updates }
+          : tab
+      )
+    );
+  }
+
+  setQueryText(value: string): void {
+    this.updateCurrentTab({ queryText: value });
+  }
+
+  setQueryName(value: string): void {
+    this.updateCurrentTab({ queryName: value });
+  }
+
+  setQueryDescription(value: string): void {
+    this.updateCurrentTab({ queryDescription: value });
+  }
+
+  setResultsTab(value: 'results' | 'schema'): void {
+    this.updateCurrentTab({ resultsTab: value });
+  }
+
+  setError(value: string | null): void {
+    this.updateCurrentTab({ error: value });
+  }
+
   loadSchema(): void {
     this.schemaLoading.set(true);
     const request = this.allProjects()
@@ -217,8 +330,7 @@ ORDER BY date, status`;
   }
 
   executeQuery(): void {
-    this.loading.set(true);
-    this.error.set(null);
+    this.updateCurrentTab({ loading: true, error: null });
     this.successMessage.set(null);
 
     const request = this.allProjects()
@@ -227,38 +339,43 @@ ORDER BY date, status`;
 
     this.api.sqlExecute(request).subscribe({
       next: (response) => {
-        this.columns.set(response.columns);
-        this.rows.set(response.rows as Record<string, unknown>[]);
-        this.rowCount.set(response.rowCount);
-        this.executionTimeMs.set(response.executionTimeMs);
-        this.loading.set(false);
-        this.activeTab.set('results');
+        this.updateCurrentTab({
+          columns: response.columns,
+          rows: response.rows as Record<string, unknown>[],
+          rowCount: response.rowCount,
+          executionTimeMs: response.executionTimeMs,
+          loading: false,
+          resultsTab: 'results'
+        });
       },
       error: (err) => {
-        this.error.set('Query execution failed: ' + err);
-        this.loading.set(false);
+        this.updateCurrentTab({
+          error: 'Query execution failed: ' + err,
+          loading: false
+        });
       }
     });
   }
 
   openSaveModal(): void {
     if (!this.editingQueryId()) {
-      this.queryName.set('');
-      this.queryDescription.set('');
+      this.updateCurrentTab({ queryName: '', queryDescription: '' });
     }
     this.showSaveModal.set(true);
   }
 
   closeSaveModal(): void {
     this.showSaveModal.set(false);
-    this.editingQueryId.set(null);
-    this.queryName.set('');
-    this.queryDescription.set('');
+    this.updateCurrentTab({
+      editingQueryId: null,
+      queryName: '',
+      queryDescription: ''
+    });
   }
 
   saveQuery(): void {
     if (!this.queryName().trim()) {
-      this.error.set('Query name is required');
+      this.updateCurrentTab({ error: 'Query name is required' });
       return;
     }
 
@@ -275,16 +392,26 @@ ORDER BY date, status`;
         setTimeout(() => this.successMessage.set(null), 3000);
       },
       error: (err) => {
-        this.error.set('Failed to save query: ' + err);
+        this.updateCurrentTab({ error: 'Failed to save query: ' + err });
       }
     });
   }
 
   loadQuery(query: SavedQuery): void {
-    this.queryText.set(query.query);
-    this.editingQueryId.set(query.id);
-    this.queryName.set(query.name);
-    this.queryDescription.set(query.description || '');
+    this.updateCurrentTab({
+      queryText: query.query,
+      editingQueryId: query.id,
+      queryName: query.name,
+      queryDescription: query.description || ''
+    });
+    // Update tab name to match the loaded query
+    this.tabs.update(tabs =>
+      tabs.map(tab =>
+        tab.id === this.activeTabId()
+          ? { ...tab, name: query.name }
+          : tab
+      )
+    );
   }
 
   deleteQuery(query: SavedQuery, event: Event): void {
@@ -294,11 +421,11 @@ ORDER BY date, status`;
         next: () => {
           this.loadSavedQueries();
           if (this.editingQueryId() === query.id) {
-            this.editingQueryId.set(null);
+            this.updateCurrentTab({ editingQueryId: null });
           }
         },
         error: (err) => {
-          this.error.set('Failed to delete query: ' + err);
+          this.updateCurrentTab({ error: 'Failed to delete query: ' + err });
         }
       });
     }
@@ -309,9 +436,9 @@ ORDER BY date, status`;
     if (currentQuery.includes('FROM')) {
       // Replace table name after FROM
       const newQuery = currentQuery.replace(/FROM\s+\w+/i, `FROM ${tableName}`);
-      this.queryText.set(newQuery);
+      this.updateCurrentTab({ queryText: newQuery });
     } else {
-      this.queryText.set(`SELECT * FROM ${tableName} LIMIT 10`);
+      this.updateCurrentTab({ queryText: `SELECT * FROM ${tableName} LIMIT 10` });
     }
   }
 
@@ -320,26 +447,35 @@ ORDER BY date, status`;
     // Simple insertion at cursor position - for now just append to SELECT
     if (currentQuery.toUpperCase().startsWith('SELECT *')) {
       const newQuery = currentQuery.replace(/SELECT \*/i, `SELECT ${columnName}`);
-      this.queryText.set(newQuery);
+      this.updateCurrentTab({ queryText: newQuery });
     } else if (currentQuery.toUpperCase().startsWith('SELECT')) {
       const newQuery = currentQuery.replace(/SELECT /i, `SELECT ${columnName}, `);
-      this.queryText.set(newQuery);
+      this.updateCurrentTab({ queryText: newQuery });
     }
   }
 
   clearResults(): void {
-    this.columns.set([]);
-    this.rows.set([]);
-    this.rowCount.set(0);
-    this.executionTimeMs.set(0);
+    this.updateCurrentTab({
+      columns: [],
+      rows: [],
+      rowCount: 0,
+      executionTimeMs: 0
+    });
   }
 
   newQuery(): void {
-    this.queryText.set('SELECT * FROM issues LIMIT 10');
-    this.editingQueryId.set(null);
-    this.queryName.set('');
-    this.queryDescription.set('');
-    this.clearResults();
+    this.updateCurrentTab({
+      queryText: 'SELECT * FROM issues LIMIT 10',
+      editingQueryId: null,
+      queryName: '',
+      queryDescription: '',
+      columns: [],
+      rows: [],
+      rowCount: 0,
+      executionTimeMs: 0,
+      error: null,
+      name: `Query ${this.tabs().length + 1}`
+    });
   }
 
   onKeypress(event: KeyboardEvent): void {
@@ -366,25 +502,31 @@ ORDER BY date, status`;
 
   // バーンダウンチャート用SQLをエディタに挿入
   insertBurndownSql(): void {
-    this.queryText.set(this.burndownSqlTemplate);
-    this.editingQueryId.set(null);
-    this.queryName.set('');
-    this.queryDescription.set('');
+    this.updateCurrentTab({
+      queryText: this.burndownSqlTemplate,
+      editingQueryId: null,
+      queryName: '',
+      queryDescription: ''
+    });
   }
 
   // ベロシティチャート用SQLをエディタに挿入
   insertVelocitySql(): void {
-    this.queryText.set(this.velocitySqlTemplate);
-    this.editingQueryId.set(null);
-    this.queryName.set('');
-    this.queryDescription.set('');
+    this.updateCurrentTab({
+      queryText: this.velocitySqlTemplate,
+      editingQueryId: null,
+      queryName: '',
+      queryDescription: ''
+    });
   }
 
   // 累積フロー図用SQLをエディタに挿入
   insertCfdSql(): void {
-    this.queryText.set(this.cfdSqlTemplate);
-    this.editingQueryId.set(null);
-    this.queryName.set('');
-    this.queryDescription.set('');
+    this.updateCurrentTab({
+      queryText: this.cfdSqlTemplate,
+      editingQueryId: null,
+      queryName: '',
+      queryDescription: ''
+    });
   }
 }
