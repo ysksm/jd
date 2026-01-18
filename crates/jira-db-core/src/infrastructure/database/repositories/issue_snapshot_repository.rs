@@ -47,6 +47,8 @@ impl IssueSnapshotRepository for DuckDbIssueSnapshotRepository {
                 .as_ref()
                 .map(|v| serde_json::to_string(v).unwrap_or_default());
 
+            let updated_date_str = snapshot.updated_date.map(|dt| dt.to_rfc3339());
+
             conn.execute(
                 r#"
                 INSERT INTO issue_snapshots (
@@ -55,9 +57,9 @@ impl IssueSnapshotRepository for DuckDbIssueSnapshotRepository {
                     summary, description, status, priority,
                     assignee, reporter, issue_type, resolution,
                     labels, components, fix_versions, sprint, parent_key,
-                    raw_data, created_at
+                    raw_data, updated_date, created_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (issue_id, version) DO UPDATE SET
                     valid_to = EXCLUDED.valid_to,
                     summary = EXCLUDED.summary,
@@ -73,7 +75,8 @@ impl IssueSnapshotRepository for DuckDbIssueSnapshotRepository {
                     fix_versions = EXCLUDED.fix_versions,
                     sprint = EXCLUDED.sprint,
                     parent_key = EXCLUDED.parent_key,
-                    raw_data = EXCLUDED.raw_data
+                    raw_data = EXCLUDED.raw_data,
+                    updated_date = EXCLUDED.updated_date
                 "#,
                 duckdb::params![
                     &snapshot.issue_id,
@@ -96,6 +99,7 @@ impl IssueSnapshotRepository for DuckDbIssueSnapshotRepository {
                     &snapshot.sprint,
                     &snapshot.parent_key,
                     &raw_data_str,
+                    &updated_date_str,
                     &snapshot.created_at.to_rfc3339(),
                 ],
             )
@@ -148,7 +152,7 @@ impl IssueSnapshotRepository for DuckDbIssueSnapshotRepository {
                        summary, description, status, priority,
                        assignee, reporter, issue_type, resolution,
                        labels, components, fix_versions, sprint, parent_key,
-                       raw_data, CAST(created_at AS VARCHAR)
+                       raw_data, CAST(updated_date AS VARCHAR), CAST(created_at AS VARCHAR)
                 FROM issue_snapshots
                 WHERE issue_key = ?
                 ORDER BY version ASC
@@ -184,8 +188,11 @@ impl IssueSnapshotRepository for DuckDbIssueSnapshotRepository {
                     sprint: row.get(17)?,
                     parent_key: row.get(18)?,
                     raw_data: Self::parse_json_value(row.get(19)?),
+                    updated_date: row
+                        .get::<_, Option<String>>(20)?
+                        .and_then(|s| s.parse::<DateTime<Utc>>().ok()),
                     created_at: row
-                        .get::<_, String>(20)?
+                        .get::<_, String>(21)?
                         .parse::<DateTime<Utc>>()
                         .unwrap_or_else(|_| Utc::now()),
                 })
@@ -217,7 +224,7 @@ impl IssueSnapshotRepository for DuckDbIssueSnapshotRepository {
                        summary, description, status, priority,
                        assignee, reporter, issue_type, resolution,
                        labels, components, fix_versions, sprint, parent_key,
-                       raw_data, CAST(created_at AS VARCHAR)
+                       raw_data, CAST(updated_date AS VARCHAR), CAST(created_at AS VARCHAR)
                 FROM issue_snapshots
                 WHERE issue_key = ? AND version = ?
                 "#,
@@ -251,8 +258,11 @@ impl IssueSnapshotRepository for DuckDbIssueSnapshotRepository {
                 sprint: row.get(17)?,
                 parent_key: row.get(18)?,
                 raw_data: Self::parse_json_value(row.get(19)?),
+                updated_date: row
+                    .get::<_, Option<String>>(20)?
+                    .and_then(|s| s.parse::<DateTime<Utc>>().ok()),
                 created_at: row
-                    .get::<_, String>(20)?
+                    .get::<_, String>(21)?
                     .parse::<DateTime<Utc>>()
                     .unwrap_or_else(|_| Utc::now()),
             })
@@ -281,7 +291,7 @@ impl IssueSnapshotRepository for DuckDbIssueSnapshotRepository {
                        summary, description, status, priority,
                        assignee, reporter, issue_type, resolution,
                        labels, components, fix_versions, sprint, parent_key,
-                       raw_data, CAST(created_at AS VARCHAR)
+                       raw_data, CAST(updated_date AS VARCHAR), CAST(created_at AS VARCHAR)
                 FROM issue_snapshots
                 WHERE issue_key = ? AND valid_to IS NULL
                 "#,
@@ -315,8 +325,11 @@ impl IssueSnapshotRepository for DuckDbIssueSnapshotRepository {
                 sprint: row.get(17)?,
                 parent_key: row.get(18)?,
                 raw_data: Self::parse_json_value(row.get(19)?),
+                updated_date: row
+                    .get::<_, Option<String>>(20)?
+                    .and_then(|s| s.parse::<DateTime<Utc>>().ok()),
                 created_at: row
-                    .get::<_, String>(20)?
+                    .get::<_, String>(21)?
                     .parse::<DateTime<Utc>>()
                     .unwrap_or_else(|_| Utc::now()),
             })
@@ -345,7 +358,7 @@ impl IssueSnapshotRepository for DuckDbIssueSnapshotRepository {
                        summary, description, status, priority,
                        assignee, reporter, issue_type, resolution,
                        labels, components, fix_versions, sprint, parent_key,
-                       raw_data, CAST(created_at AS VARCHAR)
+                       raw_data, CAST(updated_date AS VARCHAR), CAST(created_at AS VARCHAR)
                 FROM issue_snapshots
                 WHERE project_id = ?
                 ORDER BY issue_key, version ASC
@@ -381,8 +394,11 @@ impl IssueSnapshotRepository for DuckDbIssueSnapshotRepository {
                     sprint: row.get(17)?,
                     parent_key: row.get(18)?,
                     raw_data: Self::parse_json_value(row.get(19)?),
+                    updated_date: row
+                        .get::<_, Option<String>>(20)?
+                        .and_then(|s| s.parse::<DateTime<Utc>>().ok()),
                     created_at: row
-                        .get::<_, String>(20)?
+                        .get::<_, String>(21)?
                         .parse::<DateTime<Utc>>()
                         .unwrap_or_else(|_| Utc::now()),
                 })
@@ -455,9 +471,9 @@ impl IssueSnapshotRepository for DuckDbIssueSnapshotRepository {
                     summary, description, status, priority,
                     assignee, reporter, issue_type, resolution,
                     labels, components, fix_versions, sprint, parent_key,
-                    raw_data, created_at
+                    raw_data, updated_date, created_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (issue_id, version) DO UPDATE SET
                     valid_to = EXCLUDED.valid_to,
                     summary = EXCLUDED.summary,
@@ -473,7 +489,8 @@ impl IssueSnapshotRepository for DuckDbIssueSnapshotRepository {
                     fix_versions = EXCLUDED.fix_versions,
                     sprint = EXCLUDED.sprint,
                     parent_key = EXCLUDED.parent_key,
-                    raw_data = EXCLUDED.raw_data
+                    raw_data = EXCLUDED.raw_data,
+                    updated_date = EXCLUDED.updated_date
                 "#,
             )
             .map_err(|e| DomainError::Repository(format!("Failed to prepare statement: {}", e)))?;
@@ -487,6 +504,7 @@ impl IssueSnapshotRepository for DuckDbIssueSnapshotRepository {
                 .raw_data
                 .as_ref()
                 .map(|v| serde_json::to_string(v).unwrap_or_default());
+            let updated_date_str = snapshot.updated_date.map(|dt| dt.to_rfc3339());
 
             stmt.execute(duckdb::params![
                 &snapshot.issue_id,
@@ -509,6 +527,7 @@ impl IssueSnapshotRepository for DuckDbIssueSnapshotRepository {
                 &snapshot.sprint,
                 &snapshot.parent_key,
                 &raw_data_str,
+                &updated_date_str,
                 &snapshot.created_at.to_rfc3339(),
             ])
             .map_err(|e| DomainError::Repository(format!("Failed to insert snapshot: {}", e)))?;

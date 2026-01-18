@@ -105,6 +105,8 @@ impl Schema {
         Self::add_column_if_not_exists(conn, "issues_expanded", "affected_versions", "JSON")?;
         // Migration: issues_expandedテーブルにsecurity_levelカラムを追加（セキュリティレベル）
         Self::add_column_if_not_exists(conn, "issues_expanded", "security_level", "VARCHAR")?;
+        // Migration: issue_snapshotsテーブルにupdated_dateカラムを追加（課題の更新日）
+        Self::add_column_if_not_exists(conn, "issue_snapshots", "updated_date", "TIMESTAMPTZ")?;
         Ok(())
     }
 
