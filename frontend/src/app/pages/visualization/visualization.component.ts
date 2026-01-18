@@ -740,15 +740,33 @@ export class VisualizationComponent implements OnInit, OnDestroy, AfterViewInit,
     }
   }
 
-  private getXAxisSplits(dataLength: number, tickCount: number): number[] | undefined {
-    if (tickCount === 0) {
-      return undefined;
-    }
-
+  private getXAxisSplits(dataLength: number, tickCount: number): number[] {
+    // Always return integer indices to ensure labels map correctly
     if (tickCount === -1 || tickCount >= dataLength) {
+      // Show all ticks
       return Array.from({ length: dataLength }, (_, i) => i);
     }
 
+    if (tickCount === 0) {
+      // Auto mode: choose appropriate number of ticks (max ~20)
+      const maxTicks = 20;
+      if (dataLength <= maxTicks) {
+        return Array.from({ length: dataLength }, (_, i) => i);
+      }
+      // Generate evenly spaced integer indices
+      const step = Math.ceil(dataLength / maxTicks);
+      const splits: number[] = [];
+      for (let i = 0; i < dataLength; i += step) {
+        splits.push(i);
+      }
+      // Always include last point
+      if (splits[splits.length - 1] !== dataLength - 1) {
+        splits.push(dataLength - 1);
+      }
+      return splits;
+    }
+
+    // Specific tick count requested
     const splits: number[] = [];
     const step = (dataLength - 1) / (tickCount - 1);
     for (let i = 0; i < tickCount; i++) {
@@ -801,7 +819,27 @@ export class VisualizationComponent implements OnInit, OnDestroy, AfterViewInit,
       aggregated.push({ label, value });
     }
 
-    aggregated.sort((a, b) => a.label.localeCompare(b.label));
+    // Sort: detect dates and sort chronologically, otherwise alphabetically
+    aggregated.sort((a, b) => {
+      // Try to parse as dates (ISO format: YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss)
+      const dateA = Date.parse(a.label);
+      const dateB = Date.parse(b.label);
+
+      if (!isNaN(dateA) && !isNaN(dateB)) {
+        // Both are valid dates - sort chronologically
+        return dateA - dateB;
+      }
+
+      // Try numeric sort if both look like numbers
+      const numA = Number(a.label);
+      const numB = Number(b.label);
+      if (!isNaN(numA) && !isNaN(numB)) {
+        return numA - numB;
+      }
+
+      // Fallback to alphabetical sort
+      return a.label.localeCompare(b.label);
+    });
 
     const xData = aggregated.map((_, i) => i);
     const yData = aggregated.map((d) => d.value);

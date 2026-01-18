@@ -63,15 +63,21 @@ impl DuckDbIssuesExpandedRepository {
             "priority",
             "assignee",
             "reporter",
+            "creator",
             "issue_type",
             "resolution",
             "labels",
             "components",
             "fix_versions",
+            "affected_versions",
             "sprint",
             "parent_key",
+            "environment",
+            "security_level",
             "created_date",
             "updated_date",
+            "resolved_date",
+            "due_date",
             "synced_at",
         ]
         .into_iter()
@@ -98,14 +104,20 @@ impl DuckDbIssuesExpandedRepository {
                 ("priority", "priority"),
                 ("assignee", "assignee"),
                 ("reporter", "reporter"),
+                ("creator", "creator"),
                 ("issuetype", "issue_type"),
                 ("resolution", "resolution"),
                 ("labels", "labels"),
                 ("components", "components"),
                 ("fixversions", "fix_versions"),
+                ("versions", "affected_versions"),
                 ("parent", "parent_key"),
+                ("environment", "environment"),
+                ("security", "security_level"),
                 ("created", "created_date"),
                 ("updated", "updated_date"),
+                ("resolutiondate", "resolved_date"),
+                ("duedate", "due_date"),
             ];
 
             let is_base_mapping = known_mappings
@@ -225,6 +237,10 @@ impl DuckDbIssuesExpandedRepository {
                 "COALESCE(i.raw_data->'fields'->'reporter'->>'displayName', i.reporter) AS reporter",
             ),
             (
+                "creator",
+                "i.raw_data->'fields'->'creator'->>'displayName' AS creator",
+            ),
+            (
                 "issue_type",
                 "COALESCE(i.raw_data->'fields'->'issuetype'->>'name', i.issue_type) AS issue_type",
             ),
@@ -244,10 +260,22 @@ impl DuckDbIssuesExpandedRepository {
                 "fix_versions",
                 "TRY_CAST(i.raw_data->'fields'->'fixVersions' AS JSON) AS fix_versions",
             ),
+            (
+                "affected_versions",
+                "TRY_CAST(i.raw_data->'fields'->'versions' AS JSON) AS affected_versions",
+            ),
             ("sprint", "i.sprint"),
             (
                 "parent_key",
                 "i.raw_data->'fields'->'parent'->>'key' AS parent_key",
+            ),
+            (
+                "environment",
+                "i.raw_data->'fields'->>'environment' AS environment",
+            ),
+            (
+                "security_level",
+                "i.raw_data->'fields'->'security'->>'name' AS security_level",
             ),
             (
                 "created_date",
@@ -256,6 +284,14 @@ impl DuckDbIssuesExpandedRepository {
             (
                 "updated_date",
                 "TRY_CAST(i.raw_data->'fields'->>'updated' AS TIMESTAMP) AS updated_date",
+            ),
+            (
+                "resolved_date",
+                "TRY_CAST(i.raw_data->'fields'->>'resolutiondate' AS TIMESTAMP) AS resolved_date",
+            ),
+            (
+                "due_date",
+                "TRY_CAST(i.raw_data->'fields'->>'duedate' AS TIMESTAMP) AS due_date",
             ),
         ];
 
@@ -431,9 +467,13 @@ impl DuckDbIssuesExpandedRepository {
         let column_to_field_id: std::collections::HashMap<&str, &str> = [
             ("issue_type", "issuetype"),
             ("fix_versions", "fixversions"),
+            ("affected_versions", "versions"),
             ("parent_key", "parent"),
+            ("security_level", "security"),
             ("created_date", "created"),
             ("updated_date", "updated"),
+            ("resolved_date", "resolutiondate"),
+            ("due_date", "duedate"),
         ]
         .into_iter()
         .collect();
@@ -458,15 +498,21 @@ impl DuckDbIssuesExpandedRepository {
             "priority",
             "assignee",
             "reporter",
+            "creator",
             "issue_type",
             "resolution",
             "labels",
             "components",
             "fix_versions",
+            "affected_versions",
             "sprint",
             "parent_key",
+            "environment",
+            "security_level",
             "created_date",
             "updated_date",
+            "resolved_date",
+            "due_date",
             "synced_at",
         ];
 
@@ -558,6 +604,8 @@ impl DuckDbIssuesExpandedRepository {
             ("issue_type", "issuetype"),
             ("fix_versions", "fixversions"),
             ("parent_key", "parent"),
+            ("resolved_date", "resolutiondate"),
+            ("due_date", "duedate"),
         ]
         .into_iter()
         .collect();
@@ -596,6 +644,8 @@ impl DuckDbIssuesExpandedRepository {
             "fix_versions",
             "sprint",
             "parent_key",
+            "resolved_date",
+            "due_date",
             "created_at",
         ];
 
@@ -661,6 +711,7 @@ impl DuckDbIssuesExpandedRepository {
         fields: &[JiraField],
     ) -> DomainResult<()> {
         // Base snapshot columns
+        // For resolved_date and due_date, fallback to raw_data extraction if column is NULL
         let base_columns = vec![
             ("s.issue_id", "issue_id"),
             ("s.issue_key", "issue_key"),
@@ -681,6 +732,8 @@ impl DuckDbIssuesExpandedRepository {
             ("s.fix_versions", "fix_versions"),
             ("s.sprint", "sprint"),
             ("s.parent_key", "parent_key"),
+            ("COALESCE(s.resolved_date, TRY_CAST(s.raw_data->'fields'->>'resolutiondate' AS TIMESTAMP))", "resolved_date"),
+            ("COALESCE(s.due_date, TRY_CAST(s.raw_data->'fields'->>'duedate' AS TIMESTAMP))", "due_date"),
             ("s.created_at", "created_at"),
         ];
 
@@ -713,6 +766,8 @@ impl DuckDbIssuesExpandedRepository {
                 "parent",
                 "created",
                 "updated",
+                "resolutiondate",
+                "duedate",
             ];
 
             if skip_fields.contains(&field_id_lower.as_str()) {
@@ -779,6 +834,8 @@ impl DuckDbIssuesExpandedRepository {
             ("issue_type", "issuetype"),
             ("fix_versions", "fixversions"),
             ("parent_key", "parent"),
+            ("resolved_date", "resolutiondate"),
+            ("due_date", "duedate"),
         ]
         .into_iter()
         .collect();
@@ -817,6 +874,8 @@ impl DuckDbIssuesExpandedRepository {
             "fix_versions",
             "sprint",
             "parent_key",
+            "resolved_date",
+            "due_date",
             "created_at",
         ];
 
