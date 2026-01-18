@@ -642,7 +642,6 @@ where
                 .cloned()
                 .or_else(|| issue.parent_key.clone()),
             snapshot_raw_data.clone(),
-            issue.updated_date,
         );
         snapshots.push(snapshot);
 
@@ -732,7 +731,6 @@ where
                     .cloned()
                     .or_else(|| issue.parent_key.clone()),
                 snapshot_raw_data.clone(),
-                issue.updated_date,
             );
             snapshots.push(snapshot);
         }
@@ -842,7 +840,6 @@ where
             issue.sprint.clone(),
             issue.parent_key.clone(),
             raw_data,
-            issue.updated_date,
         )
     }
 
