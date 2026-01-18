@@ -793,14 +793,13 @@ impl DuckDbIssuesExpandedRepository {
         let select_clause = select_parts.join(",\n    ");
 
         // Create view using issue_snapshots.raw_data directly
-        // Note: raw_data is only available for current snapshots (valid_to IS NULL)
+        // raw_data is now available for all snapshots (reconstructed from changelog)
         let sql = format!(
             r#"
             CREATE OR REPLACE VIEW issue_snapshots_expanded AS
             SELECT
                 {select_clause}
             FROM issue_snapshots s
-            WHERE s.raw_data IS NOT NULL
             "#
         );
 
