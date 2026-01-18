@@ -18,7 +18,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1rem;
+  margin-bottom: 0.5rem;
 
   h2 {
     margin: 0;
@@ -28,6 +28,132 @@
   .header-actions {
     display: flex;
     gap: 0.5rem;
+  }
+}
+
+// Query tabs bar (browser-like tabs)
+.query-tabs-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-bottom: 0.75rem;
+  padding: 0.25rem;
+  background: #f3f4f6;
+  border-radius: 8px 8px 0 0;
+  overflow-x: auto;
+
+  .query-tabs {
+    display: flex;
+    gap: 0.25rem;
+    flex: 1;
+    min-width: 0;
+    overflow-x: auto;
+
+    &::-webkit-scrollbar {
+      height: 4px;
+    }
+
+    &::-webkit-scrollbar-thumb {
+      background: #d1d5db;
+      border-radius: 2px;
+    }
+  }
+
+  .query-tab {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    background: #e5e7eb;
+    border-radius: 6px 6px 0 0;
+    cursor: pointer;
+    font-size: 0.875rem;
+    color: #666;
+    min-width: 100px;
+    max-width: 200px;
+    transition: all 0.2s;
+    position: relative;
+
+    &:hover {
+      background: #d1d5db;
+    }
+
+    &.active {
+      background: white;
+      color: #333;
+      box-shadow: 0 -2px 4px rgba(0, 0, 0, 0.05);
+
+      .tab-name {
+        font-weight: 500;
+      }
+    }
+
+    .tab-name {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .tab-loading-indicator {
+      width: 8px;
+      height: 8px;
+      border: 2px solid #4a4ae0;
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    .tab-close-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 18px;
+      height: 18px;
+      background: none;
+      border: none;
+      color: #999;
+      cursor: pointer;
+      font-size: 1rem;
+      line-height: 1;
+      padding: 0;
+      border-radius: 3px;
+      transition: all 0.2s;
+
+      &:hover {
+        background: rgba(0, 0, 0, 0.1);
+        color: #dc2626;
+      }
+    }
+  }
+
+  .add-tab-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    background: none;
+    border: 1px dashed #d1d5db;
+    border-radius: 6px;
+    color: #666;
+    cursor: pointer;
+    font-size: 1.25rem;
+    line-height: 1;
+    flex-shrink: 0;
+    transition: all 0.2s;
+
+    &:hover {
+      border-color: #4a4ae0;
+      color: #4a4ae0;
+      background: #f0f0ff;
+    }
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
   }
 }
 

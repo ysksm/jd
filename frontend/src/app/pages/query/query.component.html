@@ -2,7 +2,6 @@
   <div class="query-header">
     <h2>SQL Query</h2>
     <div class="header-actions">
-      <button class="btn btn-secondary" (click)="newQuery()">New Query</button>
       <button class="btn btn-secondary" (click)="openSaveModal()">
         {{ editingQueryId() ? 'Update' : 'Save' }}
       </button>
@@ -10,6 +9,34 @@
         {{ showSchemaPanel() ? 'Hide Schema' : 'Show Schema' }}
       </button>
     </div>
+  </div>
+
+  <!-- Query Tabs Bar -->
+  <div class="query-tabs-bar">
+    <div class="query-tabs">
+      @for (tab of tabs(); track tab.id) {
+        <div
+          class="query-tab"
+          [class.active]="activeTabId() === tab.id"
+          (click)="switchTab(tab.id)"
+        >
+          <span class="tab-name">{{ tab.name }}</span>
+          @if (tab.loading) {
+            <span class="tab-loading-indicator"></span>
+          }
+          <button
+            class="tab-close-btn"
+            (click)="closeTab(tab.id, $event)"
+            title="Close tab"
+          >
+            &times;
+          </button>
+        </div>
+      }
+    </div>
+    <button class="add-tab-btn" (click)="addTab()" title="New tab">
+      +
+    </button>
   </div>
 
   @if (error()) {
@@ -137,7 +164,7 @@
         <textarea
           class="sql-input"
           [ngModel]="queryText()"
-          (ngModelChange)="queryText.set($event)"
+          (ngModelChange)="setQueryText($event)"
           (keydown)="onKeypress($event)"
           placeholder="Enter your SQL query here..."
           rows="6"
@@ -167,8 +194,8 @@
         <div class="results-tabs">
           <button
             class="tab-btn"
-            [class.active]="activeTab() === 'results'"
-            (click)="activeTab.set('results')"
+            [class.active]="activeResultsTab() === 'results'"
+            (click)="setResultsTab('results')"
           >
             Results
             @if (hasResults()) {
@@ -177,14 +204,14 @@
           </button>
           <button
             class="tab-btn"
-            [class.active]="activeTab() === 'schema'"
-            (click)="activeTab.set('schema')"
+            [class.active]="activeResultsTab() === 'schema'"
+            (click)="setResultsTab('schema')"
           >
             Schema
           </button>
         </div>
 
-        @if (activeTab() === 'results') {
+        @if (activeResultsTab() === 'results') {
           @if (loading()) {
             <div class="loading">Executing query...</div>
           } @else if (!hasResults()) {
@@ -218,7 +245,7 @@
           }
         }
 
-        @if (activeTab() === 'schema') {
+        @if (activeResultsTab() === 'schema') {
           <div class="schema-view">
             @if (selectedTable() && tableColumns().length > 0) {
               <h4>{{ selectedTable()!.name }}</h4>
@@ -264,7 +291,7 @@
               id="queryName"
               type="text"
               [ngModel]="queryName()"
-              (ngModelChange)="queryName.set($event)"
+              (ngModelChange)="setQueryName($event)"
               placeholder="Enter query name"
             />
           </div>
@@ -273,7 +300,7 @@
             <textarea
               id="queryDescription"
               [ngModel]="queryDescription()"
-              (ngModelChange)="queryDescription.set($event)"
+              (ngModelChange)="setQueryDescription($event)"
               placeholder="Optional description"
               rows="3"
             ></textarea>
