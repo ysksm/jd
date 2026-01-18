@@ -16,6 +16,22 @@ use super::params::*;
 use super::registry::{ToolHandler, build_tool_definition};
 use crate::protocol::{CallToolResult, Tool};
 
+/// Normalize smart/curly quotes to standard ASCII quotes
+/// This handles cases where OS or browser auto-converts quotes
+fn normalize_quotes(query: &str) -> String {
+    query
+        // Single quotes: ' (U+2018), ' (U+2019), ‚ (U+201A), ‛ (U+201B) → '
+        .replace('\u{2018}', "'")
+        .replace('\u{2019}', "'")
+        .replace('\u{201A}', "'")
+        .replace('\u{201B}', "'")
+        // Double quotes: " (U+201C), " (U+201D), „ (U+201E), ‟ (U+201F) → "
+        .replace('\u{201C}', "\"")
+        .replace('\u{201D}', "\"")
+        .replace('\u{201E}', "\"")
+        .replace('\u{201F}', "\"")
+}
+
 /// Helper function to extract project key from issue key (e.g., "PROJ-123" -> "PROJ")
 fn extract_project_key(issue_key: &str) -> Option<&str> {
     issue_key.split('-').next()
@@ -453,10 +469,12 @@ impl ToolHandler for ExecuteSqlTool {
             }
         };
 
+        // Normalize smart/curly quotes to standard ASCII quotes
+        let query = normalize_quotes(&params.query);
+
         // Security checks - allow SELECT and WITH...SELECT (CTEs)
         // Skip comment lines (-- ...) to find the actual SQL statement
-        let query_upper = params
-            .query
+        let query_upper = query
             .lines()
             .map(|line| line.trim())
             .filter(|line| !line.starts_with("--") && !line.is_empty())
@@ -493,11 +511,11 @@ impl ToolHandler for ExecuteSqlTool {
         let final_query = if !query_upper.contains("LIMIT") {
             format!(
                 "{} LIMIT {}",
-                params.query.trim().trim_end_matches(';'),
+                query.trim().trim_end_matches(';'),
                 params.limit.unwrap_or(100)
             )
         } else {
-            params.query.clone()
+            query.clone()
         };
 
         let mut stmt = conn.prepare(&final_query)?;
